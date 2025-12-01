@@ -6,9 +6,12 @@ from routes.treatment import treatment
 from routes.toma import toma
 from auth.auth import auth
 from routes.others import assignment, statistics
-
+from config.db import Base, engine
 
 cuidar = FastAPI()
+
+# Crear todas las tablas al iniciar la aplicación
+Base.metadata.create_all(bind=engine)
 
 
 cuidar.add_middleware(

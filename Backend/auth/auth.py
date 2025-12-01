@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from pydantic import BaseModel
 
-from models.modelo import User, session
+from models.modelo import User
+from config.db import SessionLocal
 from auth.security import (hash_password,verify_password,create_access_token,decode_token,oauth2_scheme,ACCESS_TOKEN_EXPIRE_MINUTES)
 
 auth = APIRouter(prefix="/auth", tags=["Auth"])
@@ -39,7 +40,7 @@ class UserAuthResponse(BaseModel):
 # DEPENDENCIAS
 # ------------------------
 def get_db():
-    db = session
+    db = SessionLocal()
     try:
         yield db
     finally:

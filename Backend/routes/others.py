@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models.modelo import (Assignment, AssignmentCreate, AssignmentResponse, User, Patient, Treatment, IntakeLog, session)
+from models.modelo import (Assignment, AssignmentCreate, AssignmentResponse, User, Patient, Treatment, IntakeLog)
+from config.db import SessionLocal
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 
@@ -14,7 +15,7 @@ assignment = APIRouter(tags=["Assignments"])
 
 # Dependencia de sesión de base de datos
 def get_db():
-    db = session
+    db = SessionLocal()
     try:
         yield db
     finally:

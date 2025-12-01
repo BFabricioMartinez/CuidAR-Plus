@@ -1,8 +1,8 @@
 from typing import Optional
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum as SQLEnum
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import relationship
 from pydantic import BaseModel, Field
-from config.db import engine, Base
+from config.db import Base
 from datetime import date, datetime
 
 #region MODELOS SQLALCHEMY ORM TABLAS
@@ -92,10 +92,6 @@ class Assignment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 #endregion
-
-
-
-
 
 #region MODELOS Pydantic
 # ------------------------
@@ -202,12 +198,3 @@ class AssignmentResponse(BaseModel):
         from_attributes = True
 
 #endregion
-
-
-# ------------------------
-# CONFIGURACIÓN BASE DE DATOS
-# ------------------------
-
-Base.metadata.create_all(bind=engine)
-Session = sessionmaker(bind=engine)
-session = Session()
