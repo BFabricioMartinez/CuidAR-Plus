@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from models.modelo import Treatment, TreatmentCreate, TreatmentResponse, TreatmentUpdate, Medication
+from models import Treatment, TreatmentCreate, TreatmentResponse, TreatmentUpdate, Medication
 from config.db import SessionLocal
 from typing import List, Optional
 

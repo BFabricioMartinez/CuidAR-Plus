@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models.modelo import (Assignment, AssignmentCreate, AssignmentResponse, User, Patient, Treatment, IntakeLog)
+from models import Assignment, AssignmentCreate, AssignmentResponse, User, Patient, Treatment, IntakeLog
 from config.db import SessionLocal
 from typing import List, Optional
 from datetime import datetime, date, timedelta

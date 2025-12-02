@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from pydantic import BaseModel
 
-from models.modelo import User
+from models import User
 from config.db import SessionLocal
 from auth.security import (hash_password,verify_password,create_access_token,decode_token,oauth2_scheme,ACCESS_TOKEN_EXPIRE_MINUTES)
 
