@@ -1,159 +1,384 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from models import Patient, PatientCreate, PatientResponse, PatientUpdate, Treatment, IntakeLog
-from config.db import SessionLocal
-from typing import List
-from datetime import datetime, date
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import select, or_, cast, String
+from sqlalchemy.orm import joinedload
+from models import Patient, User, InputPatient, InputPatientUpdate, InputPaginatedRequestFilter
+from config.db import AsyncSessionLocal
+from auth.security import Security
+from utils.update import is_valid_change
+import traceback
 
-# Router instancia
-patient = APIRouter(tags=["Patients"])
+patient = APIRouter()
 
 
-# Dependencia de sesión de base de datos
-def get_db():
-    db = SessionLocal()
+@patient.post("/patient/paginated")
+async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter):
+    """
+    Obtiene una lista paginada de pacientes con filtros dinámicos.
+
+    Filtros disponibles en body.filters:
+    - search: Búsqueda en name
+    - name: Filtro por nombre
+    - active: Filtro por estado activo
+    - caregiver_id: Filtro por ID del cuidador
+    - order: "desc" para descendente, "asc" para ascendente
+
+    Returns:
+        JSONResponse con lista de pacientes y cursor para siguiente página
+    """
     try:
-        yield db
-    finally:
-        db.close()
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        # Extraer parámetros
+        limit = body.limit or 20
+        last_seen_id = body.last_seen_id
+        filters = body.filters or {}
+        search = (filters.get("search") or "").strip()
+        order_raw = (filters.get("order") or "").lower()
+
+        # Determinar orden
+        order_desc = order_raw in ("desc", "newest", "mas_nuevos")
+
+        async with AsyncSessionLocal() as session:
+            # Construir query base
+            stmt = (
+                select(Patient)
+                .options(joinedload(Patient.caregiver))
+                .options(joinedload(Patient.treatments))
+            )
+
+            # Filtrar por active
+            if hasattr(Patient, "active"):
+                active_filter = filters.get("active")
+                if active_filter is not None:
+                    stmt = stmt.where(Patient.active.is_(active_filter))
+                else:
+                    stmt = stmt.where(Patient.active.is_(True))
+
+            # Búsqueda libre (search)
+            if search:
+                pattern = f"%{search}%"
+                stmt = stmt.where(Patient.name.ilike(pattern))
+
+            # Filtro por name
+            name_filter = filters.get("name")
+            if name_filter:
+                stmt = stmt.where(Patient.name.ilike(f"%{name_filter}%"))
+
+            # Filtro por caregiver_id
+            caregiver_id_filter = filters.get("caregiver_id")
+            if caregiver_id_filter:
+                stmt = stmt.where(Patient.caregiver_id == caregiver_id_filter)
+
+            # Aplicar orden
+            if order_desc:
+                stmt = stmt.order_by(Patient.id.desc())
+            else:
+                stmt = stmt.order_by(Patient.id.asc())
+
+            # Keyset pagination
+            if last_seen_id is not None:
+                if order_desc:
+                    stmt = stmt.where(Patient.id < last_seen_id)
+                else:
+                    stmt = stmt.where(Patient.id > last_seen_id)
+
+            # Aplicar límite
+            stmt = stmt.limit(limit)
+
+            # Ejecutar query
+            result = await session.execute(stmt)
+            patients = result.scalars().all()
+
+            # Serializar
+            data = []
+            for p in patients:
+                caregiver = p.caregiver
+                data.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "caregiver_id": p.caregiver_id,
+                    "active": p.active,
+                    "notes": p.notes,
+                    "caregiver": {
+                        "id": caregiver.id if caregiver else None,
+                        "name": caregiver.name if caregiver else None,
+                        "email": caregiver.email if caregiver else None
+                    } if caregiver else None,
+                    "treatments_count": len(p.treatments) if p.treatments else 0
+                })
+
+            # Cursor para siguiente página
+            next_cursor = patients[-1].id if len(patients) == limit else None
+
+            return JSONResponse(
+                status_code=200,
+                content={"patients": data, "next_cursor": next_cursor}
+            )
+
+    except Exception as error:
+        print("Error al obtener pacientes paginados ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener pacientes"}
+        )
 
 
-#Crear un nuevo Paciente
-@patient.post("/patients/create", response_model=PatientResponse)
-def create_patient(patient_data: PatientCreate, db: Session = Depends(get_db)):
+@patient.get("/patient/{patient_id}")
+async def get_patient_by_id(req: Request, patient_id: int):
+    """
+    Obtiene un paciente por su ID.
 
-    new_patient = Patient(
-        name=patient_data.name,
-        caregiver_id=patient_data.caregiver_id
-    )
+    Args:
+        patient_id: ID del paciente
 
-    db.add(new_patient)
-    db.commit()
-    db.refresh(new_patient)
+    Returns:
+        JSONResponse con los datos del paciente
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
-    return new_patient
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Patient)
+                .options(joinedload(Patient.caregiver))
+                .options(joinedload(Patient.treatments))
+                .where(Patient.id == patient_id)
+            )
 
+            result = await session.execute(stmt)
+            patient_found = result.scalar_one_or_none()
 
-#Obtener todos los pacientes
-@patient.get("/patients/all", response_model=List[PatientResponse])
-def get_patients(db: Session = Depends(get_db)):
+            if not patient_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Paciente con ID {patient_id} no encontrado"}
+                )
 
-    patients = db.query(Patient).all()
-    return patients
+            caregiver = patient_found.caregiver
 
+            patient_data = {
+                "id": patient_found.id,
+                "name": patient_found.name,
+                "caregiver_id": patient_found.caregiver_id,
+                "active": patient_found.active,
+                "notes": patient_found.notes,
+                "caregiver": {
+                    "id": caregiver.id if caregiver else None,
+                    "name": caregiver.name if caregiver else None,
+                    "email": caregiver.email if caregiver else None,
+                    "role": caregiver.role if caregiver else None
+                } if caregiver else None,
+                "treatments_count": len(patient_found.treatments) if patient_found.treatments else 0
+            }
 
-#Obtener un paciente por el ID
-@patient.get("/patients/{id}", response_model=PatientResponse)
-def get_patient(id: int, db: Session = Depends(get_db)):
+            return JSONResponse(status_code=200, content=patient_data)
 
-    patient_found = db.query(Patient).filter(Patient.id == id).first()
-
-    if not patient_found:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
-
-    return patient_found
-
-
-#Actualizar un paciente
-@patient.patch("/patients/{id}/update", response_model=PatientResponse)
-def update_patient(
-    id: int,
-    patient_data: PatientUpdate,
-    db: Session = Depends(get_db)
-):
-
-    patient_found = db.query(Patient).filter(Patient.id == id).first()
-
-    if not patient_found:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
-
-    # Actualizar solo los campos enviados
-    if patient_data.name is not None:
-        patient_found.name = patient_data.name
-    if patient_data.caregiver_id is not None:
-        patient_found.caregiver_id = patient_data.caregiver_id
-    if patient_data.notes is not None:
-        patient_found.notes = patient_data.notes
-
-    db.commit()
-    db.refresh(patient_found)
-
-    return patient_found
-
-
-#Eliminar o inactivar paciente
-@patient.delete("/patients/{id}/delete")
-def delete_patient(id: int, db: Session = Depends(get_db)):
-
-    patient_found = db.query(Patient).filter(Patient.id == id).first()
-
-    if not patient_found:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
-
-    patient_found.active = False
-    db.commit()
-
-    return {
-        "message": f"Paciente {patient_found.name} eliminado correctamente",
-        "id": id
-    }
+    except Exception as error:
+        print("Error al obtener paciente ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener paciente"}
+        )
 
 
-#Obtener todos los tratamientos de un PACIENTe
-@patient.get("/patients/{id}/treatments")
-def get_patient_treatments(id: int, db: Session = Depends(get_db)):
+@patient.post("/patient/create")
+async def create_patient(req: Request, data: InputPatient):
+    """
+    Crea un nuevo paciente.
 
-    patient_found = db.query(Patient).filter(Patient.id == id).first()
+    Args:
+        data: Datos del paciente (InputPatient)
 
-    if not patient_found:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    Returns:
+        JSONResponse con el paciente creado
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
-    treatments = db.query(Treatment).filter(
-        Treatment.patient_id == id,
-        Treatment.active == True
-    ).all()
+        async with AsyncSessionLocal() as session:
+            # Verificar que el cuidador existe
+            stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+            result_caregiver = await session.execute(stmt_caregiver)
+            caregiver = result_caregiver.scalar_one_or_none()
 
-    return {
-        "patient_id": id,
-        "patient_name": patient_found.name,
-        "treatments": treatments
-    }
+            if not caregiver:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Cuidador con ID {data.caregiver_id} no encontrado"}
+                )
+
+            # Crear paciente
+            new_patient = Patient(
+                name=data.name,
+                caregiver_id=data.caregiver_id,
+                notes=data.notes
+            )
+
+            session.add(new_patient)
+            await session.commit()
+            await session.refresh(new_patient)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": "Paciente creado correctamente",
+                    "patient": {
+                        "id": new_patient.id,
+                        "name": new_patient.name,
+                        "caregiver_id": new_patient.caregiver_id,
+                        "notes": new_patient.notes,
+                        "active": new_patient.active
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al crear paciente ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al crear paciente"}
+        )
 
 
-# Obtener dosis pendientes de HOY para un paciente
-@patient.get("/patients/{id}/upcoming-doses")
-def get_patient_upcoming_doses(id: int, db: Session = Depends(get_db)):
+@patient.put("/patient/update")
+async def update_patient(req: Request, data: InputPatientUpdate):
+    """
+    Actualiza un paciente existente.
 
-    patient_found = db.query(Patient).filter(Patient.id == id).first()
+    Args:
+        data: Datos a actualizar (InputPatientUpdate)
 
-    if not patient_found:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    Returns:
+        JSONResponse con mensaje de actualización
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
-    # Obtener tratamientos activos del paciente
-    treatments = db.query(Treatment).filter(
-        Treatment.patient_id == id,
-        Treatment.active == True
-    ).all()
+        async with AsyncSessionLocal() as session:
+            # Buscar paciente
+            stmt = select(Patient).where(Patient.id == data.id)
+            result = await session.execute(stmt)
+            patient_found = result.scalar_one_or_none()
 
-    # Obtener logs de HOY
-    today = date.today()
-    logs = db.query(IntakeLog).join(Treatment).filter(
-        Treatment.patient_id == id,
-        IntakeLog.taken_at >= datetime.combine(today, datetime.min.time()),
-        IntakeLog.taken_at < datetime.combine(today, datetime.max.time())
-    ).all()
+            if not patient_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Paciente con ID {data.id} no encontrado"}
+                )
 
-    return {
-        "patient_id": id,
-        "patient_name": patient_found.name,
-        "date": today.isoformat(),
-        "treatments": [
-            {
-                "id": t.id,
-                "med_name": t.medication.name if hasattr(t, 'medication') else None,
-                "dosage": t.dosage,
-                "frequency": t.frequency
-            } for t in treatments
-        ],
-        "logs_today": len(logs)
-    }
+            updated = False
+
+            # Validar y aplicar cambios
+            if is_valid_change(data.name, patient_found.name):
+                patient_found.name = data.name
+                updated = True
+
+            if is_valid_change(data.caregiver_id, patient_found.caregiver_id):
+                # Verificar que el nuevo cuidador existe
+                stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+                result_caregiver = await session.execute(stmt_caregiver)
+                caregiver = result_caregiver.scalar_one_or_none()
+
+                if not caregiver:
+                    return JSONResponse(
+                        status_code=404,
+                        content={"message": f"Cuidador con ID {data.caregiver_id} no encontrado"}
+                    )
+
+                patient_found.caregiver_id = data.caregiver_id
+                updated = True
+
+            if is_valid_change(data.notes, patient_found.notes):
+                patient_found.notes = data.notes
+                updated = True
+
+            if is_valid_change(data.active, patient_found.active):
+                patient_found.active = data.active
+                updated = True
+
+            if updated:
+                await session.commit()
+                if patient_found.active:
+                    return JSONResponse(
+                        status_code=200,
+                        content={"message": "Paciente actualizado correctamente"}
+                    )
+                else:
+                    return JSONResponse(
+                        status_code=200,
+                        content={"message": "Paciente desactivado correctamente"}
+                    )
+            else:
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "No se realizaron cambios"}
+                )
+
+    except Exception as error:
+        print("Error al actualizar paciente ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al actualizar paciente"}
+        )
+
+
+@patient.put("/patient/{patient_id}/deactivate")
+async def deactivate_patient(req: Request, patient_id: int):
+    """
+    Desactiva un paciente (soft delete).
+
+    Args:
+        patient_id: ID del paciente
+
+    Returns:
+        JSONResponse con mensaje de confirmación
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Patient).where(Patient.id == patient_id)
+            result = await session.execute(stmt)
+            patient_found = result.scalar_one_or_none()
+
+            if not patient_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Paciente con ID {patient_id} no encontrado"}
+                )
+
+            patient_found.active = False
+            await session.commit()
+
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Paciente desactivado correctamente"}
+            )
+
+    except Exception as error:
+        print("Error al desactivar paciente ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al desactivar paciente"}
+        )

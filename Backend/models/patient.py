@@ -4,9 +4,7 @@ from sqlalchemy.orm import relationship
 from pydantic import BaseModel
 from config.db import Base
 
-# ==========================================
-# MODELO SQLALCHEMY
-# ==========================================
+#region MODELO SQLALCHEMY
 
 class Patient(Base):
     __tablename__ = 'patients'
@@ -20,10 +18,9 @@ class Patient(Base):
     caregiver = relationship('User', back_populates='patients', foreign_keys=[caregiver_id])
     treatments = relationship('Treatment', back_populates='patient')
 
+#endregion
 
-# ==========================================
-# MODELOS PYDANTIC
-# ==========================================
+#region MODELOS PYDANTIC
 
 class PatientBase(BaseModel):
     name: str
@@ -40,8 +37,24 @@ class PatientResponse(PatientBase):
     class Config:
         from_attributes = True
 
+class InputPatient(BaseModel):
+    """Modelo para crear un paciente"""
+    name: str
+    caregiver_id: int
+    notes: Optional[str] = None
+
+class InputPatientUpdate(BaseModel):
+    """Modelo para actualizar un paciente"""
+    id: int
+    name: Optional[str] = None
+    caregiver_id: Optional[int] = None
+    notes: Optional[str] = None
+    active: Optional[bool] = None
+
 class PatientUpdate(BaseModel):
     name: Optional[str] = None
     caregiver_id: Optional[int] = None
     notes: Optional[str] = None
     active: Optional[bool] = None
+
+#endregion

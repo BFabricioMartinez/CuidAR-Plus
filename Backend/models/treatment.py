@@ -5,9 +5,7 @@ from pydantic import BaseModel
 from datetime import date
 from config.db import Base
 
-# ==========================================
-# MODELO SQLALCHEMY
-# ==========================================
+#region MODELO SQLALCHEMY
 
 class Treatment(Base):
     __tablename__ = 'treatments'
@@ -28,10 +26,9 @@ class Treatment(Base):
     intake_logs = relationship('IntakeLog', back_populates='treatment')
     medication = relationship('Medication', back_populates='treatments')
 
+#endregion
 
-# ==========================================
-# MODELOS PYDANTIC
-# ==========================================
+#region MODELOS PYDANTIC
 
 class TreatmentCreate(BaseModel):
     patient_id: int
@@ -66,3 +63,29 @@ class TreatmentUpdate(BaseModel):
     end_date: Optional[date] = None
     notes: Optional[str] = None
     active: Optional[bool] = None
+
+class InputTreatment(BaseModel):
+    """Modelo para crear un tratamiento"""
+    patient_id: int
+    medication_name: str
+    dosage: Optional[str] = None
+    frequency: str
+    description: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    notes: Optional[str] = None
+
+class InputTreatmentUpdate(BaseModel):
+    """Modelo para actualizar un tratamiento"""
+    id: int
+    patient_id: Optional[int] = None
+    medication_name: Optional[str] = None
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    notes: Optional[str] = None
+    active: Optional[bool] = None
+
+#endregion

@@ -1,368 +1,755 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from models import Assignment, AssignmentCreate, AssignmentResponse, User, Patient, Treatment, IntakeLog
-from config.db import SessionLocal
-from typing import List, Optional
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import select, func, or_
+from sqlalchemy.orm import joinedload
+from models import (
+    Medication, Assignment, User, Patient, Treatment, IntakeLog,
+    InputMedication, InputMedicationUpdate,
+    InputAssignment, InputAssignmentUpdate,
+    InputPaginatedRequestFilter
+)
+from config.db import AsyncSessionLocal
+from auth.security import Security
+from utils.update import is_valid_change
 from datetime import datetime, date, timedelta
+import traceback
 
-# ============================================s
-# ASIGNACION
+medication = APIRouter()
+assignment = APIRouter()
+statistics = APIRouter()
+
+
+# ============================================
+# MEDICATIONS ENDPOINTS
 # ============================================
 
-assignment = APIRouter(tags=["Assignments"])
+@medication.post("/medication/paginated")
+async def get_medications_paginated(req: Request, body: InputPaginatedRequestFilter):
+    """
+    Obtiene una lista paginada de medicamentos con filtros dinámicos.
 
+    Filtros disponibles en body.filters:
+    - search: Búsqueda en name y description
+    - name: Filtro por nombre
+    - active: Filtro por estado activo
+    - order: "desc" para descendente, "asc" para ascendente
 
-# Dependencia de sesión de base de datos
-def get_db():
-    db = SessionLocal()
+    Returns:
+        JSONResponse con lista de medicamentos y cursor para siguiente página
+    """
     try:
-        yield db
-    finally:
-        db.close()
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
+        # Extraer parámetros
+        limit = body.limit or 20
+        last_seen_id = body.last_seen_id
+        filters = body.filters or {}
+        search = (filters.get("search") or "").strip()
+        order_raw = (filters.get("order") or "").lower()
 
-# Listar todos las asignaciones
-@assignment.get("/assignments/all", response_model=List[AssignmentResponse])
-def get_assignments(
-    caregiver_id: Optional[int] = Query(None, description="Filtrar por ID del cuidador"),
-    patient_id: Optional[int] = Query(None, description="Filtrar por ID del paciente"),
-    db: Session = Depends(get_db)
-):
+        # Determinar orden
+        order_desc = order_raw in ("desc", "newest", "mas_nuevos")
 
-    query = db.query(Assignment).filter(Assignment.active == True)
-    
-    # Filtrar por cuidador
-    if caregiver_id is not None:
-        query = query.filter(Assignment.caregiver_id == caregiver_id)
-    
-    # Filtrar por paciente
-    if patient_id is not None:
-        query = query.filter(Assignment.patient_id == patient_id)
-    
-    assignments = query.all()
-    return assignments
+        async with AsyncSessionLocal() as session:
+            # Construir query base
+            stmt = select(Medication)
 
+            # Filtrar por active
+            if hasattr(Medication, "active"):
+                active_filter = filters.get("active")
+                if active_filter is not None:
+                    stmt = stmt.where(Medication.active.is_(active_filter))
+                else:
+                    stmt = stmt.where(Medication.active.is_(True))
 
-#Asignar cuidador a paciente
-@assignment.post("/assignments/create", response_model=AssignmentResponse)
-def create_assignment(
-    assignment_data: AssignmentCreate,
-    db: Session = Depends(get_db)
-):
-    # Verificar que el cuidador existe y tiene rol ASISTENCIAL
-    caregiver = db.query(User).filter(
-        User.id == assignment_data.caregiver_id,
-        User.role == "ASISTENCIAL",
-        User.active == True
-    ).first()
-    
-    if not caregiver:
-        raise HTTPException(
-            status_code=404,
-            detail="Cuidador no encontrado o no tiene rol ASISTENCIAL"
+            # Búsqueda libre (search)
+            if search:
+                pattern = f"%{search}%"
+                stmt = stmt.where(
+                    or_(
+                        Medication.name.ilike(pattern),
+                        Medication.description.ilike(pattern)
+                    )
+                )
+
+            # Filtro por name
+            name_filter = filters.get("name")
+            if name_filter:
+                stmt = stmt.where(Medication.name.ilike(f"%{name_filter}%"))
+
+            # Aplicar orden
+            if order_desc:
+                stmt = stmt.order_by(Medication.id.desc())
+            else:
+                stmt = stmt.order_by(Medication.id.asc())
+
+            # Keyset pagination
+            if last_seen_id is not None:
+                if order_desc:
+                    stmt = stmt.where(Medication.id < last_seen_id)
+                else:
+                    stmt = stmt.where(Medication.id > last_seen_id)
+
+            # Aplicar límite
+            stmt = stmt.limit(limit)
+
+            # Ejecutar query
+            result = await session.execute(stmt)
+            medications = result.scalars().all()
+
+            # Serializar
+            data = []
+            for m in medications:
+                data.append({
+                    "id": m.id,
+                    "name": m.name,
+                    "description": m.description,
+                    "active": m.active
+                })
+
+            # Cursor para siguiente página
+            next_cursor = medications[-1].id if len(medications) == limit else None
+
+            return JSONResponse(
+                status_code=200,
+                content={"medications": data, "next_cursor": next_cursor}
+            )
+
+    except Exception as error:
+        print("Error al obtener medicamentos paginados ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener medicamentos"}
         )
-    
-    # Verificar que el paciente existe
-    patient = db.query(Patient).filter(Patient.id == assignment_data.patient_id).first()
-    
-    if not patient:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
-    
-    # Verificar que no existe ya una asignación activa
-    existing = db.query(Assignment).filter(
-        Assignment.caregiver_id == assignment_data.caregiver_id,
-        Assignment.patient_id == assignment_data.patient_id,
-        Assignment.active == True
-    ).first()
-    
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="Esta asignación ya existe"
-        )
-    
-    # Crear asignación
-    new_assignment = Assignment(
-        caregiver_id=assignment_data.caregiver_id,
-        patient_id=assignment_data.patient_id,
-        active=True
-    )
-    
-    db.add(new_assignment)
-    db.commit()
-    db.refresh(new_assignment)
-    
-    return new_assignment
 
 
-# Desasignar un cuidador a un paciente
-@assignment.delete("/assignments/{id}/delete")
-def delete_assignment(id: int, db: Session = Depends(get_db)):
+@medication.get("/medication/{medication_id}")
+async def get_medication_by_id(req: Request, medication_id: int):
+    """Obtiene un medicamento por su ID."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
-    assignment_found = db.query(Assignment).filter(Assignment.id == id).first()
-    
-    if not assignment_found:
-        raise HTTPException(status_code=404, detail="Asignación no encontrada")
-    
-    # Soft delete
-    assignment_found.active = False
-    db.commit()
-    
-    return {
-        "message": "Asignación eliminada correctamente",
-        "id": id
-    }
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Medication)
+                .options(joinedload(Medication.treatments))
+                .where(Medication.id == medication_id)
+            )
 
+            result = await session.execute(stmt)
+            medication_found = result.scalar_one_or_none()
 
-# ============================================
-# ESTADISTICAS
-# ============================================
+            if not medication_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Medicamento con ID {medication_id} no encontrado"}
+                )
 
-statistics = APIRouter(tags=["Statistics"])
-
-
-# Resumen - total usuarios activos - total pacientes - total tratamientos - dosis de hoy - Adherencia de hoy
-@statistics.get("/statistics/overview")
-def get_overview(db: Session = Depends(get_db)):
-
-    # Usuarios activos
-    active_users = db.query(func.count(User.id)).filter(User.active == True).scalar()
-    
-    # Total pacientes
-    total_patients = db.query(func.count(Patient.id)).scalar()
-    
-    # Tratamientos activos
-    active_treatments = db.query(func.count(Treatment.id)).filter(
-        Treatment.active == True
-    ).scalar()
-    
-    # Dosis de HOY
-    today = date.today()
-    today_start = datetime.combine(today, datetime.min.time())
-    today_end = datetime.combine(today, datetime.max.time())
-    
-    taken_today = db.query(func.count(IntakeLog.id)).filter(
-        IntakeLog.taken_at >= today_start,
-        IntakeLog.taken_at <= today_end,
-        IntakeLog.status == "TAKEN"
-    ).scalar()
-    
-    missed_today = db.query(func.count(IntakeLog.id)).filter(
-        IntakeLog.taken_at >= today_start,
-        IntakeLog.taken_at <= today_end,
-        IntakeLog.status == "MISSED"
-    ).scalar()
-    
-    total_today = taken_today + missed_today
-    adherence_today = round((taken_today / total_today * 100), 2) if total_today > 0 else None
-    
-    return {
-        "active_users": active_users or 0,
-        "total_patients": total_patients or 0,
-        "active_treatments": active_treatments or 0,
-        "today_doses": {
-            "taken": taken_today or 0,
-            "missed": missed_today or 0,
-            "total": total_today or 0,
-            "adherence_percentage": adherence_today
-        }
-    }
-
-
-# Estdisticas personalizadas segun el rol
-@statistics.get("/statistics/my-stats")
-def get_my_stats(
-    user_id: int = Query(..., description="ID del usuario actual"),
-    db: Session = Depends(get_db)
-):
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    today = date.today()
-    today_start = datetime.combine(today, datetime.min.time())
-    today_end = datetime.combine(today, datetime.max.time())
-    
-    if user.role == "ADMIN":
-        # Retornar overview global
-        return get_overview(db)
-    
-    elif user.role == "ASISTENCIAL":
-        # Pacientes asignados
-        assigned_patients = db.query(func.count(Assignment.id)).filter(
-            Assignment.caregiver_id == user_id,
-            Assignment.active == True
-        ).scalar()
-        
-        # Obtener IDs de pacientes asignados
-        patient_ids = db.query(Assignment.patient_id).filter(
-            Assignment.caregiver_id == user_id,
-            Assignment.active == True
-        ).all()
-        patient_ids = [p[0] for p in patient_ids]
-        
-        # Dosis de HOY de sus pacientes
-        taken_today = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id.in_(patient_ids),
-            IntakeLog.taken_at >= today_start,
-            IntakeLog.taken_at <= today_end,
-            IntakeLog.status == "TAKEN"
-        ).scalar() if patient_ids else 0
-        
-        missed_today = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id.in_(patient_ids),
-            IntakeLog.taken_at >= today_start,
-            IntakeLog.taken_at <= today_end,
-            IntakeLog.status == "MISSED"
-        ).scalar() if patient_ids else 0
-        
-        total_today = taken_today + missed_today
-        adherence_today = round((taken_today / total_today * 100), 2) if total_today > 0 else None
-        
-        return {
-            "role": "ASISTENCIAL",
-            "assigned_patients": assigned_patients or 0,
-            "today_doses": {
-                "taken": taken_today or 0,
-                "missed": missed_today or 0,
-                "total": total_today or 0,
-                "adherence_percentage": adherence_today
+            medication_data = {
+                "id": medication_found.id,
+                "name": medication_found.name,
+                "description": medication_found.description,
+                "active": medication_found.active,
+                "treatments_count": len(medication_found.treatments) if medication_found.treatments else 0
             }
-        }
-    
-    elif user.role == "PERSONAL":
-        # Obtener su paciente
-        patient = db.query(Patient).filter(
-            Patient.created_by_user_id == user_id
-        ).first()
-        
-        if not patient:
-            return {
-                "role": "PERSONAL",
-                "message": "No tiene paciente asignado",
-                "today_doses": {
-                    "taken": 0,
-                    "missed": 0,
-                    "total": 0,
-                    "adherence_percentage": None
+
+            return JSONResponse(status_code=200, content=medication_data)
+
+    except Exception as error:
+        print("Error al obtener medicamento ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener medicamento"}
+        )
+
+
+@medication.post("/medication/create")
+async def create_medication(req: Request, data: InputMedication):
+    """Crea un nuevo medicamento."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            # Verificar que el nombre no exista
+            stmt_check = select(Medication).where(Medication.name == data.name)
+            result_check = await session.execute(stmt_check)
+            existing = result_check.scalar_one_or_none()
+
+            if existing:
+                return JSONResponse(
+                    status_code=409,
+                    content={"message": f"El medicamento {data.name} ya existe"}
+                )
+
+            new_medication = Medication(
+                name=data.name,
+                description=data.description
+            )
+
+            session.add(new_medication)
+            await session.commit()
+            await session.refresh(new_medication)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": "Medicamento creado correctamente",
+                    "medication": {
+                        "id": new_medication.id,
+                        "name": new_medication.name,
+                        "description": new_medication.description,
+                        "active": new_medication.active
+                    }
                 }
+            )
+
+    except Exception as error:
+        print("Error al crear medicamento ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al crear medicamento"}
+        )
+
+
+@medication.put("/medication/update")
+async def update_medication(req: Request, data: InputMedicationUpdate):
+    """Actualiza un medicamento existente."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Medication).where(Medication.id == data.id)
+            result = await session.execute(stmt)
+            medication_found = result.scalar_one_or_none()
+
+            if not medication_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Medicamento con ID {data.id} no encontrado"}
+                )
+
+            updated = False
+
+            if is_valid_change(data.name, medication_found.name):
+                # Verificar que el nuevo nombre no exista
+                stmt_check = select(Medication).where(Medication.name == data.name).where(Medication.id != data.id)
+                result_check = await session.execute(stmt_check)
+                existing = result_check.scalar_one_or_none()
+
+                if existing:
+                    return JSONResponse(
+                        status_code=409,
+                        content={"message": f"El medicamento {data.name} ya existe"}
+                    )
+
+                medication_found.name = data.name
+                updated = True
+
+            if is_valid_change(data.description, medication_found.description):
+                medication_found.description = data.description
+                updated = True
+
+            if is_valid_change(data.active, medication_found.active):
+                medication_found.active = data.active
+                updated = True
+
+            if updated:
+                await session.commit()
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "Medicamento actualizado correctamente"}
+                )
+            else:
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "No se realizaron cambios"}
+                )
+
+    except Exception as error:
+        print("Error al actualizar medicamento ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al actualizar medicamento"}
+        )
+
+
+@medication.put("/medication/{medication_id}/deactivate")
+async def deactivate_medication(req: Request, medication_id: int):
+    """Desactiva un medicamento (soft delete)."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Medication).where(Medication.id == medication_id)
+            result = await session.execute(stmt)
+            medication_found = result.scalar_one_or_none()
+
+            if not medication_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Medicamento con ID {medication_id} no encontrado"}
+                )
+
+            medication_found.active = False
+            await session.commit()
+
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Medicamento desactivado correctamente"}
+            )
+
+    except Exception as error:
+        print("Error al desactivar medicamento ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al desactivar medicamento"}
+        )
+
+
+# ============================================
+# ASSIGNMENTS ENDPOINTS
+# ============================================
+
+@assignment.post("/assignment/paginated")
+async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFilter):
+    """
+    Obtiene una lista paginada de asignaciones con filtros dinámicos.
+
+    Filtros disponibles en body.filters:
+    - caregiver_id: Filtro por ID del cuidador
+    - patient_id: Filtro por ID del paciente
+    - active: Filtro por estado activo
+    - order: "desc" para descendente, "asc" para ascendente
+    """
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        limit = body.limit or 20
+        last_seen_id = body.last_seen_id
+        filters = body.filters or {}
+        order_raw = (filters.get("order") or "").lower()
+
+        order_desc = order_raw in ("desc", "newest", "mas_nuevos")
+
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Assignment)
+                .options(joinedload(Assignment.caregiver))
+                .options(joinedload(Assignment.patient))
+            )
+
+            if hasattr(Assignment, "active"):
+                active_filter = filters.get("active")
+                if active_filter is not None:
+                    stmt = stmt.where(Assignment.active.is_(active_filter))
+                else:
+                    stmt = stmt.where(Assignment.active.is_(True))
+
+            caregiver_id_filter = filters.get("caregiver_id")
+            if caregiver_id_filter:
+                stmt = stmt.where(Assignment.caregiver_id == caregiver_id_filter)
+
+            patient_id_filter = filters.get("patient_id")
+            if patient_id_filter:
+                stmt = stmt.where(Assignment.patient_id == patient_id_filter)
+
+            if order_desc:
+                stmt = stmt.order_by(Assignment.id.desc())
+            else:
+                stmt = stmt.order_by(Assignment.id.asc())
+
+            if last_seen_id is not None:
+                if order_desc:
+                    stmt = stmt.where(Assignment.id < last_seen_id)
+                else:
+                    stmt = stmt.where(Assignment.id > last_seen_id)
+
+            stmt = stmt.limit(limit)
+
+            result = await session.execute(stmt)
+            assignments = result.scalars().all()
+
+            data = []
+            for a in assignments:
+                caregiver = a.caregiver
+                patient = a.patient
+                data.append({
+                    "id": a.id,
+                    "caregiver_id": a.caregiver_id,
+                    "patient_id": a.patient_id,
+                    "active": a.active,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "caregiver": {
+                        "id": caregiver.id if caregiver else None,
+                        "name": caregiver.name if caregiver else None,
+                        "email": caregiver.email if caregiver else None
+                    } if caregiver else None,
+                    "patient": {
+                        "id": patient.id if patient else None,
+                        "name": patient.name if patient else None
+                    } if patient else None
+                })
+
+            next_cursor = assignments[-1].id if len(assignments) == limit else None
+
+            return JSONResponse(
+                status_code=200,
+                content={"assignments": data, "next_cursor": next_cursor}
+            )
+
+    except Exception as error:
+        print("Error al obtener asignaciones paginadas ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener asignaciones"}
+        )
+
+
+@assignment.get("/assignment/{assignment_id}")
+async def get_assignment_by_id(req: Request, assignment_id: int):
+    """Obtiene una asignación por su ID."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Assignment)
+                .options(joinedload(Assignment.caregiver))
+                .options(joinedload(Assignment.patient))
+                .where(Assignment.id == assignment_id)
+            )
+
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {assignment_id} no encontrada"}
+                )
+
+            caregiver = assignment_found.caregiver
+            patient = assignment_found.patient
+
+            assignment_data = {
+                "id": assignment_found.id,
+                "caregiver_id": assignment_found.caregiver_id,
+                "patient_id": assignment_found.patient_id,
+                "active": assignment_found.active,
+                "created_at": assignment_found.created_at.isoformat() if assignment_found.created_at else None,
+                "caregiver": {
+                    "id": caregiver.id if caregiver else None,
+                    "name": caregiver.name if caregiver else None,
+                    "email": caregiver.email if caregiver else None,
+                    "role": caregiver.role if caregiver else None
+                } if caregiver else None,
+                "patient": {
+                    "id": patient.id if patient else None,
+                    "name": patient.name if patient else None,
+                    "caregiver_id": patient.caregiver_id if patient else None
+                } if patient else None
             }
-        
-        # Dosis de HOY
-        taken_today = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id == patient.id,
-            IntakeLog.taken_at >= today_start,
-            IntakeLog.taken_at <= today_end,
-            IntakeLog.status == "TAKEN"
-        ).scalar()
-        
-        missed_today = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id == patient.id,
-            IntakeLog.taken_at >= today_start,
-            IntakeLog.taken_at <= today_end,
-            IntakeLog.status == "MISSED"
-        ).scalar()
-        
-        total_today = taken_today + missed_today
-        adherence_today = round((taken_today / total_today * 100), 2) if total_today > 0 else None
-        
-        return {
-            "role": "PERSONAL",
-            "patient_id": patient.id,
-            "patient_name": patient.name,
-            "today_doses": {
-                "taken": taken_today or 0,
-                "missed": missed_today or 0,
-                "total": total_today or 0,
-                "adherence_percentage": adherence_today
-            }
-        }
+
+            return JSONResponse(status_code=200, content=assignment_data)
+
+    except Exception as error:
+        print("Error al obtener asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener asignación"}
+        )
 
 
-# Obtener estadisticas PACIENTe en los ultimos dias
-@statistics.get("/statistics/patients/{patient_id}/adherence")
-def get_patient_adherence(
-    patient_id: int,
-    days: int = Query(7, description="Número de días hacia atrás (default: 7)"),
-    db: Session = Depends(get_db)
-):
+@assignment.post("/assignment/create")
+async def create_assignment(req: Request, data: InputAssignment):
+    """Crea una nueva asignación de cuidador a paciente."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
 
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    
-    if not patient:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
-    
-    # Calcular fecha de inicio
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days - 1)
-    
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-    end_datetime = datetime.combine(end_date, datetime.max.time())
-    
-    # Contar tomadas
-    taken_count = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-        Treatment.patient_id == patient_id,
-        IntakeLog.taken_at >= start_datetime,
-        IntakeLog.taken_at <= end_datetime,
-        IntakeLog.status == "TAKEN"
-    ).scalar()
-    
-    # Contar omitidas
-    missed_count = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-        Treatment.patient_id == patient_id,
-        IntakeLog.taken_at >= start_datetime,
-        IntakeLog.taken_at <= end_datetime,
-        IntakeLog.status == "MISSED"
-    ).scalar()
-    
-    total_count = taken_count + missed_count
-    adherence_percentage = round((taken_count / total_count * 100), 2) if total_count > 0 else None
-    
-    # Desglose diario (opcional, puedes agregarlo después)
-    daily_breakdown = []
-    current_date = start_date
-    while current_date <= end_date:
-        day_start = datetime.combine(current_date, datetime.min.time())
-        day_end = datetime.combine(current_date, datetime.max.time())
-        
-        day_taken = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id == patient_id,
-            IntakeLog.taken_at >= day_start,
-            IntakeLog.taken_at <= day_end,
-            IntakeLog.status == "TAKEN"
-        ).scalar()
-        
-        day_missed = db.query(func.count(IntakeLog.id)).join(Treatment).filter(
-            Treatment.patient_id == patient_id,
-            IntakeLog.taken_at >= day_start,
-            IntakeLog.taken_at <= day_end,
-            IntakeLog.status == "MISSED"
-        ).scalar()
-        
-        daily_breakdown.append({
-            "date": current_date.isoformat(),
-            "taken": day_taken or 0,
-            "missed": day_missed or 0
-        })
-        
-        current_date += timedelta(days=1)
-    
-    return {
-        "patient_id": patient_id,
-        "patient_name": patient.name,
-        "period": {
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "days": days
-        },
-        "summary": {
-            "taken_count": taken_count or 0,
-            "missed_count": missed_count or 0,
-            "total_count": total_count or 0,
-            "adherence_percentage": adherence_percentage
-        },
-        "daily_breakdown": daily_breakdown
-    }
+        async with AsyncSessionLocal() as session:
+            # Verificar que el cuidador existe y tiene rol ASISTENCIAL
+            stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+            result_caregiver = await session.execute(stmt_caregiver)
+            caregiver = result_caregiver.scalar_one_or_none()
+
+            if not caregiver:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Cuidador con ID {data.caregiver_id} no encontrado"}
+                )
+
+            if caregiver.role != "ASISTENCIAL":
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "El usuario debe tener rol ASISTENCIAL para ser cuidador"}
+                )
+
+            # Verificar que el paciente existe
+            stmt_patient = select(Patient).where(Patient.id == data.patient_id)
+            result_patient = await session.execute(stmt_patient)
+            patient = result_patient.scalar_one_or_none()
+
+            if not patient:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
+                )
+
+            # Verificar que no existe ya una asignación activa
+            stmt_check = (
+                select(Assignment)
+                .where(Assignment.caregiver_id == data.caregiver_id)
+                .where(Assignment.patient_id == data.patient_id)
+                .where(Assignment.active.is_(True))
+            )
+            result_check = await session.execute(stmt_check)
+            existing = result_check.scalar_one_or_none()
+
+            if existing:
+                return JSONResponse(
+                    status_code=409,
+                    content={"message": "Esta asignación ya existe"}
+                )
+
+            new_assignment = Assignment(
+                caregiver_id=data.caregiver_id,
+                patient_id=data.patient_id
+            )
+
+            session.add(new_assignment)
+            await session.commit()
+            await session.refresh(new_assignment)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": "Asignación creada correctamente",
+                    "assignment": {
+                        "id": new_assignment.id,
+                        "caregiver_id": new_assignment.caregiver_id,
+                        "patient_id": new_assignment.patient_id,
+                        "active": new_assignment.active,
+                        "created_at": new_assignment.created_at.isoformat() if new_assignment.created_at else None
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al crear asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al crear asignación"}
+        )
+
+
+@assignment.put("/assignment/update")
+async def update_assignment(req: Request, data: InputAssignmentUpdate):
+    """Actualiza una asignación existente."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Assignment).where(Assignment.id == data.id)
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {data.id} no encontrada"}
+                )
+
+            updated = False
+
+            if is_valid_change(data.caregiver_id, assignment_found.caregiver_id):
+                stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+                result_caregiver = await session.execute(stmt_caregiver)
+                caregiver = result_caregiver.scalar_one_or_none()
+
+                if not caregiver or caregiver.role != "ASISTENCIAL":
+                    return JSONResponse(
+                        status_code=400,
+                        content={"message": "El usuario debe existir y tener rol ASISTENCIAL"}
+                    )
+
+                assignment_found.caregiver_id = data.caregiver_id
+                updated = True
+
+            if is_valid_change(data.patient_id, assignment_found.patient_id):
+                stmt_patient = select(Patient).where(Patient.id == data.patient_id)
+                result_patient = await session.execute(stmt_patient)
+                patient = result_patient.scalar_one_or_none()
+
+                if not patient:
+                    return JSONResponse(
+                        status_code=404,
+                        content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
+                    )
+
+                assignment_found.patient_id = data.patient_id
+                updated = True
+
+            if is_valid_change(data.active, assignment_found.active):
+                assignment_found.active = data.active
+                updated = True
+
+            if updated:
+                await session.commit()
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "Asignación actualizada correctamente"}
+                )
+            else:
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "No se realizaron cambios"}
+                )
+
+    except Exception as error:
+        print("Error al actualizar asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al actualizar asignación"}
+        )
+
+
+@assignment.put("/assignment/{assignment_id}/deactivate")
+async def deactivate_assignment(req: Request, assignment_id: int):
+    """Desactiva una asignación (soft delete)."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Assignment).where(Assignment.id == assignment_id)
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {assignment_id} no encontrada"}
+                )
+
+            assignment_found.active = False
+            await session.commit()
+
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Asignación desactivada correctamente"}
+            )
+
+    except Exception as error:
+        print("Error al desactivar asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al desactivar asignación"}
+        )
+
+
+# ============================================
+# STATISTICS ENDPOINTS
+# ============================================
+
+@statistics.get("/statistics/overview")
+async def get_overview(req: Request):
+    """Obtiene estadísticas generales del sistema."""
+    try:
+        has_access = Security.verify_token(req.headers)
+        if "iat" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            # Usuarios activos
+            stmt_users = select(func.count(User.id)).where(User.active.is_(True))
+            result_users = await session.execute(stmt_users)
+            active_users = result_users.scalar()
+
+            # Total pacientes
+            stmt_patients = select(func.count(Patient.id))
+            result_patients = await session.execute(stmt_patients)
+            total_patients = result_patients.scalar()
+
+            # Tratamientos activos
+            stmt_treatments = select(func.count(Treatment.id)).where(Treatment.active.is_(True))
+            result_treatments = await session.execute(stmt_treatments)
+            active_treatments = result_treatments.scalar()
+
+            # Dosis de HOY
+            today = date.today()
+            today_start = datetime.combine(today, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            stmt_taken = (
+                select(func.count(IntakeLog.id))
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+                .where(IntakeLog.status == "TAKEN")
+            )
+            result_taken = await session.execute(stmt_taken)
+            taken_today = result_taken.scalar()
+
+            stmt_missed = (
+                select(func.count(IntakeLog.id))
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+                .where(IntakeLog.status == "MISSED")
+            )
+            result_missed = await session.execute(stmt_missed)
+            missed_today = result_missed.scalar()
+
+            total_today = taken_today + missed_today
+            adherence_today = round((taken_today / total_today * 100), 2) if total_today > 0 else None
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "active_users": active_users or 0,
+                    "total_patients": total_patients or 0,
+                    "active_treatments": active_treatments or 0,
+                    "today_doses": {
+                        "taken": taken_today or 0,
+                        "missed": missed_today or 0,
+                        "total": total_today or 0,
+                        "adherence_percentage": adherence_today
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al obtener estadísticas generales ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener estadísticas"}
+        )
