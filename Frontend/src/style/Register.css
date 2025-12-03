@@ -1,0 +1,88 @@
+/* ============================================ */
+/* ESTILOS ADICIONALES PARA REGISTER */
+/* ============================================ */
+
+/* Ajustes específicos para Register - eliminar scroll interno y compactar */
+.register-container .right-panel {
+  padding: 25px 40px !important;
+}
+
+.register-container .form-container {
+  padding: 8px 0;
+}
+
+.register-container .modern-form {
+  gap: 10px !important;
+}
+
+.register-container .input-group {
+  gap: 5px !important;
+}
+
+.register-container .welcome-section {
+  margin-bottom: 16px !important;
+}
+
+.register-container .register-link-container {
+  margin-bottom: 16px !important;
+}
+
+.register-container .divider {
+  margin: 16px 0 12px 0 !important;
+}
+
+.register-container .submit-button-modern {
+  margin-top: 4px !important;
+}
+
+/* Select personalizado */
+.modern-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.modern-select:focus {
+  cursor: pointer;
+}
+
+/* Mensaje de error */
+.error-message {
+  padding: 10px 14px;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.error-message::before {
+  content: "⚠";
+  font-size: 16px;
+}
+
+/* Estado deshabilitado para inputs */
+.modern-input:disabled,
+.modern-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-button-modern:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.social-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

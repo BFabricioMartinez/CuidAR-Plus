@@ -1,0 +1,505 @@
+/* ============================================ */
+/* LOGIN MODERNO - DISEÑO DE DOS COLUMNAS */
+/* ============================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Contenedor principal - Fondo gris claro */
+.modern-login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #e5e7eb;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* ============================================ */
+/* CARD CONTENEDOR PRINCIPAL */
+/* ============================================ */
+
+.login-card {
+  width: 100%;
+  max-width: 1100px;
+  min-height: 600px;
+  max-height: 95vh;
+  display: flex;
+  background-color: #ffffff;
+  border-radius: 32px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  margin: auto;
+}
+
+/* ============================================ */
+/* PANEL IZQUIERDO - FONDO LISO PARA IMAGEN */
+/* ============================================ */
+
+.left-panel {
+  flex: 1;
+  background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.left-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-placeholder {
+  width: 100%;
+  max-width: 400px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Cuando agregues tu imagen, descomenta esto */
+.main-illustration {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ============================================ */
+/* PANEL DERECHO - FORMULARIO */
+/* ============================================ */
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 40px;
+  background-color: #ffffff;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.form-container {
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+}
+
+/* Botón de volver */
+.back-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+}
+
+.back-button svg {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.3s ease;
+}
+
+.back-button:hover {
+  background-color: #f3f4f6;
+  color: #a855f7;
+}
+
+.back-button:hover svg {
+  transform: translateX(-3px);
+}
+
+.back-button:active {
+  background-color: #e5e7eb;
+  transform: scale(0.95);
+}
+
+/* Enlace de registro en la esquina */
+.register-link-container {
+  text-align: right;
+  margin-bottom: 24px;
+}
+
+.register-text {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.register-link {
+  background: none;
+  border: none;
+  color: #a855f7;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  transition: color 0.2s ease;
+}
+
+.register-link:hover {
+  color: #9333ea;
+  text-decoration: underline;
+}
+
+/* Sección de bienvenida */
+.welcome-section {
+  margin-bottom: 24px;
+}
+
+.welcome-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 6px;
+  letter-spacing: -0.5px;
+}
+
+.welcome-subtitle {
+  font-size: 15px;
+  color: #6b7280;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* ============================================ */
+/* FORMULARIO */
+/* ============================================ */
+
+.modern-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.2px;
+}
+
+.input-wrapper-modern {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-svg {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.modern-input {
+  width: 100%;
+  padding: 13px 14px 13px 44px;
+  font-size: 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #fafafa;
+  color: #1a1a1a;
+  font-family: inherit;
+}
+
+.modern-input::placeholder {
+  color: #9ca3af;
+}
+
+.modern-input:focus {
+  border-color: #c084fc;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.08);
+}
+
+.modern-input:hover:not(:focus) {
+  border-color: #d1d5db;
+  background-color: #ffffff;
+}
+
+/* Botón de mostrar/ocultar contraseña */
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  transition: color 0.2s ease;
+}
+
+.password-toggle:hover {
+  color: #c084fc;
+}
+
+.password-toggle svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Recuperar contraseña */
+.forgot-password-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: #a855f7;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.forgot-password-link:hover {
+  color: #9333ea;
+  text-decoration: underline;
+}
+
+/* ============================================ */
+/* BOTÓN PRINCIPAL */
+/* ============================================ */
+
+.submit-button-modern {
+  width: 100%;
+  padding: 14px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff7b7b 0%, #ff6b6b 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px -8px rgba(255, 107, 107, 0.4);
+  margin-top: 8px;
+  letter-spacing: 0.2px;
+}
+
+.submit-button-modern:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -8px rgba(255, 107, 107, 0.5);
+}
+
+.submit-button-modern:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px -8px rgba(255, 107, 107, 0.4);
+}
+
+/* ============================================ */
+/* DIVIDER */
+/* ============================================ */
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0 16px 0;
+  position: relative;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.divider-text {
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 0 14px;
+  font-weight: 500;
+}
+
+/* ============================================ */
+/* BOTONES DE REDES SOCIALES */
+/* ============================================ */
+
+.social-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.social-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background-color: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 100px;
+}
+
+.social-button:hover {
+  border-color: #d1d5db;
+  background-color: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.12);
+}
+
+.social-button:active {
+  transform: translateY(0);
+}
+
+.social-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ============================================ */
+/* RESPONSIVE DESIGN */
+/* ============================================ */
+
+@media (max-width: 1024px) {
+  .login-card {
+    max-width: 900px;
+  }
+
+  .left-panel {
+    padding: 40px;
+  }
+
+  .right-panel {
+    padding: 40px 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .modern-login-container {
+    padding: 20px;
+  }
+
+  .login-card {
+    flex-direction: column;
+    border-radius: 24px;
+  }
+
+  .left-panel {
+    display: none;
+  }
+
+  .right-panel {
+    padding: 40px 30px;
+  }
+
+  .form-container {
+    max-width: 100%;
+  }
+
+  .welcome-title {
+    font-size: 28px;
+  }
+
+  .welcome-subtitle {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-login-container {
+    padding: 15px;
+  }
+
+  .login-card {
+    border-radius: 20px;
+  }
+
+  .right-panel {
+    padding: 30px 24px;
+  }
+
+  .welcome-title {
+    font-size: 26px;
+  }
+
+  .welcome-subtitle {
+    font-size: 13px;
+  }
+
+  .modern-form {
+    gap: 16px;
+  }
+
+  .input-label {
+    font-size: 12px;
+  }
+
+  .modern-input {
+    padding: 12px 13px 12px 40px;
+    font-size: 14px;
+  }
+
+  .submit-button-modern {
+    padding: 13px 24px;
+    font-size: 14px;
+  }
+
+  .register-text,
+  .register-link {
+    font-size: 12px;
+  }
+
+  .social-buttons {
+    gap: 8px;
+  }
+
+  .social-button {
+    padding: 11px;
+  }
+
+  .social-icon {
+    width: 18px;
+    height: 18px;
+  }
+}
