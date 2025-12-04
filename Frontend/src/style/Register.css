@@ -2,37 +2,97 @@
 /* ESTILOS ADICIONALES PARA REGISTER */
 /* ============================================ */
 
-/* Ajustes específicos para Register - eliminar scroll interno y compactar */
+/* Panel derecho optimizado para Register */
 .register-container .right-panel {
-  padding: 25px 40px !important;
+  padding: 30px 60px 30px 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* Contenedor del formulario - Reducido y centrado */
 .register-container .form-container {
-  padding: 8px 0;
+  width: 90%;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+/* Header Flexbox - Contenedor de la flecha */
+.register-container .header-content {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 30px;
+  min-height: 40px;
+}
+
+/* Botón de volver (flecha) específico para Register */
+.register-container .back-button {
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+  margin-right: auto;
+  flex-shrink: 0;
+}
+
+.register-container .back-button svg {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.3s ease;
+}
+
+.register-container .back-button:hover {
+  background-color: #f3f4f6;
+  color: #a855f7;
+}
+
+.register-container .back-button:hover svg {
+  transform: translateX(-3px);
+}
+
+.register-container .back-button:active {
+  background-color: #e5e7eb;
+  transform: scale(0.95);
+}
+
+/* Contenedor de campos del formulario - MÁS COMPACTO */
+.register-container .form-fields {
+  margin-top: 0;
 }
 
 .register-container .modern-form {
-  gap: 10px !important;
+  gap: 10px;
 }
 
 .register-container .input-group {
-  gap: 5px !important;
+  gap: 5px;
 }
 
+/* Ocultar sección de bienvenida en register */
 .register-container .welcome-section {
-  margin-bottom: 16px !important;
-}
-
-.register-container .register-link-container {
-  margin-bottom: 16px !important;
+  display: none;
 }
 
 .register-container .divider {
-  margin: 16px 0 12px 0 !important;
+  margin: 14px 0 12px 0;
 }
 
 .register-container .submit-button-modern {
-  margin-top: 4px !important;
+  margin-top: 4px;
+}
+
+/* Ocultar el link de "Ya tienes cuenta" en register */
+.register-container .register-link-container {
+  display: none;
 }
 
 /* Select personalizado */
@@ -49,8 +109,8 @@
   cursor: pointer;
 }
 
-/* Mensaje de error */
-.error-message {
+/* Mensaje de error compacto */
+.register-container .error-message {
   padding: 10px 14px;
   background-color: #fee2e2;
   border: 1px solid #fecaca;
@@ -58,18 +118,58 @@
   color: #dc2626;
   font-size: 12px;
   font-weight: 500;
-  margin-bottom: 12px;
+  margin-top: 0;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.error-message::before {
+.register-container .error-message::before {
   content: "⚠";
-  font-size: 16px;
+  font-size: 14px;
 }
 
-/* Estado deshabilitado para inputs */
+/* Botón de Google completo */
+.google-button-full {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 13px;
+  background-color: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.google-button-full:hover {
+  border-color: #d1d5db;
+  background-color: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.12);
+}
+
+.google-button-full:active {
+  transform: translateY(0);
+}
+
+.google-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.google-button-text {
+  font-family: inherit;
+}
+
+/* Estado deshabilitado */
 .modern-input:disabled,
 .modern-select:disabled {
   opacity: 0.6;
@@ -82,7 +182,43 @@
   transform: none;
 }
 
-.social-button:disabled {
+.google-button-full:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+}
+
+/* Responsive para Register */
+@media (max-width: 768px) {
+  .register-container .right-panel {
+    padding: 30px 30px 25px 30px;
+  }
+
+  .register-container .form-container {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .register-container .header-content {
+    min-height: 36px;
+    margin-bottom: 24px;
+  }
+
+  .register-container .back-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .register-container .back-button svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .register-container .form-fields {
+    margin-top: 0;
+  }
+
+  .register-container .modern-form {
+    gap: 8px;
+  }
 }

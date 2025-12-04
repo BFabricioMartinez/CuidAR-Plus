@@ -31,25 +31,26 @@
   max-height: 95vh;
   display: flex;
   background-color: #ffffff;
-  border-radius: 32px;
+  border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   margin: auto;
 }
 
 /* ============================================ */
-/* PANEL IZQUIERDO - FONDO LISO PARA IMAGEN */
+/* PANEL IZQUIERDO - FONDO MORADO CON IMAGEN */
 /* ============================================ */
 
 .left-panel {
   flex: 1;
-  background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 60px;
+  padding: 0;
   position: relative;
   overflow: hidden;
+  border-radius: 24px 0 0 24px;
 }
 
 .left-content {
@@ -64,18 +65,19 @@
 
 .image-placeholder {
   width: 100%;
-  max-width: 400px;
-  height: 400px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Cuando agregues tu imagen, descomenta esto */
+/* Estilos para la imagen - Ajuste perfecto */
 .main-illustration {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 24px 0 0 24px;
 }
 
 /* ============================================ */
@@ -358,43 +360,52 @@
 }
 
 /* ============================================ */
-/* BOTONES DE REDES SOCIALES */
+/* BOTÓN DE GOOGLE */
 /* ============================================ */
 
-.social-buttons {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.social-button {
-  flex: 1;
+.google-button-full {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  gap: 12px;
+  padding: 13px 24px;
   background-color: #ffffff;
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  max-width: 100px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
 }
 
-.social-button:hover {
+.google-button-full:hover {
   border-color: #d1d5db;
   background-color: #f9fafb;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.12);
 }
 
-.social-button:active {
+.google-button-full:active {
   transform: translateY(0);
 }
 
-.social-icon {
+.google-button-full:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.google-icon {
   width: 20px;
   height: 20px;
+  flex-shrink: 0;
+}
+
+.google-button-text {
+  font-family: inherit;
+  letter-spacing: 0.2px;
 }
 
 /* ============================================ */
