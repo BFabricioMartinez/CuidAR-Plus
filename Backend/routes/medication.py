@@ -28,7 +28,7 @@ async def get_medications_paginated(req: Request, body: InputPaginatedRequestFil
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         # Extraer parámetros
@@ -120,7 +120,7 @@ async def get_medication_by_id(req: Request, medication_id: int):
     """Obtiene un medicamento por su ID."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -131,7 +131,7 @@ async def get_medication_by_id(req: Request, medication_id: int):
             )
 
             result = await session.execute(stmt)
-            medication_found = result.scalar_one_or_none()
+            medication_found = result.unique().scalar_one_or_none()
 
             if not medication_found:
                 return JSONResponse(
@@ -163,7 +163,7 @@ async def create_medication(req: Request, data: InputMedication):
     """Crea un nuevo medicamento."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -214,7 +214,7 @@ async def update_medication(req: Request, data: InputMedicationUpdate):
     """Actualiza un medicamento existente."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -279,7 +279,7 @@ async def deactivate_medication(req: Request, medication_id: int):
     """Desactiva un medicamento (soft delete)."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

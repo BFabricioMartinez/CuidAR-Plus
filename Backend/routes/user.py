@@ -30,7 +30,7 @@ async def get_users_paginated(req: Request, body: InputPaginatedRequestFilter):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         # Extraer parámetros
@@ -142,7 +142,7 @@ async def get_user_by_id(req: Request, user_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -153,7 +153,7 @@ async def get_user_by_id(req: Request, user_id: int):
             )
 
             result = await session.execute(stmt)
-            user_found = result.scalar_one_or_none()
+            user_found = result.unique().scalar_one_or_none()
 
             if not user_found:
                 return JSONResponse(
@@ -195,7 +195,7 @@ async def create_user(req: Request, data: InputUser):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -259,7 +259,7 @@ async def update_user(req: Request, data: InputUserUpdate):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -349,7 +349,7 @@ async def deactivate_user(req: Request, user_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -394,7 +394,7 @@ async def get_users_by_role(req: Request, role: str):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

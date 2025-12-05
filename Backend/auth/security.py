@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+from jose import jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 
@@ -40,19 +39,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
     return encoded_jwt
 
-# Decodificar y validar un token JWT
-def decode_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token invalido o expirado",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
 # Clase Security siguiendo el patrón del proyecto anterior
 class Security:
     """
@@ -60,26 +46,6 @@ class Security:
     Sigue el patrón del proyecto anterior (sistema Escuela).
     """
     secret = SECRET_KEY
-
-    @classmethod
-    def generate_token(cls, user_data: dict) -> str:
-        """
-        Genera un token JWT para un usuario.
-
-        Args:
-            user_data: Diccionario con datos del usuario (email, role, etc.)
-
-        Returns:
-            Token JWT codificado
-        """
-        payload = {
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-            "email": user_data.get("email"),
-            "role": user_data.get("role"),
-            "user_id": user_data.get("id")
-        }
-        return jwt.encode(payload, cls.secret, algorithm=ALGORITHM)
 
     @classmethod
     def verify_token(cls, headers: dict) -> dict:
@@ -91,12 +57,12 @@ class Security:
             headers: Headers de la request (debe contener "authorization")
 
         Returns:
-            dict: Payload del token con "iat", "exp", "email", "role", "user_id"
+            dict: Payload del token con "sub", "exp", "email", "role"
                   O dict con mensaje de error si falla
 
         Uso en endpoints:
             has_access = Security.verify_token(req.headers)
-            if "iat" not in has_access:
+            if "sub" not in has_access:
                 return JSONResponse(status_code=401, content=has_access)
         """
         # Verificar que exista el header authorization

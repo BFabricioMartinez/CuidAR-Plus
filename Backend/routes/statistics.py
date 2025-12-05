@@ -15,7 +15,7 @@ async def get_overview(req: Request):
     """Obtiene estadísticas generales del sistema."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

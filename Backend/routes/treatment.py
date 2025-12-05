@@ -29,7 +29,7 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         # Extraer parámetros
@@ -153,7 +153,7 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -166,7 +166,7 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
             )
 
             result = await session.execute(stmt)
-            treatment_found = result.scalar_one_or_none()
+            treatment_found = result.unique().scalar_one_or_none()
 
             if not treatment_found:
                 return JSONResponse(
@@ -227,7 +227,7 @@ async def create_treatment(req: Request, data: InputTreatment):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -313,7 +313,7 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -430,7 +430,7 @@ async def deactivate_treatment(req: Request, treatment_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -475,7 +475,7 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

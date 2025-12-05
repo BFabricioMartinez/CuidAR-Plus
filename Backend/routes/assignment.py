@@ -24,7 +24,7 @@ async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFil
     """
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         limit = body.limit or 20
@@ -114,7 +114,7 @@ async def get_assignment_by_id(req: Request, assignment_id: int):
     """Obtiene una asignación por su ID."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -172,7 +172,7 @@ async def create_assignment(req: Request, data: InputAssignment):
     """Crea una nueva asignación de cuidador a paciente."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -257,7 +257,7 @@ async def update_assignment(req: Request, data: InputAssignmentUpdate):
     """Actualiza una asignación existente."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -331,7 +331,7 @@ async def deactivate_assignment(req: Request, assignment_id: int):
     """Desactiva una asignación (soft delete)."""
     try:
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

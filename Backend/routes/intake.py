@@ -28,7 +28,7 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         # Extraer parámetros
@@ -144,7 +144,7 @@ async def get_intake_by_id(req: Request, intake_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -218,7 +218,7 @@ async def create_intake(req: Request, data: InputIntakeLog):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -280,7 +280,7 @@ async def update_intake(req: Request, data: InputIntakeLogUpdate):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -356,7 +356,7 @@ async def get_intakes_by_treatment(req: Request, treatment_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:
@@ -419,7 +419,7 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         async with AsyncSessionLocal() as session:

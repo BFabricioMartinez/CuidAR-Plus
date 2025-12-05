@@ -125,7 +125,7 @@ async def get_me(req: Request):
     try:
         # Verificar token
         has_access = Security.verify_token(req.headers)
-        if "iat" not in has_access:
+        if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
         # Obtener user_id del token decodificado
