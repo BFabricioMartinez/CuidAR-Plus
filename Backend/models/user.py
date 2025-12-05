@@ -54,4 +54,29 @@ class InputUserUpdate(BaseModel):
     name: Optional[str] = None
     active: Optional[bool] = None
 
+class SignupRequest(BaseModel):
+    """Modelo para registro de usuario"""
+    email: str
+    password: str
+    role: str = "PERSONAL"
+
+class LoginRequest(BaseModel):
+    """Modelo para login de usuario"""
+    email: str
+    password: str
+
+class TokenResponse(BaseModel):
+    """Modelo para respuesta de token"""
+    access_token: str
+    token_type: str = "bearer"
+
+class UserAuthResponse(BaseModel):
+    """Modelo para respuesta de autenticación"""
+    id: int
+    email: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
 #endregion

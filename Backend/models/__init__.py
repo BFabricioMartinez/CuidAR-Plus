@@ -7,7 +7,7 @@ from models.intake_log import IntakeLog
 from models.assignment import Assignment
 
 # Importar modelos Pydantic de User
-from models.user import UserBase, UserCreate, UserResponse, InputUser, InputUserUpdate
+from models.user import UserBase, UserCreate, UserResponse, InputUser, InputUserUpdate, SignupRequest, LoginRequest, TokenResponse, UserAuthResponse
 
 # Importar modelos Pydantic de Patient
 from models.patient import PatientBase, PatientCreate, PatientResponse, PatientUpdate, InputPatient, InputPatientUpdate
@@ -42,6 +42,10 @@ __all__ = [
     "UserResponse",
     "InputUser",
     "InputUserUpdate",
+    "SignupRequest",
+    "LoginRequest",
+    "TokenResponse",
+    "UserAuthResponse",
 
     # Modelos Pydantic - Patient
     "PatientBase",

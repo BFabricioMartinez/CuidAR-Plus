@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes.auth import auth
 from routes.user import user
 from routes.patient import patient
 from routes.treatment import treatment
 from routes.intake import intake
-from auth.auth import auth
-from routes.others import medication, assignment, statistics
+from routes.medication import medication
+from routes.assignment import assignment
+from routes.statistics import statistics
 from config.db import Base, engine
 
 cuidar = FastAPI()
