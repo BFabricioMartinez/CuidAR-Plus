@@ -1,56 +1,32 @@
 import { useEffect } from 'react';
-import { usePersonalStats } from '../../hooks/personal/usePersonalStats';
-import { useTreatments } from '../../hooks/personal/useTreatments';
-import { useIntakeLogs } from '../../hooks/personal/useIntakeLogs';
+import { useDashboard } from '../../hooks/personal/useDashboard';
+import { useTreatmentManagement } from '../../hooks/personal/useTreatmentManagement';
+import { authApi } from '../../api';
 
 export default function PersonalDashboard() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = authApi.getStoredUser();
+  const { treatments, upcomingDoses, stats, loading, error, fetchDashboard } = useDashboard();
+  const { markAsTaken, markAsMissed } = useTreatmentManagement();
 
-  // Custom hooks
-  const { stats, loading: statsLoading, fetchStats } = usePersonalStats();
-  const { treatments, upcomingDoses, loading: treatmentsLoading, fetchTreatments } = useTreatments();
-  const { error, successMessage, markAsTaken, markAsMissed } = useIntakeLogs();
-
-  const loading = statsLoading || treatmentsLoading;
-
-  // Cargar datos al montar
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboard();
+  }, [fetchDashboard]);
 
-  // Función principal que carga todo
-  const fetchDashboardData = async () => {
-    try {
-      await Promise.all([
-        fetchStats(user.id),
-        fetchTreatments(),
-      ]);
-    } catch (err) {
-      console.error('Error al cargar datos del dashboard:', err);
-    }
-  };
-
-  // Marcar dosis como TOMADA
   const handleMarkTaken = async (treatmentId: number, time: string) => {
     try {
-      await markAsTaken(treatmentId, time, user.id);
-      setTimeout(() => {
-        fetchDashboardData();
-      }, 1000);
+      await markAsTaken(treatmentId, time);
+      setTimeout(() => fetchDashboard(), 1000);
     } catch (err) {
-      console.error('Error al marcar dosis como tomada:', err);
+      console.error('Error al marcar dosis:', err);
     }
   };
 
-  // Marcar dosis como OMITIDA
   const handleMarkMissed = async (treatmentId: number, time: string) => {
     try {
-      await markAsMissed(treatmentId, time, user.id);
-      setTimeout(() => {
-        fetchDashboardData();
-      }, 1000);
+      await markAsMissed(treatmentId, time);
+      setTimeout(() => fetchDashboard(), 1000);
     } catch (err) {
-      console.error('Error al marcar dosis como omitida:', err);
+      console.error('Error al marcar dosis:', err);
     }
   };
 
@@ -63,30 +39,23 @@ export default function PersonalDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-5 font-sans">
+    <div className="max-w-7xl mx-auto p-5">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-800 mb-2">Mi Dashboard</h1>
-        <p className="text-base text-gray-500">Bienvenido, {user.name}</p>
+        <p className="text-base text-gray-500">Bienvenido, {user?.name || user?.email}</p>
       </div>
 
-      {/* Mensajes de Error/Éxito */}
+      {/* Error */}
       {error && (
         <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-5 border border-red-200">
           {error}
         </div>
       )}
 
-      {successMessage && (
-        <div className="bg-green-50 text-green-600 px-4 py-3 rounded-lg mb-5 border border-green-200">
-          {successMessage}
-        </div>
-      )}
-
-      {/* KPIs - Cards de Estadísticas */}
+      {/* KPIs */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-          {/* Tomadas Hoy */}
           <div className="bg-white p-5 rounded-xl shadow-md flex items-center gap-4 hover:shadow-lg transition-shadow">
             <div className="text-4xl">✓</div>
             <div>
@@ -95,7 +64,6 @@ export default function PersonalDashboard() {
             </div>
           </div>
 
-          {/* Omitidas Hoy */}
           <div className="bg-white p-5 rounded-xl shadow-md flex items-center gap-4 hover:shadow-lg transition-shadow">
             <div className="text-4xl">✗</div>
             <div>
@@ -104,13 +72,12 @@ export default function PersonalDashboard() {
             </div>
           </div>
 
-          {/* Adherencia Hoy */}
           <div className="bg-white p-5 rounded-xl shadow-md flex items-center gap-4 hover:shadow-lg transition-shadow">
             <div className="text-4xl">📊</div>
             <div>
               <div className="text-3xl font-bold text-gray-800">
                 {stats.today_doses.adherence_percentage
-                  ? `${stats.today_doses.adherence_percentage}%`
+                  ? `${Math.round(stats.today_doses.adherence_percentage)}%`
                   : 'N/A'}
               </div>
               <div className="text-sm text-gray-500">Adherencia Hoy</div>
@@ -119,7 +86,7 @@ export default function PersonalDashboard() {
         </div>
       )}
 
-      {/* Sección de Dosis Pendientes */}
+      {/* Dosis de Hoy */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">🕐 Dosis de Hoy</h2>
 
@@ -135,18 +102,15 @@ export default function PersonalDashboard() {
                 key={index}
                 className="bg-white p-5 rounded-xl shadow-md flex flex-col sm:flex-row items-start sm:items-center gap-5 hover:shadow-lg transition-shadow"
               >
-                {/* Hora */}
                 <div className="text-2xl font-bold text-indigo-600 min-w-[80px]">
                   {dose.time}
                 </div>
 
-                {/* Información del Medicamento */}
                 <div className="flex-1">
                   <div className="text-lg font-semibold text-gray-800">{dose.med_name}</div>
                   <div className="text-sm text-gray-500">{dose.dosage}</div>
                 </div>
 
-                {/* Botones de Acción */}
                 <div className="flex gap-2 w-full sm:w-auto">
                   <button
                     onClick={() => handleMarkTaken(dose.treatment_id, dose.time)}
@@ -167,7 +131,7 @@ export default function PersonalDashboard() {
         )}
       </div>
 
-      {/* Sección de Tratamientos Activos */}
+      {/* Tratamientos Activos */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-800 mb-4">💊 Mis Tratamientos Activos</h2>
 

@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from pydantic import BaseModel
 
-from models import User
+from models import User, Patient
 from config.db import SessionLocal
-from auth.security import (hash_password,verify_password,create_access_token,decode_token,oauth2_scheme,ACCESS_TOKEN_EXPIRE_MINUTES)
+from auth.security import (hash_password,verify_password,create_access_token,decode_token,oauth2_scheme,ACCESS_TOKEN_EXPIRE_MINUTES,Security)
 
 auth = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -96,6 +96,32 @@ def signup(user_data: SignupRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
+    # ============================================================================
+    # FIX: Crear automáticamente un Patient cuando el usuario tiene rol PERSONAL
+    #
+    # PROBLEMA:
+    # - Los usuarios con rol PERSONAL necesitan un registro en la tabla Patient
+    #   para poder crear tratamientos y gestionar su salud
+    # - El modelo Patient no tiene user_id, solo tiene caregiver_id (para ASISTENCIAL)
+    # - El frontend asume que existe un Patient asociado al User PERSONAL
+    #
+    # SOLUCIÓN:
+    # - Cuando un usuario se registra con rol PERSONAL, crear automáticamente
+    #   un registro Patient asociado
+    # - Usar el nombre del email como nombre temporal del paciente
+    # - El caregiver_id se deja NULL por ahora (puede asignarse después)
+    # ============================================================================
+    if user_data.role == "PERSONAL":
+        # Crear registro de paciente para usuarios PERSONAL
+        new_patient = Patient(
+            name=user_data.email.split('@')[0],  # Nombre temporal del email
+            caregiver_id=None,  # Sin cuidador asignado inicialmente
+            active=True,
+            notes=f"Paciente creado automáticamente para usuario {user_data.email}"
+        )
+        db.add(new_patient)
+        db.commit()
+
     return new_user
 
 
@@ -119,11 +145,26 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
             detail="Credenciales incorrectas"
         )
 
-    # Crear token
-    access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+    # ============================================================================
+    # FIX: Cambio de create_access_token() a Security.generate_token()
+    #
+    # PROBLEMA:
+    # - create_access_token() genera tokens sin el campo "iat" (issued at)
+    # - Security.verify_token() REQUIERE que el token tenga "iat" para validarlo
+    # - Esto causaba que todos los endpoints protegidos devolvieran 401 Unauthorized
+    #
+    # SOLUCIÓN:
+    # - Usar Security.generate_token() que sí incluye "iat" en el payload
+    # - Esto asegura consistencia entre generación y validación de tokens
+    #
+    # ANTES: access_token = create_access_token(data={...})
+    # AHORA:  access_token = Security.generate_token({...})
+    # ============================================================================
+    access_token = Security.generate_token({
+        "id": user.id,
+        "email": user.email,
+        "role": user.role
+    })
 
     #  Usar email como name temporalmente
     return {

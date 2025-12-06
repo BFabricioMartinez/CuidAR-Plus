@@ -1,14 +1,7 @@
-export interface Treatment {
-  id: number;
-  patient_id: number;
-  medication_name: string;
-  dosage: string;
-  frequency: string;
-  start_date: string;
-  end_date?: string;
-  notes?: string;
-  active: boolean;
-}
+// Este archivo ya no se usa, los tipos están en src/types/api.ts
+// Se mantiene por compatibilidad pero se recomienda usar los tipos de api.ts
+
+export type { Treatment } from './api';
 
 export interface UpcomingDose {
   treatment_id: number;
@@ -16,6 +9,4 @@ export interface UpcomingDose {
   dosage: string;
   time: string;
   frequency: string;
-  status: 'PENDING' | 'MISSED';
-  acknowledged: boolean;
 }

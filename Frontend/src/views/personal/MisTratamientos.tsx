@@ -1,33 +1,30 @@
 import { useState, useEffect } from 'react';
-import { useTreatments } from '../../hooks/personal/useTreatments';
-import { useTreatmentForm } from '../../hooks/personal/useTreatmentForm';
-import { useTreatmentActions } from '../../hooks/personal/useTreatmentActions';
-import type { Treatment } from '../../types/treatment';
+import { useTreatmentManagement } from '../../hooks/personal/useTreatmentManagement';
+import type { Treatment } from '../../api';
 
 export default function MisTratamientos() {
   const [showForm, setShowForm] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState<Treatment | null>(null);
 
-  // Custom hooks
-  const { treatments, loading: loadingTreatments, fetchTreatments } = useTreatments();
-  const { formData, handleInputChange, setFormDataFromTreatment, resetForm } = useTreatmentForm();
   const {
-    loading: actionLoading,
+    treatments,
+    formData,
+    loading,
     error,
     successMessage,
+    fetchTreatments,
     createTreatment,
     updateTreatment,
     deleteTreatment,
-  } = useTreatmentActions();
+    handleInputChange,
+    setFormDataFromTreatment,
+    resetForm,
+  } = useTreatmentManagement();
 
-  const loading = loadingTreatments || actionLoading;
-
-  // Cargar tratamientos al montar
   useEffect(() => {
     fetchTreatments();
-  }, []);
+  }, [fetchTreatments]);
 
-  // Crear tratamiento
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -40,7 +37,6 @@ export default function MisTratamientos() {
     }
   };
 
-  // Editar tratamiento
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTreatment) return;
@@ -56,7 +52,6 @@ export default function MisTratamientos() {
     }
   };
 
-  // Eliminar tratamiento (soft delete)
   const handleDelete = async (id: number) => {
     if (!confirm('¿Estás seguro de desactivar este tratamiento?')) return;
 
@@ -68,14 +63,12 @@ export default function MisTratamientos() {
     }
   };
 
-  // Abrir formulario para editar
   const openEditForm = (treatment: Treatment) => {
     setEditingTreatment(treatment);
     setFormDataFromTreatment(treatment);
     setShowForm(true);
   };
 
-  // Cancelar formulario
   const cancelForm = () => {
     setShowForm(false);
     setEditingTreatment(null);
@@ -83,7 +76,7 @@ export default function MisTratamientos() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-5 font-sans">
+    <div className="max-w-7xl mx-auto p-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
@@ -120,7 +113,6 @@ export default function MisTratamientos() {
           </h2>
 
           <form onSubmit={editingTreatment ? handleEdit : handleCreate} className="space-y-6">
-            {/* Medicamento y Dosis */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-gray-700">
@@ -153,7 +145,6 @@ export default function MisTratamientos() {
               </div>
             </div>
 
-            {/* Frecuencia */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">
                 Frecuencia <span className="text-red-500">*</span>
@@ -172,7 +163,6 @@ export default function MisTratamientos() {
               </small>
             </div>
 
-            {/* Fechas */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-gray-700">
@@ -200,7 +190,6 @@ export default function MisTratamientos() {
               </div>
             </div>
 
-            {/* Notas */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">Notas</label>
               <textarea
@@ -213,7 +202,6 @@ export default function MisTratamientos() {
               />
             </div>
 
-            {/* Botones */}
             <div className="flex gap-3 justify-end pt-4">
               <button
                 type="button"
@@ -235,7 +223,7 @@ export default function MisTratamientos() {
       )}
 
       {/* Lista de tratamientos */}
-      {loadingTreatments && treatments.length === 0 ? (
+      {loading && treatments.length === 0 ? (
         <div className="text-center py-10 text-gray-500">Cargando tratamientos...</div>
       ) : treatments.length === 0 ? (
         <div className="bg-gray-50 p-16 rounded-xl text-center text-gray-500">
@@ -249,7 +237,6 @@ export default function MisTratamientos() {
               key={treatment.id}
               className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow"
             >
-              {/* Header del tratamiento */}
               <div className="flex items-center gap-4 mb-5">
                 <div className="text-4xl">💊</div>
                 <div className="flex-1">
@@ -260,18 +247,19 @@ export default function MisTratamientos() {
                 </div>
               </div>
 
-              {/* Detalles */}
               <div className="space-y-2.5 py-4 border-t border-gray-200">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium text-gray-600">Frecuencia:</span>
                   <span className="text-gray-800">{treatment.frequency}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-gray-600">Inicio:</span>
-                  <span className="text-gray-800">
-                    {new Date(treatment.start_date).toLocaleDateString('es-AR')}
-                  </span>
-                </div>
+                {treatment.start_date && (
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-600">Inicio:</span>
+                    <span className="text-gray-800">
+                      {new Date(treatment.start_date).toLocaleDateString('es-AR')}
+                    </span>
+                  </div>
+                )}
                 {treatment.end_date && (
                   <div className="flex justify-between text-sm">
                     <span className="font-medium text-gray-600">Fin:</span>
@@ -288,7 +276,6 @@ export default function MisTratamientos() {
                 )}
               </div>
 
-              {/* Acciones */}
               <div className="flex gap-2 mt-5">
                 <button
                   onClick={() => openEditForm(treatment)}

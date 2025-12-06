@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authApi, ApiError } from '../api';
 
 // ============================================
 // TIPOS
@@ -8,22 +9,8 @@ interface AuthFormData {
   email: string;
   password: string;
   confirmPassword?: string;
-  role?: string;
+  role?: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
   name?: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
-  active: boolean;
-}
-
-interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
 }
 
 // ============================================
@@ -73,56 +60,31 @@ const Login: React.FC = () => {
 
     try {
       if (isLogin) {
-        // LOGIN
-        const response = await fetch('http://localhost:8000/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password
-          }),
+        // LOGIN usando nueva API
+        const authResponse = await authApi.login({
+          email: formData.email,
+          password: formData.password,
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Credenciales inválidas');
-        }
-
-        const data: LoginResponse = await response.json();
-
-        // Guardar token y usuario
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        // Guardar token y usuario en localStorage
+        authApi.saveAuth(authResponse);
 
         // Redirigir según el rol
-        if (data.user.role === 'ADMIN') {
+        if (authResponse.user.role === 'ADMIN') {
           navigate('/admin/dashboard');
-        } else if (data.user.role === 'ASISTENCIAL') {
+        } else if (authResponse.user.role === 'ASISTENCIAL') {
           navigate('/asistencial/dashboard');
         } else {
           navigate('/personal/dashboard');
         }
       } else {
-        // REGISTRO
-        const response = await fetch('http://localhost:8000/auth/signup', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            role: formData.role
-          }),
+        // REGISTRO usando nueva API
+        await authApi.signup({
+          name: formData.name!,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role!,
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Error al crear la cuenta');
-        }
 
         // Registro exitoso - cambiar a modo login
         setIsLogin(true);
@@ -131,7 +93,13 @@ const Login: React.FC = () => {
         alert('Cuenta creada exitosamente. Ahora puedes iniciar sesión.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error de conexión');
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Error de conexión');
+      }
     } finally {
       setLoading(false);
     }

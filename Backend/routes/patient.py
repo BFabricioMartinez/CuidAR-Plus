@@ -89,9 +89,20 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
             # Aplicar límite
             stmt = stmt.limit(limit)
 
+            # ========================================================================
+            # FIX: Agregar unique() antes de scalars() para relaciones eager-loaded
+            #
+            # PROBLEMA:
+            # - joinedload() con relaciones one-to-many (como treatments) genera
+            #   filas duplicadas en el resultado
+            # - SQLAlchemy requiere llamar a unique() para deduplicar los resultados
+            #
+            # SOLUCIÓN:
+            # - Llamar a result.unique() antes de scalars() para eliminar duplicados
+            # ========================================================================
             # Ejecutar query
             result = await session.execute(stmt)
-            patients = result.scalars().all()
+            patients = result.unique().scalars().all()
 
             # Serializar
             data = []
@@ -154,7 +165,7 @@ async def get_patient_by_id(req: Request, patient_id: int):
             )
 
             result = await session.execute(stmt)
-            patient_found = result.scalar_one_or_none()
+            patient_found = result.unique().scalar_one_or_none()
 
             if not patient_found:
                 return JSONResponse(
@@ -274,7 +285,7 @@ async def update_patient(req: Request, data: InputPatientUpdate):
             # Buscar paciente
             stmt = select(Patient).where(Patient.id == data.id)
             result = await session.execute(stmt)
-            patient_found = result.scalar_one_or_none()
+            patient_found = result.unique().scalar_one_or_none()
 
             if not patient_found:
                 return JSONResponse(
@@ -359,7 +370,7 @@ async def deactivate_patient(req: Request, patient_id: int):
         async with AsyncSessionLocal() as session:
             stmt = select(Patient).where(Patient.id == patient_id)
             result = await session.execute(stmt)
-            patient_found = result.scalar_one_or_none()
+            patient_found = result.unique().scalar_one_or_none()
 
             if not patient_found:
                 return JSONResponse(
