@@ -233,10 +233,30 @@ async def create_intake(req: Request, data: InputIntakeLog):
                     content={"message": f"Tratamiento con ID {data.treatment_id} no encontrado"}
                 )
 
+            # ============================================================================
+            # FIX: Parsear taken_at de string a datetime naive para PostgreSQL
+            #
+            # PROBLEMA:
+            # - Pydantic convierte automáticamente strings ISO a datetime con timezone UTC
+            # - PostgreSQL TIMESTAMP WITHOUT TIME ZONE no acepta datetime con timezone
+            #
+            # SOLUCIÓN:
+            # - Cambiar InputIntakeLog.taken_at de datetime a str
+            # - Parsear manualmente el string a datetime naive (sin timezone)
+            # ============================================================================
+            from datetime import datetime
+
+            # Parsear taken_at de string a datetime naive
+            try:
+                taken_at_dt = datetime.strptime(data.taken_at, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Si falla, intentar con formato ISO
+                taken_at_dt = datetime.fromisoformat(data.taken_at.replace('Z', '+00:00')).replace(tzinfo=None)
+
             # Crear registro de toma
             new_intake = IntakeLog(
                 treatment_id=data.treatment_id,
-                taken_at=data.taken_at,
+                taken_at=taken_at_dt,
                 status=data.status
             )
 
@@ -314,7 +334,14 @@ async def update_intake(req: Request, data: InputIntakeLogUpdate):
                 updated = True
 
             if is_valid_change(data.taken_at, intake_found.taken_at):
-                intake_found.taken_at = data.taken_at
+                # Parsear taken_at de string a datetime naive (igual que en create)
+                from datetime import datetime
+                try:
+                    taken_at_dt = datetime.strptime(data.taken_at, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    taken_at_dt = datetime.fromisoformat(data.taken_at.replace('Z', '+00:00')).replace(tzinfo=None)
+
+                intake_found.taken_at = taken_at_dt
                 updated = True
 
             if is_valid_change(data.status, intake_found.status):

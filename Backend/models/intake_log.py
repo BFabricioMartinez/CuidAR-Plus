@@ -36,16 +36,21 @@ class IntakeLogResponse(BaseModel):
         from_attributes = True
 
 class InputIntakeLog(BaseModel):
-    """Modelo para crear un registro de toma"""
+    """
+    Modelo para crear un registro de toma.
+
+    IMPORTANTE: taken_at debe ser un string en formato "YYYY-MM-DD HH:MM:SS"
+    sin información de timezone para compatibilidad con PostgreSQL TIMESTAMP WITHOUT TIME ZONE.
+    """
     treatment_id: int
-    taken_at: datetime
+    taken_at: str  # Cambiado de datetime a str para evitar conversión automática con timezone
     status: str
 
 class InputIntakeLogUpdate(BaseModel):
     """Modelo para actualizar un registro de toma"""
     id: int
     treatment_id: Optional[int] = None
-    taken_at: Optional[datetime] = None
+    taken_at: Optional[str] = None  # Cambiado de datetime a str
     status: Optional[str] = None
 
 #endregion

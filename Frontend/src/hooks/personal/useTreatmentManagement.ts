@@ -165,13 +165,34 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
+      // ============================================================================
+      // FIX: Formato de datetime sin timezone para compatibilidad con PostgreSQL
+      //
+      // PROBLEMA:
+      // - toISOString() genera "2025-12-06T11:00:00.000Z" (timezone-aware UTC)
+      // - PostgreSQL TIMESTAMP WITHOUT TIME ZONE espera datetime sin timezone
+      // - Backend lanzaba error: "can't subtract offset-naive and offset-aware datetimes"
+      //
+      // SOLUCIÓN:
+      // - Crear datetime local y formatearlo como "YYYY-MM-DD HH:mm:ss"
+      // - Esto envía un datetime sin información de timezone al backend
+      // ============================================================================
       const now = new Date();
       const [hours, minutes] = time.split(':');
       now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
+      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hour = String(now.getHours()).padStart(2, '0');
+      const minute = String(now.getMinutes()).padStart(2, '0');
+      const second = String(now.getSeconds()).padStart(2, '0');
+      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+
       await intakesApi.create({
         treatment_id: treatmentId,
-        taken_at: now.toISOString(),
+        taken_at,
         status: 'TAKEN',
       });
 
@@ -196,13 +217,23 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
+      // Formatear datetime sin timezone (igual que en markAsTaken)
       const now = new Date();
       const [hours, minutes] = time.split(':');
       now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
+      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hour = String(now.getHours()).padStart(2, '0');
+      const minute = String(now.getMinutes()).padStart(2, '0');
+      const second = String(now.getSeconds()).padStart(2, '0');
+      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+
       await intakesApi.create({
         treatment_id: treatmentId,
-        taken_at: now.toISOString(),
+        taken_at,
         status: 'MISSED',
       });
 

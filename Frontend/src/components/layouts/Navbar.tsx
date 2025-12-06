@@ -1,8 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
 
-// ============================================
-// TIPOS
-// ============================================
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
 
 interface User {
@@ -15,53 +13,48 @@ interface User {
 interface NavItem {
   label: string;
   path: string;
-  icon: string;
+  icon: JSX.Element;
   roles: UserRole[];
 }
 
-// ============================================
-// COMPONENTE
-// ============================================
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Obtener usuario del localStorage
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const userStr = localStorage.getItem('user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
 
-  // Cerrar sesión
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/');
   };
 
-  // Definir items de navegación según rol
   const navItems: NavItem[] = [
     // ADMIN
     {
       label: 'Dashboard',
       path: '/admin/dashboard',
-      icon: '📊',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>,
       roles: ['ADMIN'],
     },
     {
       label: 'Usuarios',
       path: '/admin/users',
-      icon: '👥',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" /></svg>,
       roles: ['ADMIN'],
     },
     {
       label: 'Pacientes',
       path: '/admin/pacientes',
-      icon: '🏥',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>,
       roles: ['ADMIN'],
     },
     {
       label: 'Asignaciones',
       path: '/admin/asignaciones',
-      icon: '🔗',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>,
       roles: ['ADMIN'],
     },
 
@@ -69,19 +62,19 @@ export default function Navbar() {
     {
       label: 'Dashboard',
       path: '/asistencial/dashboard',
-      icon: '📊',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>,
       roles: ['ASISTENCIAL'],
     },
     {
       label: 'Tratamientos',
       path: '/asistencial/tratamientos',
-      icon: '💊',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" /></svg>,
       roles: ['ASISTENCIAL'],
     },
     {
       label: 'Historial',
       path: '/asistencial/historial',
-      icon: '📝',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>,
       roles: ['ASISTENCIAL'],
     },
 
@@ -89,234 +82,481 @@ export default function Navbar() {
     {
       label: 'Mi Dashboard',
       path: '/personal/dashboard',
-      icon: '🏠',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg>,
       roles: ['PERSONAL'],
     },
     {
       label: 'Mis Tratamientos',
       path: '/personal/tratamientos',
-      icon: '💊',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" /></svg>,
       roles: ['PERSONAL'],
     },
     {
       label: 'Mi Historial',
       path: '/personal/historial',
-      icon: '📝',
+      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>,
       roles: ['PERSONAL'],
     },
   ];
 
-  // Filtrar items según el rol del usuario
   const visibleItems = user
     ? navItems.filter((item) => item.roles.includes(user.role))
     : [];
 
-  // Verificar si una ruta está activa
   const isActive = (path: string) => location.pathname === path;
 
   if (!user) return null;
 
   return (
-    <nav style={styles.navbar}>
-      <div style={styles.container}>
-        {/* Logo y Brand */}
-        <div style={styles.brand}>
-          <div style={styles.logoCircle}>
-            <svg style={styles.logoSvg} viewBox="0 0 24 24" fill="none">
-              <path
-                d="M19 3H5C3.89 3 3 3.89 3 5V19C3 20.11 3.89 21 5 21H19C20.11 21 21 20.11 21 19V5C21 3.89 20.11 3 19 3ZM18 14H14V18H10V14H6V10H10V6H14V10H18V14Z"
-                fill="white"
-              />
-            </svg>
-          </div>
-          <span style={styles.brandName}>CuidAR+</span>
-        </div>
-
-        {/* Navigation Links */}
-        <div style={styles.navLinks}>
-          {visibleItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              style={{
-                ...styles.navLink,
-                ...(isActive(item.path) ? styles.navLinkActive : {}),
-              }}
-            >
-              <span style={styles.navIcon}>{item.icon}</span>
-              <span style={styles.navLabel}>{item.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* User Menu */}
-        <div style={styles.userMenu}>
-          <div style={styles.userInfo}>
-            <div style={styles.userAvatar}>
-              {user.name.charAt(0).toUpperCase()}
+    <>
+      <nav className="modern-navbar">
+        <div className="navbar-container">
+          {/* Logo */}
+          <div className="navbar-brand" onClick={() => navigate(visibleItems[0]?.path || '/')}>
+            <div className="brand-logo">
+              <svg className="brand-logo-svg" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M19 3H5C3.89 3 3 3.89 3 5V19C3 20.11 3.89 21 5 21H19C20.11 21 21 20.11 21 19V5C21 3.89 20.11 3 19 3ZM18 14H14V18H10V14H6V10H10V6H14V10H18V14Z"
+                  fill="url(#nav-logo-gradient)"
+                />
+                <defs>
+                  <linearGradient id="nav-logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#667eea"/>
+                    <stop offset="100%" stopColor="#764ba2"/>
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
-            <div style={styles.userDetails}>
-              <div style={styles.userName}>{user.name}</div>
-              <div style={styles.userRole}>
-                {user.role === 'ADMIN' && '👑 Administrador'}
-                {user.role === 'ASISTENCIAL' && '👨‍⚕️ Asistencial'}
-                {user.role === 'PERSONAL' && '👤 Personal'}
+            <span className="brand-name">CuidAR+</span>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="nav-links-desktop">
+            {visibleItems.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
+              >
+                <span className="nav-link-icon">{item.icon}</span>
+                <span className="nav-link-label">{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* User Menu */}
+          <div className="user-section">
+            <div className="user-info">
+              <div className="user-avatar">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="user-details">
+                <div className="user-name">{user.name}</div>
+                <div className="user-role">
+                  {user.role === 'ADMIN' && 'Administrador'}
+                  {user.role === 'ASISTENCIAL' && 'Asistencial'}
+                  {user.role === 'PERSONAL' && 'Personal'}
+                </div>
               </div>
             </div>
+            <button onClick={handleLogout} className="logout-btn">
+              <svg className="logout-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+              </svg>
+              <span className="logout-text">Salir</span>
+            </button>
           </div>
-          <button onClick={handleLogout} style={styles.logoutBtn}>
-            🚪 Salir
+
+          {/* Mobile Menu Toggle */}
+          <button className="mobile-menu-toggle" onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? (
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+            )}
           </button>
         </div>
-      </div>
-    </nav>
+
+        {/* Mobile Menu */}
+        {menuOpen && (
+          <div className="mobile-menu">
+            <div className="mobile-menu-links">
+              {visibleItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    navigate(item.path);
+                    setMenuOpen(false);
+                  }}
+                  className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''}`}
+                >
+                  <span className="mobile-nav-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="mobile-logout-btn">
+              <svg className="logout-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+              </svg>
+              <span>Cerrar Sesión</span>
+            </button>
+          </div>
+        )}
+      </nav>
+
+      <style>{`
+        .modern-navbar {
+          position: sticky;
+          top: 0;
+          z-index: 1000;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(20px);
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          animation: slideDown 0.4s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .navbar-container {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 0.75rem 2rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 2rem;
+        }
+
+        .navbar-brand {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          cursor: pointer;
+          transition: transform 0.2s ease;
+        }
+
+        .navbar-brand:hover {
+          transform: scale(1.05);
+        }
+
+        .brand-logo {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .brand-logo-svg {
+          width: 24px;
+          height: 24px;
+        }
+
+        .brand-name {
+          font-size: 1.5rem;
+          font-weight: 800;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          letter-spacing: -0.5px;
+        }
+
+        .nav-links-desktop {
+          flex: 1;
+          display: flex;
+          gap: 0.5rem;
+          justify-content: center;
+        }
+
+        .nav-link {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.25rem;
+          background: transparent;
+          border: none;
+          border-radius: 12px;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+          position: relative;
+        }
+
+        .nav-link::before {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 50%;
+          width: 0;
+          height: 3px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          transform: translateX(-50%);
+          border-radius: 3px 3px 0 0;
+          transition: width 0.3s ease;
+        }
+
+        .nav-link:hover {
+          background: rgba(102, 126, 234, 0.08);
+          color: #667eea;
+        }
+
+        .nav-link:hover::before {
+          width: 100%;
+        }
+
+        .nav-link.active {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(118, 75, 162, 0.12) 100%);
+          color: #667eea;
+        }
+
+        .nav-link.active::before {
+          width: 100%;
+        }
+
+        .nav-link-icon {
+          width: 20px;
+          height: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .nav-link-icon svg {
+          width: 100%;
+          height: 100%;
+        }
+
+        .user-section {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .user-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1rem;
+          font-weight: 700;
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .user-details {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+        }
+
+        .user-name {
+          font-size: 0.9375rem;
+          font-weight: 700;
+          color: #1f2937;
+          line-height: 1;
+        }
+
+        .user-role {
+          font-size: 0.8125rem;
+          color: #6b7280;
+          line-height: 1;
+        }
+
+        .logout-btn {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.625rem 1.25rem;
+          background: transparent;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .logout-btn:hover {
+          background: rgba(239, 68, 68, 0.08);
+          border-color: #ef4444;
+          color: #ef4444;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+        }
+
+        .logout-icon {
+          width: 18px;
+          height: 18px;
+        }
+
+        .mobile-menu-toggle {
+          display: none;
+          width: 40px;
+          height: 40px;
+          padding: 0;
+          background: transparent;
+          border: none;
+          border-radius: 8px;
+          color: #667eea;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+
+        .mobile-menu-toggle:hover {
+          background: rgba(102, 126, 234, 0.1);
+        }
+
+        .mobile-menu-toggle svg {
+          width: 24px;
+          height: 24px;
+        }
+
+        .mobile-menu {
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(20px);
+          border-top: 1px solid rgba(0, 0, 0, 0.08);
+          animation: slideDown 0.3s ease-out;
+        }
+
+        .mobile-menu-links {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+
+        .mobile-nav-link {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1rem;
+          background: transparent;
+          border: none;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+          text-align: left;
+        }
+
+        .mobile-nav-link:hover {
+          background: rgba(102, 126, 234, 0.08);
+          color: #667eea;
+        }
+
+        .mobile-nav-link.active {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(118, 75, 162, 0.12) 100%);
+          color: #667eea;
+        }
+
+        .mobile-nav-icon {
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .mobile-nav-icon svg {
+          width: 100%;
+          height: 100%;
+        }
+
+        .mobile-logout-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          padding: 1rem;
+          width: 100%;
+          background: transparent;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .mobile-logout-btn:hover {
+          background: rgba(239, 68, 68, 0.08);
+          border-color: #ef4444;
+          color: #ef4444;
+        }
+
+        @media (max-width: 1024px) {
+          .nav-links-desktop {
+            display: none;
+          }
+
+          .user-info {
+            display: none;
+          }
+
+          .logout-text {
+            display: none;
+          }
+
+          .mobile-menu-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .navbar-container {
+            padding: 0.75rem 1.5rem;
+          }
+
+          .brand-name {
+            font-size: 1.25rem;
+          }
+
+          .logout-btn {
+            padding: 0.625rem;
+          }
+        }
+      `}</style>
+    </>
   );
 }
-
-// ============================================
-// ESTILOS
-// ============================================
-const styles: Record<string, React.CSSProperties> = {
-  navbar: {
-    backgroundColor: '#fff',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 1000,
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  container: {
-    maxWidth: '1400px',
-    margin: '0 auto',
-    padding: '0 20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: '70px',
-    gap: '30px',
-  },
-  brand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    cursor: 'pointer',
-  },
-  logoCircle: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-  },
-  logoSvg: {
-    width: '24px',
-    height: '24px',
-  },
-  brandName: {
-    fontSize: '22px',
-    fontWeight: 700,
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-  },
-  navLinks: {
-    flex: 1,
-    display: 'flex',
-    gap: '8px',
-    justifyContent: 'center',
-  },
-  navLink: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '15px',
-    fontWeight: 500,
-    color: '#6b7280',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  navLinkActive: {
-    backgroundColor: '#ede9fe',
-    color: '#667eea',
-    fontWeight: 600,
-  },
-  navIcon: {
-    fontSize: '18px',
-  },
-  navLabel: {
-    fontSize: '15px',
-  },
-  userMenu: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '15px',
-  },
-  userInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  userAvatar: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    backgroundColor: '#667eea',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '16px',
-    fontWeight: 600,
-  },
-  userDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  userName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#1f2937',
-  },
-  userRole: {
-    fontSize: '12px',
-    color: '#6b7280',
-  },
-  logoutBtn: {
-    padding: '8px 16px',
-    backgroundColor: '#fff',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#6b7280',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-};
-
-// Añadir estilos hover con CSS
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  nav button:hover {
-    background-color: #f3f4f6;
-    transform: translateY(-1px);
-  }
-
-  nav button.active:hover {
-    background-color: #ede9fe;
-  }
-
-  .logout-btn:hover {
-    border-color: #dc2626 !important;
-    color: #dc2626 !important;
-  }
-`;
-document.head.appendChild(styleSheet);
