@@ -12,7 +12,6 @@ class Treatment(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
-    medication_id = Column(Integer, ForeignKey('medications.id'))
     medication_name = Column(String, nullable=False)
     dosage = Column(String)
     frequency = Column(String, nullable=False)
@@ -24,7 +23,6 @@ class Treatment(Base):
 
     patient = relationship('Patient', back_populates='treatments')
     intake_logs = relationship('IntakeLog', back_populates='treatment')
-    medication = relationship('Medication', back_populates='treatments')
 
 #endregion
 

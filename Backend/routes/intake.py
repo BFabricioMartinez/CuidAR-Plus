@@ -45,7 +45,6 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
             stmt = (
                 select(IntakeLog)
                 .options(joinedload(IntakeLog.treatment).joinedload(Treatment.patient))
-                .options(joinedload(IntakeLog.treatment).joinedload(Treatment.medication))
             )
 
             # Filtro por treatment_id
@@ -89,7 +88,6 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
             for i in intakes:
                 treatment = i.treatment
                 patient = treatment.patient if treatment else None
-                medication = treatment.medication if treatment else None
 
                 data.append({
                     "id": i.id,
@@ -106,11 +104,7 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
                     "patient": {
                         "id": patient.id if patient else None,
                         "name": patient.name if patient else None
-                    } if patient else None,
-                    "medication": {
-                        "id": medication.id if medication else None,
-                        "name": medication.name if medication else None
-                    } if medication else None
+                    } if patient else None
                 })
 
             # Cursor para siguiente página
@@ -151,7 +145,6 @@ async def get_intake_by_id(req: Request, intake_id: int):
             stmt = (
                 select(IntakeLog)
                 .options(joinedload(IntakeLog.treatment).joinedload(Treatment.patient))
-                .options(joinedload(IntakeLog.treatment).joinedload(Treatment.medication))
                 .where(IntakeLog.id == intake_id)
             )
 
@@ -166,7 +159,6 @@ async def get_intake_by_id(req: Request, intake_id: int):
 
             treatment = intake_found.treatment
             patient = treatment.patient if treatment else None
-            medication = treatment.medication if treatment else None
 
             intake_data = {
                 "id": intake_found.id,
@@ -185,12 +177,7 @@ async def get_intake_by_id(req: Request, intake_id: int):
                     "id": patient.id if patient else None,
                     "name": patient.name if patient else None,
                     "caregiver_id": patient.caregiver_id if patient else None
-                } if patient else None,
-                "medication": {
-                    "id": medication.id if medication else None,
-                    "name": medication.name if medication else None,
-                    "description": medication.description if medication else None
-                } if medication else None
+                } if patient else None
             }
 
             return JSONResponse(status_code=200, content=intake_data)
@@ -438,7 +425,7 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
             stmt = (
                 select(IntakeLog)
                 .join(Treatment, IntakeLog.treatment_id == Treatment.id)
-                .options(joinedload(IntakeLog.treatment).joinedload(Treatment.medication))
+                .options(joinedload(IntakeLog.treatment))
                 .where(Treatment.patient_id == patient_id)
                 .order_by(IntakeLog.taken_at.desc())
             )
@@ -450,7 +437,6 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
             data = []
             for i in intakes:
                 treatment = i.treatment
-                medication = treatment.medication if treatment else None
 
                 data.append({
                     "id": i.id,
@@ -462,11 +448,7 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
                         "medication_name": treatment.medication_name if treatment else None,
                         "dosage": treatment.dosage if treatment else None,
                         "frequency": treatment.frequency if treatment else None
-                    } if treatment else None,
-                    "medication": {
-                        "id": medication.id if medication else None,
-                        "name": medication.name if medication else None
-                    } if medication else None
+                    } if treatment else None
                 })
 
             return JSONResponse(

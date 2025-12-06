@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from models import Treatment, Patient, Medication, InputTreatment, InputTreatmentUpdate, InputPaginatedRequestFilter
+from models import Treatment, Patient, InputTreatment, InputTreatmentUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
 from auth.security import Security
 from utils.update import is_valid_change
@@ -47,7 +47,6 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
             stmt = (
                 select(Treatment)
                 .options(joinedload(Treatment.patient))
-                .options(joinedload(Treatment.medication))
             )
 
             # Filtrar por active
@@ -97,11 +96,9 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
             data = []
             for t in treatments:
                 patient = t.patient
-                medication = t.medication
                 data.append({
                     "id": t.id,
                     "patient_id": t.patient_id,
-                    "medication_id": t.medication_id,
                     "medication_name": t.medication_name,
                     "dosage": t.dosage,
                     "frequency": t.frequency,
@@ -114,12 +111,7 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
                         "id": patient.id if patient else None,
                         "name": patient.name if patient else None,
                         "caregiver_id": patient.caregiver_id if patient else None
-                    } if patient else None,
-                    "medication": {
-                        "id": medication.id if medication else None,
-                        "name": medication.name if medication else None,
-                        "description": medication.description if medication else None
-                    } if medication else None
+                    } if patient else None
                 })
 
             # Cursor para siguiente página
@@ -160,7 +152,6 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
             stmt = (
                 select(Treatment)
                 .options(joinedload(Treatment.patient))
-                .options(joinedload(Treatment.medication))
                 .options(joinedload(Treatment.intake_logs))
                 .where(Treatment.id == treatment_id)
             )
@@ -175,12 +166,10 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
                 )
 
             patient = treatment_found.patient
-            medication = treatment_found.medication
 
             treatment_data = {
                 "id": treatment_found.id,
                 "patient_id": treatment_found.patient_id,
-                "medication_id": treatment_found.medication_id,
                 "medication_name": treatment_found.medication_name,
                 "dosage": treatment_found.dosage,
                 "frequency": treatment_found.frequency,
@@ -194,11 +183,6 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
                     "name": patient.name if patient else None,
                     "caregiver_id": patient.caregiver_id if patient else None
                 } if patient else None,
-                "medication": {
-                    "id": medication.id if medication else None,
-                    "name": medication.name if medication else None,
-                    "description": medication.description if medication else None
-                } if medication else None,
                 "intake_logs_count": len(treatment_found.intake_logs) if treatment_found.intake_logs else 0
             }
 
@@ -242,21 +226,9 @@ async def create_treatment(req: Request, data: InputTreatment):
                     content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
                 )
 
-            # Buscar o crear medicamento
-            stmt_medication = select(Medication).where(Medication.name == data.medication_name)
-            result_medication = await session.execute(stmt_medication)
-            medication = result_medication.scalar_one_or_none()
-
-            if not medication:
-                # Crear medicamento si no existe
-                medication = Medication(name=data.medication_name)
-                session.add(medication)
-                await session.flush()  # Flush para obtener el ID sin hacer commit aún
-
             # Crear tratamiento
             new_treatment = Treatment(
                 patient_id=data.patient_id,
-                medication_id=medication.id,
                 medication_name=data.medication_name,
                 dosage=data.dosage,
                 frequency=data.frequency,
@@ -277,7 +249,6 @@ async def create_treatment(req: Request, data: InputTreatment):
                     "treatment": {
                         "id": new_treatment.id,
                         "patient_id": new_treatment.patient_id,
-                        "medication_id": new_treatment.medication_id,
                         "medication_name": new_treatment.medication_name,
                         "dosage": new_treatment.dosage,
                         "frequency": new_treatment.frequency,
@@ -347,17 +318,6 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
                 updated = True
 
             if is_valid_change(data.medication_name, treatment_found.medication_name):
-                # Buscar o crear medicamento
-                stmt_medication = select(Medication).where(Medication.name == data.medication_name)
-                result_medication = await session.execute(stmt_medication)
-                medication = result_medication.scalar_one_or_none()
-
-                if not medication:
-                    medication = Medication(name=data.medication_name)
-                    session.add(medication)
-                    await session.flush()
-
-                treatment_found.medication_id = medication.id
                 treatment_found.medication_name = data.medication_name
                 updated = True
 
@@ -493,7 +453,6 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
             # Obtener tratamientos del paciente (solo activos por defecto)
             stmt = (
                 select(Treatment)
-                .options(joinedload(Treatment.medication))
                 .where(Treatment.patient_id == patient_id)
                 .where(Treatment.active.is_(True))
                 .order_by(Treatment.id.desc())
@@ -505,10 +464,8 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
             # Serializar
             data = []
             for t in treatments:
-                medication = t.medication
                 data.append({
                     "id": t.id,
-                    "medication_id": t.medication_id,
                     "medication_name": t.medication_name,
                     "dosage": t.dosage,
                     "frequency": t.frequency,
@@ -516,12 +473,7 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
                     "start_date": t.start_date.isoformat() if t.start_date else None,
                     "end_date": t.end_date.isoformat() if t.end_date else None,
                     "notes": t.notes,
-                    "active": t.active,
-                    "medication": {
-                        "id": medication.id if medication else None,
-                        "name": medication.name if medication else None,
-                        "description": medication.description if medication else None
-                    } if medication else None
+                    "active": t.active
                 })
 
             return JSONResponse(
