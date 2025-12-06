@@ -69,7 +69,7 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="card-body">
                 <p className="card-message">
-                  "¡Excelente trabajo hoy! Todos los pacientes atendidos."
+                  "Registro actualizado: dosis administrada correctamente."
                 </p>
                 <span className="card-time">Hace 2 minutos</span>
               </div>

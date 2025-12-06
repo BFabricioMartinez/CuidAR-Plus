@@ -15,19 +15,15 @@
   width: 90%;
   max-width: 380px;
   margin: 0 auto;
+  position: relative;
+  padding-top: 50px;
 }
 
-/* Header Flexbox - Contenedor de la flecha */
-.register-container .header-content {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-bottom: 30px;
-  min-height: 40px;
-}
-
-/* Botón de volver (flecha) específico para Register */
+/* Botón de volver (flecha) - ABSOLUTE POSITIONING igual que Login */
 .register-container .back-button {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 40px;
   height: 40px;
   background: none;
@@ -40,8 +36,7 @@
   border-radius: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0;
-  margin-right: auto;
-  flex-shrink: 0;
+  z-index: 10;
 }
 
 .register-container .back-button svg {
@@ -197,11 +192,7 @@
   .register-container .form-container {
     width: 100%;
     max-width: 100%;
-  }
-
-  .register-container .header-content {
-    min-height: 36px;
-    margin-bottom: 24px;
+    padding-top: 46px;
   }
 
   .register-container .back-button {

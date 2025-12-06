@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../../style/Login.css';
+import '../../style/Register.css';
 
 // Tipo para los datos del formulario de registro
 interface RegisterFormData {
@@ -9,14 +10,6 @@ interface RegisterFormData {
   password: string;
   confirmPassword: string;
   role: 'ASISTENCIAL' | 'PERSONAL';
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
-  active: boolean;
 }
 
 const Register: React.FC = () => {
@@ -106,19 +99,17 @@ const Register: React.FC = () => {
         {/* Panel derecho con formulario */}
         <div className="right-panel">
           <div className="form-container">
-            {/* Header con flecha de retroceso */}
-            <div className="header-content">
-              <button
-                type="button"
-                onClick={() => navigate('/login')}
-                className="back-button"
-                aria-label="Volver al Login"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-              </button>
-            </div>
+            {/* Botón de volver - Posicionado de forma absoluta */}
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="back-button"
+              aria-label="Volver al Login"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </button>
 
             {/* Mensaje de error */}
             {error && (
