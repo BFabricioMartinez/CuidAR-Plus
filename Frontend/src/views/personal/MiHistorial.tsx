@@ -1,4 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type FilterFn,
+  type SortingState,
+  type ColumnFiltersState,
+} from '@tanstack/react-table';
 
 // ============================================
 // TIPOS
@@ -24,20 +35,131 @@ interface HistoryItem extends IntakeLog {
 }
 
 // ============================================
+// FILTROS PERSONALIZADOS
+// ============================================
+const statusFilterFn: FilterFn<HistoryItem> = (row, columnId, filterValue) => {
+  if (filterValue === 'all') return true;
+  return row.getValue(columnId) === filterValue;
+};
+
+const treatmentFilterFn: FilterFn<HistoryItem> = (row, columnId, filterValue) => {
+  if (filterValue === 'all') return true;
+  return row.getValue(columnId) === parseInt(filterValue);
+};
+
+const dateFilterFn: FilterFn<HistoryItem> = (row, columnId, filterValue) => {
+  if (!filterValue) return true;
+  const takenAt = row.getValue(columnId) as string;
+  if (!takenAt) return false;
+  const intakeDateStr = takenAt.split('T')[0];
+  return intakeDateStr === filterValue;
+};
+
+// ============================================
 // COMPONENTE
 // ============================================
 export default function MiHistorial() {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [data, setData] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
-  // Filtros
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterDate, setFilterDate] = useState<string>('');
-  const [filterTreatment, setFilterTreatment] = useState<string>('all');
+  // Paginación
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  // TanStack Table States
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const token = localStorage.getItem('token');
+
+  // Definición de columnas para TanStack Table
+  const columns = useMemo<ColumnDef<HistoryItem>[]>(
+    () => [
+      {
+        accessorKey: 'taken_at',
+        id: 'taken_at',
+        header: 'Fecha',
+        cell: ({ getValue }) => formatDate(getValue() as string),
+        filterFn: dateFilterFn,
+      },
+      {
+        accessorKey: 'scheduled_time',
+        header: 'Hora Programada',
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'taken_at',
+        id: 'taken_time',
+        header: 'Hora Registrada',
+        cell: ({ getValue }) => formatTime(getValue() as string),
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'medication_name',
+        header: 'Medicamento',
+        cell: ({ getValue }) => getValue() || 'Desconocido',
+      },
+      {
+        accessorKey: 'dosage',
+        header: 'Dosis',
+        cell: ({ getValue }) => getValue() || '',
+      },
+      {
+        accessorKey: 'status',
+        header: 'Estado',
+        cell: ({ getValue }) => {
+          const status = getValue() as string;
+          return (
+            <span className={`status-badge ${status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
+              {status === 'TAKEN' ? (
+                <>
+                  <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Tomada
+                </>
+              ) : (
+                <>
+                  <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  Omitida
+                </>
+              )}
+            </span>
+          );
+        },
+        filterFn: statusFilterFn,
+      },
+      {
+        accessorKey: 'treatment_id',
+        header: 'Treatment ID',
+        filterFn: treatmentFilterFn,
+        enableSorting: false,
+        // Columna oculta, solo para filtrado
+      },
+    ],
+    []
+  );
+
+  // Configuración de TanStack Table
+  const table = useReactTable({
+    data,
+    columns,
+    state: {
+      sorting,
+      columnFilters,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    manualPagination: true, // Paginación manual desde el backend
+  });
 
   // Cargar datos al montar
   useEffect(() => {
@@ -45,17 +167,19 @@ export default function MiHistorial() {
     fetchHistory();
   }, []);
 
-  // Recargar cuando cambien los filtros
+  // Recargar cuando cambien los filtros (resetear lista)
   useEffect(() => {
     if (treatments.length > 0) {
-      fetchHistory();
+      setData([]);
+      setNextCursor(null);
+      setHasMore(true);
+      fetchHistory(null);
     }
-  }, [filterStatus, filterDate, filterTreatment]);
+  }, [columnFilters]);
 
   // Obtener tratamientos (para el filtro)
   const fetchTreatments = async () => {
     try {
-      // Usar endpoint paginado del backend con límite alto para obtener todos
       const response = await fetch('http://localhost:8000/treatment/paginated', {
         method: 'POST',
         headers: {
@@ -70,31 +194,45 @@ export default function MiHistorial() {
 
       if (!response.ok) throw new Error('Error al cargar tratamientos');
 
-      const data = await response.json();
-      setTreatments(data.treatments || []);
+      const responseData = await response.json();
+      setTreatments(responseData.treatments || []);
     } catch (err: any) {
       console.error('Error al cargar tratamientos:', err);
     }
   };
 
-  // Obtener historial de tomas
-  const fetchHistory = async () => {
-    setLoading(true);
+  // Obtener historial de tomas con paginación
+  const fetchHistory = async (cursor: number | null = null) => {
+    if (!hasMore && cursor !== null) return;
+
+    const isInitialLoad = cursor === null;
+
+    if (isInitialLoad) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     setError('');
 
     try {
-      // Preparar filtros para el endpoint paginado
+      // Preparar filtros para el backend
       const filters: any = {};
 
-      if (filterStatus !== 'all') {
-        filters.status = filterStatus;
+      // Extraer filtros de TanStack Table
+      const statusFilter = columnFilters.find(f => f.id === 'status');
+      const treatmentFilter = columnFilters.find(f => f.id === 'treatment_id');
+
+      if (statusFilter && statusFilter.value !== 'all') {
+        filters.status = statusFilter.value;
       }
 
-      if (filterTreatment !== 'all') {
-        filters.treatment_id = parseInt(filterTreatment);
+      if (treatmentFilter && treatmentFilter.value !== 'all') {
+        filters.treatment_id = parseInt(treatmentFilter.value as string);
       }
 
-      // Usar endpoint paginado del backend
+      filters.order = 'desc';
+
       const response = await fetch('http://localhost:8000/intake/paginated', {
         method: 'POST',
         headers: {
@@ -102,46 +240,44 @@ export default function MiHistorial() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          limit: 100, // Límite alto para obtener todos los registros
+          limit: 20,
+          last_seen_id: cursor,
           filters,
         }),
       });
 
       if (!response.ok) throw new Error('Error al cargar historial');
 
-      const data = await response.json();
-      let intakes = data.intakes || [];
+      const responseData = await response.json();
+      let intakes = responseData.intakes || [];
 
-      // Filtrar por fecha si está especificada (filtrado en frontend)
-      if (filterDate) {
-        intakes = intakes.filter((intake: any) => {
-          if (!intake.taken_at) return false;
-
-          // Extraer solo la fecha del intake (sin hora ni timezone)
-          const intakeDateStr = intake.taken_at.split('T')[0]; // "2024-01-15"
-
-          // Comparar directamente las fechas en formato string
-          return intakeDateStr === filterDate;
-        });
-      }
-
-      // Enriquecer con datos del tratamiento (ya vienen del backend)
+      // Enriquecer con datos del tratamiento
       const enrichedData = intakes.map((intake: any) => ({
         id: intake.id,
         treatment_id: intake.treatment_id,
         taken_at: intake.taken_at,
         scheduled_time: intake.treatment?.frequency?.split(',')[0]?.trim() || 'N/A',
         status: intake.status,
-        acknowledged: false, // No existe en el backend actual
+        acknowledged: false,
         medication_name: intake.treatment?.medication_name || 'Desconocido',
         dosage: intake.treatment?.dosage || '',
       }));
 
-      setHistory(enrichedData);
+      // Actualizar datos
+      if (isInitialLoad) {
+        setData(enrichedData);
+      } else {
+        setData((prev) => [...prev, ...enrichedData]);
+      }
+
+      // Actualizar cursor y estado de hasMore
+      setNextCursor(responseData.next_cursor);
+      setHasMore(responseData.next_cursor !== null);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -166,10 +302,44 @@ export default function MiHistorial() {
 
   // Limpiar filtros
   const clearFilters = () => {
-    setFilterStatus('all');
-    setFilterDate('');
-    setFilterTreatment('all');
+    setColumnFilters([]);
   };
+
+  // Obtener valores de filtros actuales
+  const getFilterValue = (columnId: string): string => {
+    const filter = columnFilters.find(f => f.id === columnId);
+    return (filter?.value as string) || (columnId === 'taken_at' ? '' : 'all');
+  };
+
+  // Establecer filtro
+  const setFilter = (columnId: string, value: string) => {
+    setColumnFilters((prev) => {
+      const otherFilters = prev.filter(f => f.id !== columnId);
+      if (value === 'all' || value === '') {
+        return otherFilters;
+      }
+      return [...otherFilters, { id: columnId, value }];
+    });
+  };
+
+  // Detectar scroll para cargar más automáticamente
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = document.documentElement.scrollTop;
+      const clientHeight = document.documentElement.clientHeight;
+
+      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore) {
+        fetchHistory(nextCursor);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [nextCursor, loadingMore, hasMore]);
+
+  // Obtener filas filtradas
+  const filteredRows = table.getRowModel().rows;
 
   return (
     <div className="history-container">
@@ -210,8 +380,8 @@ export default function MiHistorial() {
                 Estado
               </label>
               <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                value={getFilterValue('status')}
+                onChange={(e) => setFilter('status', e.target.value)}
                 className="filter-select"
               >
                 <option value="all">Todos</option>
@@ -229,8 +399,8 @@ export default function MiHistorial() {
               </label>
               <input
                 type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
+                value={getFilterValue('taken_at')}
+                onChange={(e) => setFilter('taken_at', e.target.value)}
                 className="filter-input"
               />
             </div>
@@ -243,8 +413,8 @@ export default function MiHistorial() {
                 Medicamento
               </label>
               <select
-                value={filterTreatment}
-                onChange={(e) => setFilterTreatment(e.target.value)}
+                value={getFilterValue('treatment_id')}
+                onChange={(e) => setFilter('treatment_id', e.target.value)}
                 className="filter-select"
               >
                 <option value="all">Todos</option>
@@ -278,12 +448,12 @@ export default function MiHistorial() {
             </div>
             <p className="loading-text">Cargando historial...</p>
           </div>
-        ) : history.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="empty-history">
             <div className="empty-icon">📋</div>
             <h3 className="empty-title">Sin registros</h3>
             <p className="empty-text">
-              {filterStatus !== 'all' || filterDate || filterTreatment !== 'all'
+              {columnFilters.length > 0
                 ? 'No hay registros que coincidan con los filtros aplicados'
                 : 'Todavía no hay tomas registradas en el historial'}
             </p>
@@ -294,42 +464,50 @@ export default function MiHistorial() {
             <div className="table-container">
               <table className="history-table">
                 <thead>
-                  <tr className="table-header">
-                    <th className="table-th">Fecha</th>
-                    <th className="table-th">Hora Programada</th>
-                    <th className="table-th">Hora Registrada</th>
-                    <th className="table-th">Medicamento</th>
-                    <th className="table-th">Dosis</th>
-                    <th className="table-th">Estado</th>
-                  </tr>
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id} className="table-header">
+                      {headerGroup.headers.map(header => {
+                        // Ocultar columna treatment_id
+                        if (header.column.id === 'treatment_id') return null;
+
+                        return (
+                          <th key={header.id} className="table-th">
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </thead>
                 <tbody>
-                  {history.map((item, index) => (
-                    <tr key={item.id} className="table-row" style={{ animationDelay: `${index * 0.05}s` }}>
-                      <td className="table-td td-date">{formatDate(item.taken_at)}</td>
-                      <td className="table-td td-time">{item.scheduled_time}</td>
-                      <td className="table-td td-time">{formatTime(item.taken_at)}</td>
-                      <td className="table-td td-med">{item.medication_name}</td>
-                      <td className="table-td td-dosage">{item.dosage}</td>
-                      <td className="table-td">
-                        <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
-                          {item.status === 'TAKEN' ? (
-                            <>
-                              <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                              </svg>
-                              Tomada
-                            </>
-                          ) : (
-                            <>
-                              <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                              </svg>
-                              Omitida
-                            </>
-                          )}
-                        </span>
-                      </td>
+                  {filteredRows.map((row, index) => (
+                    <tr
+                      key={row.id}
+                      className="table-row"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      {row.getVisibleCells().map(cell => {
+                        // Ocultar columna treatment_id
+                        if (cell.column.id === 'treatment_id') return null;
+
+                        // Aplicar clases especiales a ciertas columnas
+                        let tdClass = 'table-td';
+                        if (cell.column.id === 'taken_at') tdClass += ' td-date';
+                        if (cell.column.id === 'scheduled_time' || cell.column.id === 'taken_time') tdClass += ' td-time';
+                        if (cell.column.id === 'medication_name') tdClass += ' td-med';
+                        if (cell.column.id === 'dosage') tdClass += ' td-dosage';
+
+                        return (
+                          <td key={cell.id} className={tdClass}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -338,51 +516,76 @@ export default function MiHistorial() {
 
             {/* Mobile Cards */}
             <div className="cards-container">
-              {history.map((item, index) => (
-                <div key={item.id} className="history-card" style={{ animationDelay: `${index * 0.1}s` }}>
-                  <div className="card-header">
-                    <span className="card-date">{formatDate(item.taken_at)}</span>
-                    <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
-                      {item.status === 'TAKEN' ? (
-                        <>
-                          <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          Tomada
-                        </>
-                      ) : (
-                        <>
-                          <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
-                          Omitida
-                        </>
-                      )}
-                    </span>
-                  </div>
+              {filteredRows.map((row, index) => {
+                const item = row.original;
+                return (
+                  <div key={item.id} className="history-card" style={{ animationDelay: `${index * 0.1}s` }}>
+                    <div className="card-header">
+                      <span className="card-date">{formatDate(item.taken_at)}</span>
+                      <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
+                        {item.status === 'TAKEN' ? (
+                          <>
+                            <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Tomada
+                          </>
+                        ) : (
+                          <>
+                            <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            Omitida
+                          </>
+                        )}
+                      </span>
+                    </div>
 
-                  <div className="card-body">
-                    <div className="card-row">
-                      <span className="card-label">Medicamento:</span>
-                      <span className="card-value">{item.medication_name}</span>
-                    </div>
-                    <div className="card-row">
-                      <span className="card-label">Dosis:</span>
-                      <span className="card-value">{item.dosage}</span>
-                    </div>
-                    <div className="card-row">
-                      <span className="card-label">Hora programada:</span>
-                      <span className="card-value">{item.scheduled_time}</span>
-                    </div>
-                    <div className="card-row">
-                      <span className="card-label">Hora registrada:</span>
-                      <span className="card-value">{formatTime(item.taken_at)}</span>
+                    <div className="card-body">
+                      <div className="card-row">
+                        <span className="card-label">Medicamento:</span>
+                        <span className="card-value">{item.medication_name}</span>
+                      </div>
+                      <div className="card-row">
+                        <span className="card-label">Dosis:</span>
+                        <span className="card-value">{item.dosage}</span>
+                      </div>
+                      <div className="card-row">
+                        <span className="card-label">Hora programada:</span>
+                        <span className="card-value">{item.scheduled_time}</span>
+                      </div>
+                      <div className="card-row">
+                        <span className="card-label">Hora registrada:</span>
+                        <span className="card-value">{formatTime(item.taken_at)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
+        )}
+
+        {/* Indicador de carga de más registros */}
+        {loadingMore && (
+          <div className="loading-more">
+            <div className="loading-spinner-small">
+              <div className="spinner-ring-small"></div>
+              <div className="spinner-ring-small"></div>
+              <div className="spinner-ring-small"></div>
+            </div>
+            <p className="loading-more-text">Cargando más registros...</p>
+          </div>
+        )}
+
+        {/* Mensaje cuando no hay más registros */}
+        {!loading && !loadingMore && !hasMore && data.length > 0 && (
+          <div className="end-of-list">
+            <svg className="end-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <p className="end-text">Has llegado al final del historial</p>
+          </div>
         )}
       </div>
 
@@ -455,231 +658,6 @@ export default function MiHistorial() {
           padding: 0 2rem;
           position: relative;
           z-index: 5;
-        }
-
-        /* ============================================
-           CHARTS GRID
-           ============================================ */
-
-        .charts-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        /* Modo single chart - cuando se filtra por estado */
-        .charts-grid-single {
-          grid-template-columns: 1fr;
-        }
-
-        .chart-card {
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
-          border-radius: 14px;
-          padding: 1rem 1.25rem;
-          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.8);
-          transition: all 0.3s ease;
-          position: relative;
-          overflow: hidden;
-          animation: fadeInUp 0.6s ease-out both;
-        }
-
-        /* Card cuando está en modo full width */
-        .chart-card-full {
-          padding: 1rem 1.5rem;
-        }
-
-        .chart-card:nth-child(1) { animation-delay: 0.1s; }
-        .chart-card:nth-child(2) { animation-delay: 0.2s; }
-        .chart-card:nth-child(3) { animation-delay: 0.3s; }
-        .chart-card:nth-child(4) { animation-delay: 0.4s; }
-
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .chart-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 12px 35px rgba(0, 0, 0, 0.1);
-        }
-
-        .chart-decoration {
-          position: absolute;
-          width: 150px;
-          height: 150px;
-          border-radius: 50%;
-          filter: blur(50px);
-          opacity: 0.12;
-          right: -40px;
-          top: -40px;
-        }
-
-        .featured-decoration {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .success-decoration {
-          background: #10b981;
-        }
-
-        .warning-decoration {
-          background: #f59e0b;
-        }
-
-        .info-decoration {
-          background: #3b82f6;
-        }
-
-        /* Chart Headers & Titles */
-        .chart-header {
-          margin-bottom: 0.5rem;
-        }
-
-        .chart-card-featured .chart-header {
-          text-align: center;
-        }
-
-        .chart-card-success .chart-header,
-        .chart-card-warning .chart-header,
-        .chart-card-info .chart-header {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-
-        .chart-title {
-          font-size: 1rem;
-          font-weight: 700;
-          color: #1f2937;
-          margin: 0 0 0.125rem 0;
-        }
-
-        .chart-subtitle {
-          font-size: 0.75rem;
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .chart-title-small {
-          font-size: 0.8125rem;
-          font-weight: 700;
-          color: #1f2937;
-          margin: 0;
-        }
-
-        .chart-subtitle-small {
-          font-size: 0.6875rem;
-          color: #9ca3af;
-          font-weight: 500;
-        }
-
-        .chart-icon-wrapper {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .chart-icon-wrapper.success {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          box-shadow: 0 3px 10px rgba(16, 185, 129, 0.2);
-        }
-
-        .chart-icon-wrapper.warning {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          box-shadow: 0 3px 10px rgba(245, 158, 11, 0.2);
-        }
-
-        .chart-icon-wrapper.info {
-          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-          box-shadow: 0 3px 10px rgba(59, 130, 246, 0.2);
-        }
-
-        .chart-icon {
-          width: 18px;
-          height: 18px;
-          color: #fff;
-        }
-
-        /* Circular Chart (Adherence) */
-        .circular-chart-container {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 0.25rem 0;
-        }
-
-        .circular-chart {
-          width: 100%;
-          max-width: 120px;
-          height: auto;
-        }
-
-        .circular-chart-progress {
-          transition: stroke-dasharray 1s ease-out;
-          animation: drawCircle 1.5s ease-out;
-        }
-
-        @keyframes drawCircle {
-          from {
-            stroke-dasharray: 0 502.6;
-          }
-        }
-
-        .circular-chart-value {
-          font-size: 1.5rem;
-          font-weight: 800;
-          fill: #1f2937;
-        }
-
-        .circular-chart-label {
-          font-size: 0.6875rem;
-          font-weight: 600;
-          fill: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        /* Mini Bar Charts */
-        .mini-chart-container {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .chart-value-large {
-          font-size: 1.375rem;
-          font-weight: 800;
-          color: #1f2937;
-          line-height: 1;
-        }
-
-        .mini-bar-chart {
-          width: 100%;
-          height: auto;
-        }
-
-        .mini-bar-fill {
-          transition: width 1s ease-out;
-          animation: expandBar 1s ease-out;
-        }
-
-        @keyframes expandBar {
-          from {
-            width: 0;
-          }
         }
 
         .filters-card {
@@ -887,6 +865,80 @@ export default function MiHistorial() {
           font-weight: 500;
         }
 
+        /* ============================================
+           LOADING MORE / END OF LIST
+           ============================================ */
+
+        .loading-more {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 3rem 2rem;
+          gap: 1.5rem;
+        }
+
+        .loading-spinner-small {
+          position: relative;
+          width: 50px;
+          height: 50px;
+        }
+
+        .spinner-ring-small {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border: 3px solid transparent;
+          border-top-color: #667eea;
+          border-radius: 50%;
+          animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+        }
+
+        .spinner-ring-small:nth-child(1) {
+          animation-delay: -0.45s;
+        }
+
+        .spinner-ring-small:nth-child(2) {
+          animation-delay: -0.3s;
+        }
+
+        .spinner-ring-small:nth-child(3) {
+          animation-delay: -0.15s;
+        }
+
+        .loading-more-text {
+          font-size: 1rem;
+          color: #6b7280;
+          font-weight: 500;
+          margin: 0;
+        }
+
+        .end-of-list {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          padding: 3rem 2rem;
+          margin-top: 2rem;
+          background: rgba(102, 126, 234, 0.05);
+          border-radius: 16px;
+          border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .end-icon {
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+          flex-shrink: 0;
+        }
+
+        .end-text {
+          font-size: 1rem;
+          color: #6b7280;
+          font-weight: 600;
+          margin: 0;
+        }
+
         .empty-history {
           background: rgba(255, 255, 255, 0.7);
           backdrop-filter: blur(10px);
@@ -965,6 +1017,17 @@ export default function MiHistorial() {
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         .table-td {
@@ -1096,10 +1159,6 @@ export default function MiHistorial() {
 
           .history-content {
             padding: 0 1.5rem;
-          }
-
-          .charts-grid {
-            grid-template-columns: 1fr;
           }
 
           .filters-grid {
