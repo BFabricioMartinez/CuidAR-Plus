@@ -226,7 +226,7 @@ async def create_user(req: Request, data: InputUser):
                 status_code=201,
                 content={
                     "message": "Usuario creado correctamente",
-                    "user": {
+                    "data": {
                         "id": new_user.id,
                         "name": new_user.name,
                         "email": new_user.email,

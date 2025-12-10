@@ -1,321 +1,71 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useAsistencialTreatments } from '../../hooks/asistencial/useAsistencialTreatments';
 
 // ============================================
-// TIPOS
-// ============================================
-interface Patient {
-  id: number;
-  name: string;
-}
-
-interface Treatment {
-  id: number;
-  patient_id: number;
-  medication_name: string;
-  dosage: string;
-  frequency: string;
-  start_date: string;
-  end_date?: string;
-  notes?: string;
-  active: boolean;
-}
-
-interface TreatmentForm {
-  medication_name: string;
-  dosage: string;
-  frequency: string;
-  start_date: string;
-  end_date: string;
-  notes: string;
-}
-
-// ============================================
-// COMPONENTE
+// COMPONENTE PRINCIPAL
 // ============================================
 export default function TratamientoView() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
-  const [treatments, setTreatments] = useState<Treatment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [editingTreatment, setEditingTreatment] = useState<Treatment | null>(null);
+  // Usar el hook personalizado
+  const {
+    patients,
+    selectedPatientId,
+    treatments,
+    formData,
+    loading,
+    error,
+    successMessage,
+    showForm,
+    editingTreatment,
+    fetchMyPatients,
+    selectPatient,
+    createTreatment,
+    updateTreatment,
+    deleteTreatment,
+    fetchTreatments,
+    handleInputChange,
+    openEditForm,
+    openCreateForm,
+    cancelForm,
+  } = useAsistencialTreatments();
 
-  const [formData, setFormData] = useState<TreatmentForm>({
-    medication_name: '',
-    dosage: '',
-    frequency: '',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: '',
-    notes: '',
-  });
-
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const token = localStorage.getItem('token');
-
-  // Cargar pacientes asignados al montar
+  // Cargar pacientes al montar el componente
   useEffect(() => {
     fetchMyPatients();
-  }, []);
+  }, [fetchMyPatients]);
 
-  // Cuando cambia el paciente, cargar sus tratamientos
-  useEffect(() => {
-    if (selectedPatientId) {
-      fetchTreatments();
-    }
-  }, [selectedPatientId]);
-
-  // Obtener pacientes asignados
-  const fetchMyPatients = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/assignments/all?caregiver_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const assignments = await response.json();
-
-      const patientPromises = assignments.map(async (assignment: any) => {
-        const patientRes = await fetch(
-          `http://localhost:8000/patients/${assignment.patient_id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          }
-        );
-        return patientRes.json();
-      });
-
-      const patientsData = await Promise.all(patientPromises);
-      setPatients(patientsData);
-
-      if (patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener tratamientos del paciente seleccionado
-  const fetchTreatments = async () => {
-    if (!selectedPatientId) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/treatments/all?patient_id=${selectedPatientId}&active=true`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar tratamientos');
-
-      const data = await response.json();
-      setTreatments(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Manejar cambios en formulario
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  // Crear tratamiento
-  const handleCreate = async (e: React.FormEvent) => {
+  // Manejar envío del formulario (crear o editar)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatientId) return;
 
-    setLoading(true);
-    setError('');
+    let success = false;
 
-    try {
-      const response = await fetch('http://localhost:8000/treatments/create', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          patient_id: selectedPatientId,
-          medication_name: formData.medication_name,
-          dosage: formData.dosage,
-          frequency: formData.frequency,
-          start_date: formData.start_date,
-          end_date: formData.end_date || null,
-          notes: formData.notes || null,
-        }),
-      });
+    if (editingTreatment) {
+      // Actualizar tratamiento existente
+      success = await updateTreatment(editingTreatment.id, formData);
+    } else {
+      // Crear nuevo tratamiento
+      success = await createTreatment(formData);
+    }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al crear tratamiento');
-      }
-
-      setSuccessMessage('Tratamiento creado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        medication_name: '',
-        dosage: '',
-        frequency: '',
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: '',
-        notes: '',
-      });
-      setShowForm(false);
-
+    // Si fue exitoso, cerrar formulario y recargar tratamientos
+    if (success) {
+      cancelForm();
       fetchTreatments();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Editar tratamiento
-  const handleEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTreatment) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/treatments/${editingTreatment.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            medication_name: formData.medication_name,
-            dosage: formData.dosage,
-            frequency: formData.frequency,
-            start_date: formData.start_date,
-            end_date: formData.end_date || null,
-            notes: formData.notes || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al actualizar tratamiento');
-      }
-
-      setSuccessMessage('Tratamiento actualizado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        medication_name: '',
-        dosage: '',
-        frequency: '',
-        start_date: new Date().toISOString().split('T')[0],
-        end_date: '',
-        notes: '',
-      });
-      setEditingTreatment(null);
-      setShowForm(false);
-
-      fetchTreatments();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Eliminar tratamiento
+  // Manejar eliminación con confirmación
   const handleDelete = async (id: number) => {
     if (!confirm('¿Estás seguro de desactivar este tratamiento?')) return;
 
-    setLoading(true);
-    setError('');
+    const success = await deleteTreatment(id);
 
-    try {
-      const response = await fetch(
-        `http://localhost:8000/treatments/${id}/delete`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al eliminar tratamiento');
-
-      setSuccessMessage('Tratamiento desactivado exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
+    if (success) {
       fetchTreatments();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Abrir formulario para editar
-  const openEditForm = (treatment: Treatment) => {
-    setEditingTreatment(treatment);
-    setFormData({
-      medication_name: treatment.medication_name,
-      dosage: treatment.dosage,
-      frequency: treatment.frequency,
-      start_date: treatment.start_date,
-      end_date: treatment.end_date || '',
-      notes: treatment.notes || '',
-    });
-    setShowForm(true);
-  };
-
-  // Cancelar formulario
-  const cancelForm = () => {
-    setShowForm(false);
-    setEditingTreatment(null);
-    setFormData({
-      medication_name: '',
-      dosage: '',
-      frequency: '',
-      start_date: new Date().toISOString().split('T')[0],
-      end_date: '',
-      notes: '',
-    });
-  };
-
+  // Nombre del paciente seleccionado
   const selectedPatientName =
     patients.find((p) => p.id === selectedPatientId)?.name || '';
 
@@ -328,13 +78,13 @@ export default function TratamientoView() {
           <p style={styles.subtitle}>Administra los tratamientos de tus pacientes</p>
         </div>
         {selectedPatientId && !showForm && (
-          <button onClick={() => setShowForm(true)} style={styles.btnAdd}>
+          <button onClick={openCreateForm} style={styles.btnAdd}>
             + Agregar Tratamiento
           </button>
         )}
       </div>
 
-      {/* Mensajes */}
+      {/* Mensajes de error y éxito */}
       {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
       {successMessage && <div style={styles.successAlert}>✓ {successMessage}</div>}
 
@@ -346,7 +96,7 @@ export default function TratamientoView() {
         ) : (
           <select
             value={selectedPatientId || ''}
-            onChange={(e) => setSelectedPatientId(Number(e.target.value))}
+            onChange={(e) => selectPatient(Number(e.target.value))}
             style={styles.selector}
           >
             {patients.map((patient) => (
@@ -358,7 +108,7 @@ export default function TratamientoView() {
         )}
       </div>
 
-      {/* Formulario */}
+      {/* Formulario de Crear/Editar */}
       {showForm && selectedPatientId && (
         <div style={styles.formCard}>
           <h2 style={styles.formTitle}>
@@ -366,7 +116,7 @@ export default function TratamientoView() {
             {selectedPatientName}
           </h2>
 
-          <form onSubmit={editingTreatment ? handleEdit : handleCreate} style={styles.form}>
+          <form onSubmit={handleSubmit} style={styles.form}>
             <div style={styles.formRow}>
               <div style={styles.formGroup}>
                 <label style={styles.label}>Medicamento *</label>
@@ -492,7 +242,9 @@ export default function TratamientoView() {
                     <div style={styles.detailRow}>
                       <span style={styles.detailLabel}>Inicio:</span>
                       <span style={styles.detailValue}>
-                        {new Date(treatment.start_date).toLocaleDateString('es-AR')}
+                        {treatment.start_date
+                          ? new Date(treatment.start_date).toLocaleDateString('es-AR')
+                          : 'N/A'}
                       </span>
                     </div>
                     {treatment.end_date && (
@@ -533,7 +285,7 @@ export default function TratamientoView() {
 }
 
 // ============================================
-// ESTILOS (Mismo que MisTratamientos)
+// ESTILOS
 // ============================================
 const styles: Record<string, React.CSSProperties> = {
   container: {

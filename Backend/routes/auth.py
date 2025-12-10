@@ -4,7 +4,7 @@ from sqlalchemy import select
 from datetime import timedelta
 import traceback
 
-from models import User, SignupRequest, LoginRequest
+from models import User, Patient, SignupRequest, LoginRequest
 from config.db import AsyncSessionLocal
 from auth.security import (
     hash_password,
@@ -43,6 +43,22 @@ async def signup(req: Request, user_data: SignupRequest):
             session.add(new_user)
             await session.commit()
             await session.refresh(new_user)
+
+            # Si el usuario es PERSONAL, crear automáticamente su perfil de paciente
+            if new_user.role == "PERSONAL":
+                # Usar el email como nombre temporal del paciente
+                patient_name = user_data.email.split('@')[0].capitalize()
+
+                new_patient = Patient(
+                    name=patient_name,
+                    caregiver_id=new_user.id,  # El usuario se auto-gestiona
+                    notes=f"Perfil de paciente creado automáticamente para {user_data.email}",
+                    active=True
+                )
+
+                session.add(new_patient)
+                await session.commit()
+                await session.refresh(new_patient)
 
             return JSONResponse(
                 status_code=201,

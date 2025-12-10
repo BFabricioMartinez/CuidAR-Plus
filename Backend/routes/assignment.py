@@ -233,7 +233,7 @@ async def create_assignment(req: Request, data: InputAssignment):
                 status_code=201,
                 content={
                     "message": "Asignación creada correctamente",
-                    "assignment": {
+                    "data": {
                         "id": new_assignment.id,
                         "caregiver_id": new_assignment.caregiver_id,
                         "patient_id": new_assignment.patient_id,

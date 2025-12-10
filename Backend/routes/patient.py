@@ -32,6 +32,10 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
         if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
+        # Obtener user_id y role del token
+        user_id = has_access.get("sub")
+        user_role = has_access.get("role")
+
         # Extraer parámetros
         limit = body.limit or 20
         last_seen_id = body.last_seen_id
@@ -49,6 +53,20 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
                 .options(joinedload(Patient.caregiver))
                 .options(joinedload(Patient.treatments))
             )
+
+            # Filtrar por role del usuario
+            if user_role == "PERSONAL":
+                # Usuario PERSONAL: solo ver sus propios pacientes
+                stmt = stmt.where(Patient.caregiver_id == int(user_id))
+            elif user_role == "ASISTENCIAL":
+                # Usuario ASISTENCIAL: solo ver pacientes asignados
+                from models import Assignment
+                stmt = (
+                    stmt.join(Assignment, Assignment.patient_id == Patient.id)
+                    .where(Assignment.caregiver_id == int(user_id))
+                    .where(Assignment.active.is_(True))
+                )
+            # Si es ADMIN, no se aplica filtro adicional (ve todos)
 
             # Filtrar por active
             if hasattr(Patient, "active"):
@@ -156,6 +174,10 @@ async def get_patient_by_id(req: Request, patient_id: int):
         if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
+        # Obtener user_id y role del token
+        user_id = has_access.get("sub")
+        user_role = has_access.get("role")
+
         async with AsyncSessionLocal() as session:
             stmt = (
                 select(Patient)
@@ -172,6 +194,32 @@ async def get_patient_by_id(req: Request, patient_id: int):
                     status_code=404,
                     content={"message": f"Paciente con ID {patient_id} no encontrado"}
                 )
+
+            # Verificar permisos según rol
+            if user_role == "PERSONAL":
+                # Usuario PERSONAL: solo puede ver sus propios pacientes
+                if patient_found.caregiver_id != int(user_id):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "No tienes permiso para ver este paciente"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # Usuario ASISTENCIAL: solo puede ver pacientes asignados
+                from models import Assignment
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient_id)
+                    .where(Assignment.caregiver_id == int(user_id))
+                    .where(Assignment.active.is_(True))
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "No tienes permiso para ver este paciente"}
+                    )
 
             caregiver = patient_found.caregiver
 
@@ -245,7 +293,7 @@ async def create_patient(req: Request, data: InputPatient):
                 status_code=201,
                 content={
                     "message": "Paciente creado correctamente",
-                    "patient": {
+                    "data": {
                         "id": new_patient.id,
                         "name": new_patient.name,
                         "caregiver_id": new_patient.caregiver_id,

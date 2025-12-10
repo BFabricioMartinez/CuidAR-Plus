@@ -6,6 +6,7 @@ from models import Treatment, Patient, InputTreatment, InputTreatmentUpdate, Inp
 from config.db import AsyncSessionLocal
 from auth.security import Security
 from utils.update import is_valid_change
+from datetime import datetime
 import traceback
 
 treatment = APIRouter()
@@ -32,6 +33,10 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
         if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
+        # Obtener user_id y role del token
+        user_id = has_access.get("sub")
+        user_role = has_access.get("role")
+
         # Extraer parámetros
         limit = body.limit or 20
         last_seen_id = body.last_seen_id
@@ -48,6 +53,21 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
                 select(Treatment)
                 .options(joinedload(Treatment.patient))
             )
+
+            # Filtrar por role del usuario
+            if user_role == "PERSONAL":
+                # Usuario PERSONAL: solo ver tratamientos de sus propios pacientes
+                stmt = stmt.join(Patient).where(Patient.caregiver_id == int(user_id))
+            elif user_role == "ASISTENCIAL":
+                # Usuario ASISTENCIAL: solo ver tratamientos de pacientes asignados
+                from models import Assignment
+                stmt = (
+                    stmt.join(Patient)
+                    .join(Assignment, Assignment.patient_id == Patient.id)
+                    .where(Assignment.caregiver_id == int(user_id))
+                    .where(Assignment.active.is_(True))
+                )
+            # Si es ADMIN, no se aplica filtro adicional (ve todos)
 
             # Filtrar por active
             if hasattr(Treatment, "active"):
@@ -226,6 +246,21 @@ async def create_treatment(req: Request, data: InputTreatment):
                     content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
                 )
 
+            # Convertir fechas de string a datetime
+            start_date_dt = None
+            if data.start_date:
+                try:
+                    start_date_dt = datetime.fromisoformat(data.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                except ValueError:
+                    start_date_dt = datetime.strptime(data.start_date, "%Y-%m-%d")
+
+            end_date_dt = None
+            if data.end_date:
+                try:
+                    end_date_dt = datetime.fromisoformat(data.end_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                except ValueError:
+                    end_date_dt = datetime.strptime(data.end_date, "%Y-%m-%d")
+
             # Crear tratamiento
             new_treatment = Treatment(
                 patient_id=data.patient_id,
@@ -233,8 +268,8 @@ async def create_treatment(req: Request, data: InputTreatment):
                 dosage=data.dosage,
                 frequency=data.frequency,
                 description=data.description,
-                start_date=data.start_date,
-                end_date=data.end_date,
+                start_date=start_date_dt,
+                end_date=end_date_dt,
                 notes=data.notes
             )
 
@@ -246,7 +281,7 @@ async def create_treatment(req: Request, data: InputTreatment):
                 status_code=201,
                 content={
                     "message": "Tratamiento creado correctamente",
-                    "treatment": {
+                    "data": {
                         "id": new_treatment.id,
                         "patient_id": new_treatment.patient_id,
                         "medication_name": new_treatment.medication_name,
@@ -334,11 +369,25 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
                 updated = True
 
             if is_valid_change(data.start_date, treatment_found.start_date):
-                treatment_found.start_date = data.start_date
+                # Convertir string a datetime
+                if data.start_date:
+                    try:
+                        treatment_found.start_date = datetime.fromisoformat(data.start_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                    except ValueError:
+                        treatment_found.start_date = datetime.strptime(data.start_date, "%Y-%m-%d")
+                else:
+                    treatment_found.start_date = None
                 updated = True
 
             if is_valid_change(data.end_date, treatment_found.end_date):
-                treatment_found.end_date = data.end_date
+                # Convertir string a datetime
+                if data.end_date:
+                    try:
+                        treatment_found.end_date = datetime.fromisoformat(data.end_date.replace('Z', '+00:00')).replace(tzinfo=None)
+                    except ValueError:
+                        treatment_found.end_date = datetime.strptime(data.end_date, "%Y-%m-%d")
+                else:
+                    treatment_found.end_date = None
                 updated = True
 
             if is_valid_change(data.notes, treatment_found.notes):
@@ -438,6 +487,10 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
         if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
+        # Obtener user_id y role del token
+        user_id = has_access.get("sub")
+        user_role = has_access.get("role")
+
         async with AsyncSessionLocal() as session:
             # Verificar que el paciente existe
             stmt_patient = select(Patient).where(Patient.id == patient_id)
@@ -449,6 +502,33 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
                     status_code=404,
                     content={"message": f"Paciente con ID {patient_id} no encontrado"}
                 )
+
+            # Verificar permisos según rol
+            if user_role == "PERSONAL":
+                # Usuario PERSONAL: solo puede ver pacientes propios
+                if patient.caregiver_id != int(user_id):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "No tienes permiso para ver este paciente"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # Usuario ASISTENCIAL: solo puede ver pacientes asignados
+                from models import Assignment
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient_id)
+                    .where(Assignment.caregiver_id == int(user_id))
+                    .where(Assignment.active.is_(True))
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "No tienes permiso para ver este paciente"}
+                    )
+            # Si es ADMIN, tiene permiso para ver todos
 
             # Obtener tratamientos del paciente (solo activos por defecto)
             stmt = (

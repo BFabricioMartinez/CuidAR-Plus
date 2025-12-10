@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, statisticsApi, ApiError } from '../../api';
-import type { Treatment, OverviewStats } from '../../api';
+import { treatmentsApi, patientsApi, statisticsApi, intakesApi, ApiError } from '../../api';
+import type { Treatment, OverviewStats, IntakeLog } from '../../api';
 
 export interface UpcomingDose {
   treatment_id: number;
@@ -32,28 +32,73 @@ export const useDashboard = () => {
     return [...new Set(times)].sort();
   }, []);
 
-  // Calcular dosis pendientes de hoy
+  // Calcular dosis pendientes de hoy (filtrando las ya registradas)
   const calculateUpcomingDoses = useCallback(
-    (treatmentsList: Treatment[]) => {
+    async (treatmentsList: Treatment[], patientId: number) => {
       const doses: UpcomingDose[] = [];
 
-      treatmentsList.forEach((treatment) => {
-        const times = parseTimesFromFrequency(treatment.frequency);
+      try {
+        // Obtener todos los registros de tomas de hoy
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-        times.forEach((time) => {
-          doses.push({
-            treatment_id: treatment.id,
-            med_name: treatment.medication_name,
-            dosage: treatment.dosage || '',
-            time,
-            frequency: treatment.frequency,
+        const intakesResponse = await intakesApi.list({
+          filters: { patient_id: patientId },
+        });
+
+        // Crear un Set de dosis ya registradas hoy (treatment_id + time)
+        const todayIntakes = new Set<string>();
+        intakesResponse.items.forEach((intake: IntakeLog) => {
+          if (intake.taken_at) {
+            const intakeDate = new Date(intake.taken_at);
+            if (intakeDate.toDateString() === today.toDateString()) {
+              const time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+              todayIntakes.add(`${intake.treatment_id}-${time}`);
+            }
+          }
+        });
+
+        // Generar dosis solo si no están registradas
+        treatmentsList.forEach((treatment) => {
+          const times = parseTimesFromFrequency(treatment.frequency);
+
+          times.forEach((time) => {
+            const doseKey = `${treatment.id}-${time}`;
+
+            // Solo agregar si no está registrada hoy
+            if (!todayIntakes.has(doseKey)) {
+              doses.push({
+                treatment_id: treatment.id,
+                med_name: treatment.medication_name,
+                dosage: treatment.dosage || '',
+                time,
+                frequency: treatment.frequency,
+              });
+            }
           });
         });
-      });
 
-      // Ordenar por hora
-      doses.sort((a, b) => a.time.localeCompare(b.time));
-      setUpcomingDoses(doses);
+        // Ordenar por hora
+        doses.sort((a, b) => a.time.localeCompare(b.time));
+        setUpcomingDoses(doses);
+      } catch (err) {
+        console.error('Error calculating upcoming doses:', err);
+        // En caso de error, mostrar todas las dosis
+        treatmentsList.forEach((treatment) => {
+          const times = parseTimesFromFrequency(treatment.frequency);
+          times.forEach((time) => {
+            doses.push({
+              treatment_id: treatment.id,
+              med_name: treatment.medication_name,
+              dosage: treatment.dosage || '',
+              time,
+              frequency: treatment.frequency,
+            });
+          });
+        });
+        doses.sort((a, b) => a.time.localeCompare(b.time));
+        setUpcomingDoses(doses);
+      }
     },
     [parseTimesFromFrequency]
   );
@@ -80,7 +125,7 @@ export const useDashboard = () => {
         // Cargar tratamientos del paciente
         const treatmentsData = await treatmentsApi.getByPatient(myPatient.id);
         setTreatments(treatmentsData.treatments);
-        calculateUpcomingDoses(treatmentsData.treatments);
+        await calculateUpcomingDoses(treatmentsData.treatments, myPatient.id);
       } else {
         setTreatments([]);
         setUpcomingDoses([]);

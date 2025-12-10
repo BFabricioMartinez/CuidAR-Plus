@@ -31,6 +31,10 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
         if "sub" not in has_access:
             return JSONResponse(status_code=401, content=has_access)
 
+        # Obtener user_id y role del token
+        user_id = has_access.get("sub")
+        user_role = has_access.get("role")
+
         # Extraer parámetros
         limit = body.limit or 20
         last_seen_id = body.last_seen_id
@@ -41,22 +45,37 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
         order_desc = order_raw in ("desc", "newest", "mas_nuevos")
 
         async with AsyncSessionLocal() as session:
-            # Construir query base
+            # Construir query base con join obligatorio para filtrar por permisos
             stmt = (
                 select(IntakeLog)
+                .join(Treatment, IntakeLog.treatment_id == Treatment.id)
+                .join(Patient, Treatment.patient_id == Patient.id)
                 .options(joinedload(IntakeLog.treatment).joinedload(Treatment.patient))
             )
+
+            # Filtrar por role del usuario
+            if user_role == "PERSONAL":
+                # Usuario PERSONAL: solo ver intakes de sus propios pacientes
+                stmt = stmt.where(Patient.caregiver_id == int(user_id))
+            elif user_role == "ASISTENCIAL":
+                # Usuario ASISTENCIAL: solo ver intakes de pacientes asignados
+                from models import Assignment
+                stmt = (
+                    stmt.join(Assignment, Assignment.patient_id == Patient.id)
+                    .where(Assignment.caregiver_id == int(user_id))
+                    .where(Assignment.active.is_(True))
+                )
+            # Si es ADMIN, no se aplica filtro adicional (ve todos)
 
             # Filtro por treatment_id
             treatment_id_filter = filters.get("treatment_id")
             if treatment_id_filter:
                 stmt = stmt.where(IntakeLog.treatment_id == treatment_id_filter)
 
-            # Filtro por patient_id (requiere join)
+            # Filtro por patient_id
             patient_id_filter = filters.get("patient_id")
             if patient_id_filter:
-                stmt = stmt.join(Treatment, IntakeLog.treatment_id == Treatment.id)
-                stmt = stmt.where(Treatment.patient_id == patient_id_filter)
+                stmt = stmt.where(Patient.id == patient_id_filter)
 
             # Filtro por status
             status_filter = filters.get("status")
@@ -255,7 +274,7 @@ async def create_intake(req: Request, data: InputIntakeLog):
                 status_code=201,
                 content={
                     "message": "Registro de toma creado correctamente",
-                    "intake": {
+                    "data": {
                         "id": new_intake.id,
                         "treatment_id": new_intake.treatment_id,
                         "taken_at": new_intake.taken_at.isoformat() if new_intake.taken_at else None,

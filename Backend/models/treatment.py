@@ -2,7 +2,7 @@ from typing import Optional
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime
 from config.db import Base
 
 #region MODELO SQLALCHEMY
@@ -69,8 +69,8 @@ class InputTreatment(BaseModel):
     dosage: Optional[str] = None
     frequency: str
     description: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    start_date: Optional[str] = None  # Cambiado de date a str para compatibilidad con frontend
+    end_date: Optional[str] = None    # Cambiado de date a str para compatibilidad con frontend
     notes: Optional[str] = None
 
 class InputTreatmentUpdate(BaseModel):
@@ -81,8 +81,8 @@ class InputTreatmentUpdate(BaseModel):
     dosage: Optional[str] = None
     frequency: Optional[str] = None
     description: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
+    start_date: Optional[str] = None  # Cambiado de date a str para compatibilidad con frontend
+    end_date: Optional[str] = None    # Cambiado de date a str para compatibilidad con frontend
     notes: Optional[str] = None
     active: Optional[bool] = None
 
