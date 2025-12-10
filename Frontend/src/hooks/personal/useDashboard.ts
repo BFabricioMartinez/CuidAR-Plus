@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, statisticsApi, ApiError } from '../../api';
+import { treatmentsApi, patientsApi, statisticsApi, intakesApi, ApiError } from '../../api';
 import type { Treatment, OverviewStats } from '../../api';
 
 export interface UpcomingDose {
@@ -32,28 +32,81 @@ export const useDashboard = () => {
     return [...new Set(times)].sort();
   }, []);
 
-  // Calcular dosis pendientes de hoy
+  // Calcular dosis pendientes de hoy (filtrando las ya registradas)
   const calculateUpcomingDoses = useCallback(
-    (treatmentsList: Treatment[]) => {
+    async (treatmentsList: Treatment[], patientId: number) => {
       const doses: UpcomingDose[] = [];
 
-      treatmentsList.forEach((treatment) => {
-        const times = parseTimesFromFrequency(treatment.frequency);
+      // Obtener todos los intakes de hoy para este paciente
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
 
-        times.forEach((time) => {
-          doses.push({
-            treatment_id: treatment.id,
-            med_name: treatment.medication_name,
-            dosage: treatment.dosage || '',
-            time,
-            frequency: treatment.frequency,
+      try {
+        // Obtener historial de intakes del paciente filtrado por hoy
+        const intakesResponse = await intakesApi.getPatientHistory(patientId);
+
+        // Filtrar solo los intakes de hoy
+        const todayIntakes = intakesResponse.intakes.filter(intake => {
+          if (!intake.taken_at) return false;
+          const intakeDate = new Date(intake.taken_at);
+          return intakeDate >= startOfDay && intakeDate <= endOfDay;
+        });
+
+        // Crear un Set con las claves de dosis ya registradas (treatment_id + hora)
+        const registeredDoses = new Set<string>();
+        todayIntakes.forEach(intake => {
+          if (intake.taken_at) {
+            const intakeDate = new Date(intake.taken_at);
+            const hour = String(intakeDate.getHours()).padStart(2, '0');
+            const minute = String(intakeDate.getMinutes()).padStart(2, '0');
+            const time = `${hour}:${minute}`;
+            const key = `${intake.treatment_id}-${time}`;
+            registeredDoses.add(key);
+          }
+        });
+
+        // Generar dosis de todos los tratamientos activos
+        treatmentsList.forEach((treatment) => {
+          const times = parseTimesFromFrequency(treatment.frequency);
+
+          times.forEach((time) => {
+            const doseKey = `${treatment.id}-${time}`;
+
+            // Solo agregar si NO está registrada
+            if (!registeredDoses.has(doseKey)) {
+              doses.push({
+                treatment_id: treatment.id,
+                med_name: treatment.medication_name,
+                dosage: treatment.dosage || '',
+                time,
+                frequency: treatment.frequency,
+              });
+            }
           });
         });
-      });
 
-      // Ordenar por hora
-      doses.sort((a, b) => a.time.localeCompare(b.time));
-      setUpcomingDoses(doses);
+        // Ordenar por hora
+        doses.sort((a, b) => a.time.localeCompare(b.time));
+        setUpcomingDoses(doses);
+      } catch (err) {
+        console.error('Error al filtrar dosis registradas:', err);
+        // En caso de error, mostrar todas las dosis
+        treatmentsList.forEach((treatment) => {
+          const times = parseTimesFromFrequency(treatment.frequency);
+          times.forEach((time) => {
+            doses.push({
+              treatment_id: treatment.id,
+              med_name: treatment.medication_name,
+              dosage: treatment.dosage || '',
+              time,
+              frequency: treatment.frequency,
+            });
+          });
+        });
+        doses.sort((a, b) => a.time.localeCompare(b.time));
+        setUpcomingDoses(doses);
+      }
     },
     [parseTimesFromFrequency]
   );
@@ -80,7 +133,7 @@ export const useDashboard = () => {
         // Cargar tratamientos del paciente
         const treatmentsData = await treatmentsApi.getByPatient(myPatient.id);
         setTreatments(treatmentsData.treatments);
-        calculateUpcomingDoses(treatmentsData.treatments);
+        await calculateUpcomingDoses(treatmentsData.treatments, myPatient.id);
       } else {
         setTreatments([]);
         setUpcomingDoses([]);

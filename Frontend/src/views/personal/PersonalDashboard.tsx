@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useDashboard } from '../../hooks/personal/useDashboard';
 import { useTreatmentManagement } from '../../hooks/personal/useTreatmentManagement';
 import { authApi } from '../../api';
@@ -8,25 +8,98 @@ export default function PersonalDashboard() {
   const { treatments, upcomingDoses, stats, loading, error, fetchDashboard } = useDashboard();
   const { markAsTaken, markAsMissed } = useTreatmentManagement();
 
+  // Estado para rastrear las dosis que se están desvaneciendo
+  const [fadingDoses, setFadingDoses] = useState<Set<string>>(new Set());
+  // Estado para rastrear las dosis que ya fueron marcadas (para ocultarlas permanentemente)
+  const [markedDoses, setMarkedDoses] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  // Función para verificar si una dosis está atrasada
+  const isDoseOverdue = (time: string): boolean => {
+    const now = new Date();
+    const [hours, minutes] = time.split(':').map(Number);
+    const doseTime = new Date();
+    doseTime.setHours(hours, minutes, 0, 0);
+    return now > doseTime;
+  };
+
+  // Generar una clave única para cada dosis
+  const getDoseKey = (treatmentId: number, time: string) => `${treatmentId}-${time}`;
+
   const handleMarkTaken = async (treatmentId: number, time: string) => {
+    const doseKey = getDoseKey(treatmentId, time);
+
     try {
+      // Agregar a la lista de dosis que se están desvaneciendo
+      setFadingDoses(prev => new Set(prev).add(doseKey));
+      // Marcar como procesada inmediatamente para que no reaparezca
+      setMarkedDoses(prev => new Set(prev).add(doseKey));
+
       await markAsTaken(treatmentId, time);
-      setTimeout(() => fetchDashboard(), 1000);
+
+      // Esperar a que termine la animación, luego solo remover de fadingDoses
+      setTimeout(() => {
+        setFadingDoses(prev => {
+          const next = new Set(prev);
+          next.delete(doseKey);
+          return next;
+        });
+        // Recargar dashboard después de la animación
+        fetchDashboard();
+      }, 600); // 600ms coincide con la duración de la animación
     } catch (err) {
       console.error('Error al marcar dosis:', err);
+      // Remover de ambas listas si hay error
+      setFadingDoses(prev => {
+        const next = new Set(prev);
+        next.delete(doseKey);
+        return next;
+      });
+      setMarkedDoses(prev => {
+        const next = new Set(prev);
+        next.delete(doseKey);
+        return next;
+      });
     }
   };
 
   const handleMarkMissed = async (treatmentId: number, time: string) => {
+    const doseKey = getDoseKey(treatmentId, time);
+
     try {
+      // Agregar a la lista de dosis que se están desvaneciendo
+      setFadingDoses(prev => new Set(prev).add(doseKey));
+      // Marcar como procesada inmediatamente para que no reaparezca
+      setMarkedDoses(prev => new Set(prev).add(doseKey));
+
       await markAsMissed(treatmentId, time);
-      setTimeout(() => fetchDashboard(), 1000);
+
+      // Esperar a que termine la animación, luego solo remover de fadingDoses
+      setTimeout(() => {
+        setFadingDoses(prev => {
+          const next = new Set(prev);
+          next.delete(doseKey);
+          return next;
+        });
+        // Recargar dashboard después de la animación
+        fetchDashboard();
+      }, 600); // 600ms coincide con la duración de la animación
     } catch (err) {
       console.error('Error al marcar dosis:', err);
+      // Remover de ambas listas si hay error
+      setFadingDoses(prev => {
+        const next = new Set(prev);
+        next.delete(doseKey);
+        return next;
+      });
+      setMarkedDoses(prev => {
+        const next = new Set(prev);
+        next.delete(doseKey);
+        return next;
+      });
     }
   };
 
@@ -75,50 +148,151 @@ export default function PersonalDashboard() {
       )}
 
       <div className="dashboard-content">
-        {/* KPI Cards with Glassmorphism */}
+        {/* Charts Grid with Glassmorphism */}
         {stats && (
-          <div className="stats-grid">
-            <div className="stat-card stat-card-success">
-              <div className="stat-icon-wrapper success">
-                <svg className="stat-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          <div className="charts-grid">
+            {/* Featured Adherence Chart */}
+            <div className="chart-card chart-card-featured">
+              <div className="chart-header">
+                <h3 className="chart-title">Adherencia de Hoy</h3>
+                <div className="chart-subtitle">Tu progreso diario</div>
+              </div>
+              <div className="circular-chart-container">
+                <svg className="circular-chart" viewBox="0 0 200 200">
+                  {/* Background Circle */}
+                  <circle
+                    className="circular-chart-bg"
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, 0.1)"
+                    strokeWidth="12"
+                  />
+                  {/* Progress Circle */}
+                  <circle
+                    className="circular-chart-progress"
+                    cx="100"
+                    cy="100"
+                    r="80"
+                    fill="none"
+                    stroke="url(#adherenceGradient)"
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(stats.today_doses.adherence_percentage || 0) * 5.026} 502.6`}
+                    transform="rotate(-90 100 100)"
+                  />
+                  {/* Gradient Definition */}
+                  <defs>
+                    <linearGradient id="adherenceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#667eea" />
+                      <stop offset="100%" stopColor="#764ba2" />
+                    </linearGradient>
+                  </defs>
+                  {/* Center Text */}
+                  <text x="100" y="95" textAnchor="middle" className="circular-chart-value">
+                    {stats.today_doses.adherence_percentage
+                      ? `${Math.round(stats.today_doses.adherence_percentage)}%`
+                      : 'N/A'}
+                  </text>
+                  <text x="100" y="115" textAnchor="middle" className="circular-chart-label">
+                    adherencia
+                  </text>
                 </svg>
               </div>
-              <div className="stat-content">
-                <div className="stat-value">{stats.today_doses.taken}</div>
-                <div className="stat-label">Dosis Tomadas Hoy</div>
-              </div>
-              <div className="stat-decoration success-decoration"></div>
+              <div className="chart-decoration featured-decoration"></div>
             </div>
 
-            <div className="stat-card stat-card-warning">
-              <div className="stat-icon-wrapper warning">
-                <svg className="stat-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="stat-content">
-                <div className="stat-value">{stats.today_doses.missed}</div>
-                <div className="stat-label">Dosis Omitidas Hoy</div>
-              </div>
-              <div className="stat-decoration warning-decoration"></div>
-            </div>
-
-            <div className="stat-card stat-card-info">
-              <div className="stat-icon-wrapper info">
-                <svg className="stat-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-                </svg>
-              </div>
-              <div className="stat-content">
-                <div className="stat-value">
-                  {stats.today_doses.adherence_percentage
-                    ? `${Math.round(stats.today_doses.adherence_percentage)}%`
-                    : 'N/A'}
+            {/* Taken Doses Chart */}
+            <div className="chart-card chart-card-success">
+              <div className="chart-header">
+                <div className="chart-icon-wrapper success">
+                  <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
                 </div>
-                <div className="stat-label">Adherencia Hoy</div>
+                <div>
+                  <h3 className="chart-title-small">Dosis Tomadas</h3>
+                  <div className="chart-subtitle-small">Hoy</div>
+                </div>
               </div>
-              <div className="stat-decoration info-decoration"></div>
+              <div className="mini-chart-container">
+                <div className="chart-value-large">{stats.today_doses.taken}</div>
+                <svg className="mini-bar-chart" viewBox="0 0 120 60">
+                  {/* Bar */}
+                  <rect
+                    className="mini-bar-bg"
+                    x="10"
+                    y="10"
+                    width="100"
+                    height="40"
+                    rx="8"
+                    fill="rgba(255, 255, 255, 0.1)"
+                  />
+                  <rect
+                    className="mini-bar-fill"
+                    x="10"
+                    y="10"
+                    width={Math.min(100, (stats.today_doses.taken / Math.max(stats.today_doses.taken + stats.today_doses.missed, 1)) * 100)}
+                    height="40"
+                    rx="8"
+                    fill="url(#successGradient)"
+                  />
+                  <defs>
+                    <linearGradient id="successGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#10b981" />
+                      <stop offset="100%" stopColor="#34d399" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <div className="chart-decoration success-decoration"></div>
+            </div>
+
+            {/* Missed Doses Chart */}
+            <div className="chart-card chart-card-warning">
+              <div className="chart-header">
+                <div className="chart-icon-wrapper warning">
+                  <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="chart-title-small">Dosis Omitidas</h3>
+                  <div className="chart-subtitle-small">Hoy</div>
+                </div>
+              </div>
+              <div className="mini-chart-container">
+                <div className="chart-value-large">{stats.today_doses.missed}</div>
+                <svg className="mini-bar-chart" viewBox="0 0 120 60">
+                  {/* Bar */}
+                  <rect
+                    className="mini-bar-bg"
+                    x="10"
+                    y="10"
+                    width="100"
+                    height="40"
+                    rx="8"
+                    fill="rgba(255, 255, 255, 0.1)"
+                  />
+                  <rect
+                    className="mini-bar-fill"
+                    x="10"
+                    y="10"
+                    width={Math.min(100, (stats.today_doses.missed / Math.max(stats.today_doses.taken + stats.today_doses.missed, 1)) * 100)}
+                    height="40"
+                    rx="8"
+                    fill="url(#warningGradient)"
+                  />
+                  <defs>
+                    <linearGradient id="warningGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#f59e0b" />
+                      <stop offset="100%" stopColor="#fbbf24" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <div className="chart-decoration warning-decoration"></div>
             </div>
           </div>
         )}
@@ -132,57 +306,104 @@ export default function PersonalDashboard() {
             </h2>
           </div>
 
-          {upcomingDoses.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📋</div>
-              <h3 className="empty-title">Sin dosis programadas</h3>
-              <p className="empty-text">
-                No tienes dosis programadas para hoy. <br />
-                Agrega tratamientos en "Mis Tratamientos"
-              </p>
-            </div>
-          ) : (
-            <div className="doses-grid">
-              {upcomingDoses.map((dose, index) => (
-                <div key={index} className="dose-card">
-                  <div className="dose-time-badge">
-                    <svg className="time-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                    </svg>
-                    {dose.time}
-                  </div>
+          {(() => {
+            // Filtrar dosis no marcadas, PERO mantener las que están desvaneciéndose
+            const visibleDoses = upcomingDoses.filter(dose => {
+              const doseKey = getDoseKey(dose.treatment_id, dose.time);
+              // Mostrar si NO está marcada, O si está marcada pero todavía desvaneciéndose
+              return !markedDoses.has(doseKey) || fadingDoses.has(doseKey);
+            });
 
-                  <div className="dose-info">
-                    <h3 className="dose-med-name">{dose.med_name}</h3>
-                    <p className="dose-dosage">{dose.dosage}</p>
-                  </div>
-
-                  <div className="dose-actions">
-                    <button
-                      onClick={() => handleMarkTaken(dose.treatment_id, dose.time)}
-                      className="dose-btn dose-btn-taken"
-                      title="Marcar como tomada"
-                    >
-                      <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <span>Tomada</span>
-                    </button>
-                    <button
-                      onClick={() => handleMarkMissed(dose.treatment_id, dose.time)}
-                      className="dose-btn dose-btn-missed"
-                      title="Marcar como omitida"
-                    >
-                      <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                      </svg>
-                      <span>Omitida</span>
-                    </button>
-                  </div>
+            if (upcomingDoses.length === 0) {
+              return (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3 className="empty-title">Sin dosis programadas</h3>
+                  <p className="empty-text">
+                    No tienes dosis programadas para hoy. <br />
+                    Agrega tratamientos en "Mis Tratamientos"
+                  </p>
                 </div>
-              ))}
+              );
+            }
+
+            if (visibleDoses.length === 0) {
+              return (
+                <div className="empty-state">
+                  <div className="empty-icon">✅</div>
+                  <h3 className="empty-title">¡Todas las dosis completadas!</h3>
+                  <p className="empty-text">
+                    Has registrado todas tus dosis de hoy. <br />
+                    ¡Excelente trabajo manteniendo tu adherencia!
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="doses-grid">
+                {visibleDoses.map((dose, index) => {
+                const doseKey = getDoseKey(dose.treatment_id, dose.time);
+                const isOverdue = isDoseOverdue(dose.time);
+                const isFading = fadingDoses.has(doseKey);
+
+                return (
+                  <div
+                    key={index}
+                    className={`dose-card ${isOverdue ? 'dose-card-overdue' : ''} ${isFading ? 'dose-card-fading' : ''}`}
+                  >
+                    {/* Indicador de atrasada */}
+                    {isOverdue && (
+                      <div className="overdue-badge">
+                        <svg className="overdue-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <span className="overdue-text">Atrasada</span>
+                      </div>
+                    )}
+
+                    <div className={`dose-time-badge ${isOverdue ? 'dose-time-badge-overdue' : ''}`}>
+                      <svg className="time-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                      </svg>
+                      {dose.time}
+                    </div>
+
+                    <div className="dose-info">
+                      <h3 className="dose-med-name">{dose.med_name}</h3>
+                      <p className="dose-dosage">{dose.dosage}</p>
+                    </div>
+
+                    <div className="dose-actions">
+                      <button
+                        onClick={() => handleMarkTaken(dose.treatment_id, dose.time)}
+                        className="dose-btn dose-btn-taken"
+                        title="Marcar como tomada"
+                        disabled={isFading}
+                      >
+                        <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span>Tomada</span>
+                      </button>
+                      <button
+                        onClick={() => handleMarkMissed(dose.treatment_id, dose.time)}
+                        className="dose-btn dose-btn-missed"
+                        title="Marcar como omitida"
+                        disabled={isFading}
+                      >
+                        <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                        <span>Omitida</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Active Treatments */}
@@ -396,21 +617,27 @@ export default function PersonalDashboard() {
           z-index: 5;
         }
 
-        .stats-grid {
+        /* ============================================
+           CHARTS GRID
+           ============================================ */
+
+        .charts-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          grid-template-columns: 1fr 1fr;
           gap: 1.5rem;
           margin-bottom: 3rem;
         }
 
-        .stat-card {
+        /* Featured Chart (Adherence - Spans 2 columns on desktop) */
+        .chart-card-featured {
+          grid-column: 1 / -1;
+        }
+
+        .chart-card {
           background: rgba(255, 255, 255, 0.9);
           backdrop-filter: blur(10px);
           border-radius: 24px;
           padding: 2rem;
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
           border: 1px solid rgba(255, 255, 255, 0.8);
           transition: all 0.3s ease;
@@ -420,9 +647,9 @@ export default function PersonalDashboard() {
           animation-fill-mode: both;
         }
 
-        .stat-card:nth-child(1) { animation-delay: 0.1s; }
-        .stat-card:nth-child(2) { animation-delay: 0.2s; }
-        .stat-card:nth-child(3) { animation-delay: 0.3s; }
+        .chart-card:nth-child(1) { animation-delay: 0.1s; }
+        .chart-card:nth-child(2) { animation-delay: 0.2s; }
+        .chart-card:nth-child(3) { animation-delay: 0.3s; }
 
         @keyframes fadeInUp {
           from {
@@ -435,12 +662,12 @@ export default function PersonalDashboard() {
           }
         }
 
-        .stat-card:hover {
+        .chart-card:hover {
           transform: translateY(-8px);
           box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
         }
 
-        .stat-decoration {
+        .chart-decoration {
           position: absolute;
           width: 200px;
           height: 200px;
@@ -451,6 +678,10 @@ export default function PersonalDashboard() {
           top: -50px;
         }
 
+        .featured-decoration {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
         .success-decoration {
           background: #10b981;
         }
@@ -459,57 +690,150 @@ export default function PersonalDashboard() {
           background: #f59e0b;
         }
 
-        .info-decoration {
-          background: #3b82f6;
+        /* ============================================
+           CHART HEADERS & TITLES
+           ============================================ */
+
+        .chart-header {
+          margin-bottom: 1.5rem;
         }
 
-        .stat-icon-wrapper {
-          width: 64px;
-          height: 64px;
-          border-radius: 20px;
+        .chart-card-featured .chart-header {
+          text-align: center;
+        }
+
+        .chart-card-success .chart-header,
+        .chart-card-warning .chart-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .chart-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 0.25rem 0;
+        }
+
+        .chart-subtitle {
+          font-size: 0.9375rem;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .chart-title-small {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 0.125rem 0;
+        }
+
+        .chart-subtitle-small {
+          font-size: 0.8125rem;
+          color: #9ca3af;
+          font-weight: 500;
+        }
+
+        .chart-icon-wrapper {
+          width: 48px;
+          height: 48px;
+          border-radius: 14px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
         }
 
-        .stat-icon-wrapper.success {
+        .chart-icon-wrapper.success {
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+          box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
         }
 
-        .stat-icon-wrapper.warning {
+        .chart-icon-wrapper.warning {
           background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+          box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25);
         }
 
-        .stat-icon-wrapper.info {
-          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-          box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
-        }
-
-        .stat-icon {
-          width: 32px;
-          height: 32px;
+        .chart-icon {
+          width: 24px;
+          height: 24px;
           color: #fff;
         }
 
-        .stat-content {
-          flex: 1;
+        /* ============================================
+           CIRCULAR CHART (Adherence)
+           ============================================ */
+
+        .circular-chart-container {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 1rem 0;
         }
 
-        .stat-value {
+        .circular-chart {
+          width: 100%;
+          max-width: 240px;
+          height: auto;
+        }
+
+        .circular-chart-progress {
+          transition: stroke-dasharray 1s ease-out;
+          animation: drawCircle 1.5s ease-out;
+        }
+
+        @keyframes drawCircle {
+          from {
+            stroke-dasharray: 0 502.6;
+          }
+        }
+
+        .circular-chart-value {
           font-size: 2.5rem;
+          font-weight: 800;
+          fill: #1f2937;
+        }
+
+        .circular-chart-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          fill: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        /* ============================================
+           MINI BAR CHARTS
+           ============================================ */
+
+        .mini-chart-container {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .chart-value-large {
+          font-size: 2.25rem;
           font-weight: 800;
           color: #1f2937;
           line-height: 1;
-          margin-bottom: 0.5rem;
         }
 
-        .stat-label {
-          font-size: 0.9375rem;
-          color: #6b7280;
-          font-weight: 600;
+        .mini-bar-chart {
+          width: 100%;
+          height: auto;
+        }
+
+        .mini-bar-fill {
+          transition: width 1s ease-out;
+          animation: expandBar 1s ease-out;
+        }
+
+        @keyframes expandBar {
+          from {
+            width: 0;
+          }
         }
 
         .section {
@@ -578,6 +902,7 @@ export default function PersonalDashboard() {
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
           animation: scaleIn 0.4s ease-out;
+          position: relative;
         }
 
         @keyframes scaleIn {
@@ -680,9 +1005,101 @@ export default function PersonalDashboard() {
           transform: translateY(0);
         }
 
+        .dose-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
         .btn-icon {
           width: 20px;
           height: 20px;
+        }
+
+        /* ============================================
+           ESTILOS PARA DOSIS ATRASADAS
+           ============================================ */
+
+        .dose-card-overdue {
+          border: 2px solid rgba(239, 68, 68, 0.3);
+          background: linear-gradient(135deg, rgba(254, 242, 242, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%);
+        }
+
+        .dose-card-overdue:hover {
+          border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .overdue-badge {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          color: #fff;
+          padding: 0.5rem 0.875rem;
+          border-radius: 8px;
+          font-size: 0.8125rem;
+          font-weight: 700;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+          animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.8;
+          }
+        }
+
+        .overdue-icon {
+          width: 14px;
+          height: 14px;
+        }
+
+        .overdue-text {
+          font-size: 0.8125rem;
+        }
+
+        .dose-time-badge-overdue {
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+          animation: pulseGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseGlow {
+          0%, 100% {
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+          }
+          50% {
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+          }
+        }
+
+        /* ============================================
+           ANIMACIÓN DE DESVANECIMIENTO
+           ============================================ */
+
+        .dose-card-fading {
+          animation: fadeOutScale 0.6s ease-out forwards;
+        }
+
+        @keyframes fadeOutScale {
+          0% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(0.9);
+            height: 0;
+            padding: 0;
+            margin: 0;
+            border: none;
+          }
         }
 
         .treatments-grid {
@@ -768,8 +1185,12 @@ export default function PersonalDashboard() {
             padding: 0 1.5rem;
           }
 
-          .stats-grid {
+          .charts-grid {
             grid-template-columns: 1fr;
+          }
+
+          .chart-card-featured {
+            grid-column: 1;
           }
 
           .doses-grid {
