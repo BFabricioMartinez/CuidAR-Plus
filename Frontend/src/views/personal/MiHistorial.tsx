@@ -171,16 +171,6 @@ export default function MiHistorial() {
     setFilterTreatment('all');
   };
 
-  // Calcular estadísticas
-  const stats = {
-    total: history.length,
-    taken: history.filter(h => h.status === 'TAKEN').length,
-    missed: history.filter(h => h.status === 'MISSED').length,
-    adherence: history.length > 0
-      ? Math.round((history.filter(h => h.status === 'TAKEN').length / history.length) * 100)
-      : 0,
-  };
-
   return (
     <div className="history-container">
       {/* Header with Gradient */}
@@ -266,247 +256,6 @@ export default function MiHistorial() {
               </select>
             </div>
           </div>
-        </div>
-
-        {/* Charts Grid */}
-        <div className={`charts-grid ${filterStatus !== 'all' ? 'charts-grid-single' : ''}`}>
-          {/* Si se filtra por estado específico, mostrar solo Total Registros */}
-          {filterStatus !== 'all' ? (
-            <div className="chart-card chart-card-info chart-card-full">
-              <div className="chart-header">
-                <div className="chart-icon-wrapper info">
-                  <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="chart-title-small">
-                    Total Registros {filterStatus === 'TAKEN' ? 'Tomados' : filterStatus === 'MISSED' ? 'Omitidos' : ''}
-                  </h3>
-                  <div className="chart-subtitle-small">Filtrados por estado</div>
-                </div>
-              </div>
-              <div className="mini-chart-container">
-                <div className="chart-value-large">{stats.total}</div>
-                <svg className="mini-bar-chart" viewBox="0 0 120 60">
-                  <rect
-                    className="mini-bar-bg"
-                    x="10"
-                    y="10"
-                    width="100"
-                    height="40"
-                    rx="8"
-                    fill="rgba(255, 255, 255, 0.1)"
-                  />
-                  <rect
-                    className="mini-bar-fill"
-                    x="10"
-                    y="10"
-                    width="100"
-                    height="40"
-                    rx="8"
-                    fill="url(#infoGradient)"
-                  />
-                  <defs>
-                    <linearGradient id="infoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#2563eb" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              <div className="chart-decoration info-decoration"></div>
-            </div>
-          ) : (
-            <>
-              {/* Adherence Chart */}
-              <div className="chart-card chart-card-featured">
-                <div className="chart-header">
-                  <h3 className="chart-title">Adherencia Global</h3>
-                  <div className="chart-subtitle">Basado en registros filtrados</div>
-                </div>
-                <div className="circular-chart-container">
-                  <svg className="circular-chart" viewBox="0 0 200 200">
-                    {/* Background Circle */}
-                    <circle
-                      className="circular-chart-bg"
-                      cx="100"
-                      cy="100"
-                      r="80"
-                      fill="none"
-                      stroke="rgba(255, 255, 255, 0.1)"
-                      strokeWidth="12"
-                    />
-                    {/* Progress Circle */}
-                    <circle
-                      className="circular-chart-progress"
-                      cx="100"
-                      cy="100"
-                      r="80"
-                      fill="none"
-                      stroke="url(#adherenceGradient)"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                      strokeDasharray={`${stats.adherence * 5.026} 502.6`}
-                      transform="rotate(-90 100 100)"
-                    />
-                    {/* Gradient Definition */}
-                    <defs>
-                      <linearGradient id="adherenceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#667eea" />
-                        <stop offset="100%" stopColor="#764ba2" />
-                      </linearGradient>
-                    </defs>
-                    {/* Center Text */}
-                    <text x="100" y="95" textAnchor="middle" className="circular-chart-value">
-                      {stats.adherence}%
-                    </text>
-                    <text x="100" y="115" textAnchor="middle" className="circular-chart-label">
-                      adherencia
-                    </text>
-                  </svg>
-                </div>
-                <div className="chart-decoration featured-decoration"></div>
-              </div>
-
-              {/* Total Records Chart */}
-              <div className="chart-card chart-card-info">
-                <div className="chart-header">
-                  <div className="chart-icon-wrapper info">
-                    <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="chart-title-small">Total Registros</h3>
-                    <div className="chart-subtitle-small">Filtrados</div>
-                  </div>
-                </div>
-                <div className="mini-chart-container">
-                  <div className="chart-value-large">{stats.total}</div>
-                  <svg className="mini-bar-chart" viewBox="0 0 120 60">
-                    <rect
-                      className="mini-bar-bg"
-                      x="10"
-                      y="10"
-                      width="100"
-                      height="40"
-                      rx="8"
-                      fill="rgba(255, 255, 255, 0.1)"
-                    />
-                    <rect
-                      className="mini-bar-fill"
-                      x="10"
-                      y="10"
-                      width="100"
-                      height="40"
-                      rx="8"
-                      fill="url(#infoGradient)"
-                    />
-                    <defs>
-                      <linearGradient id="infoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#3b82f6" />
-                        <stop offset="100%" stopColor="#2563eb" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                <div className="chart-decoration info-decoration"></div>
-              </div>
-
-              {/* Taken Doses Chart */}
-              <div className="chart-card chart-card-success">
-                <div className="chart-header">
-                  <div className="chart-icon-wrapper success">
-                    <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="chart-title-small">Dosis Tomadas</h3>
-                    <div className="chart-subtitle-small">Registradas</div>
-                  </div>
-                </div>
-                <div className="mini-chart-container">
-                  <div className="chart-value-large">{stats.taken}</div>
-                  <svg className="mini-bar-chart" viewBox="0 0 120 60">
-                    <rect
-                      className="mini-bar-bg"
-                      x="10"
-                      y="10"
-                      width="100"
-                      height="40"
-                      rx="8"
-                      fill="rgba(255, 255, 255, 0.1)"
-                    />
-                    <rect
-                      className="mini-bar-fill"
-                      x="10"
-                      y="10"
-                      width={Math.min(100, stats.total > 0 ? (stats.taken / stats.total) * 100 : 0)}
-                      height="40"
-                      rx="8"
-                      fill="url(#successGradient)"
-                    />
-                    <defs>
-                      <linearGradient id="successGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#10b981" />
-                        <stop offset="100%" stopColor="#34d399" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                <div className="chart-decoration success-decoration"></div>
-              </div>
-
-              {/* Missed Doses Chart */}
-              <div className="chart-card chart-card-warning">
-                <div className="chart-header">
-                  <div className="chart-icon-wrapper warning">
-                    <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="chart-title-small">Dosis Omitidas</h3>
-                    <div className="chart-subtitle-small">Registradas</div>
-                  </div>
-                </div>
-                <div className="mini-chart-container">
-                  <div className="chart-value-large">{stats.missed}</div>
-                  <svg className="mini-bar-chart" viewBox="0 0 120 60">
-                    <rect
-                      className="mini-bar-bg"
-                      x="10"
-                      y="10"
-                      width="100"
-                      height="40"
-                      rx="8"
-                      fill="rgba(255, 255, 255, 0.1)"
-                    />
-                    <rect
-                      className="mini-bar-fill"
-                      x="10"
-                      y="10"
-                      width={Math.min(100, stats.total > 0 ? (stats.missed / stats.total) * 100 : 0)}
-                      height="40"
-                      rx="8"
-                      fill="url(#warningGradient)"
-                    />
-                    <defs>
-                      <linearGradient id="warningGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#fbbf24" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                <div className="chart-decoration warning-decoration"></div>
-              </div>
-            </>
-          )}
         </div>
 
         {/* Error */}
@@ -715,21 +464,31 @@ export default function MiHistorial() {
         .charts-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 1.5rem;
-          margin-bottom: 2rem;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        /* Modo single chart - cuando se filtra por estado */
+        .charts-grid-single {
+          grid-template-columns: 1fr;
         }
 
         .chart-card {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
-          border-radius: 20px;
-          padding: 1.75rem;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border-radius: 14px;
+          padding: 1rem 1.25rem;
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.8);
           transition: all 0.3s ease;
           position: relative;
           overflow: hidden;
           animation: fadeInUp 0.6s ease-out both;
+        }
+
+        /* Card cuando está en modo full width */
+        .chart-card-full {
+          padding: 1rem 1.5rem;
         }
 
         .chart-card:nth-child(1) { animation-delay: 0.1s; }
@@ -749,19 +508,19 @@ export default function MiHistorial() {
         }
 
         .chart-card:hover {
-          transform: translateY(-6px);
-          box-shadow: 0 15px 45px rgba(0, 0, 0, 0.12);
+          transform: translateY(-4px);
+          box-shadow: 0 12px 35px rgba(0, 0, 0, 0.1);
         }
 
         .chart-decoration {
           position: absolute;
-          width: 200px;
-          height: 200px;
+          width: 150px;
+          height: 150px;
           border-radius: 50%;
-          filter: blur(60px);
-          opacity: 0.15;
-          right: -50px;
-          top: -50px;
+          filter: blur(50px);
+          opacity: 0.12;
+          right: -40px;
+          top: -40px;
         }
 
         .featured-decoration {
@@ -782,7 +541,7 @@ export default function MiHistorial() {
 
         /* Chart Headers & Titles */
         .chart-header {
-          margin-bottom: 1.25rem;
+          margin-bottom: 0.5rem;
         }
 
         .chart-card-featured .chart-header {
@@ -794,39 +553,39 @@ export default function MiHistorial() {
         .chart-card-info .chart-header {
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: 0.75rem;
         }
 
         .chart-title {
-          font-size: 1.375rem;
-          font-weight: 700;
-          color: #1f2937;
-          margin: 0 0 0.25rem 0;
-        }
-
-        .chart-subtitle {
-          font-size: 0.875rem;
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .chart-title-small {
-          font-size: 0.9375rem;
+          font-size: 1rem;
           font-weight: 700;
           color: #1f2937;
           margin: 0 0 0.125rem 0;
         }
 
-        .chart-subtitle-small {
+        .chart-subtitle {
+          font-size: 0.75rem;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .chart-title-small {
           font-size: 0.8125rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0;
+        }
+
+        .chart-subtitle-small {
+          font-size: 0.6875rem;
           color: #9ca3af;
           font-weight: 500;
         }
 
         .chart-icon-wrapper {
-          width: 48px;
-          height: 48px;
-          border-radius: 14px;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -835,22 +594,22 @@ export default function MiHistorial() {
 
         .chart-icon-wrapper.success {
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          box-shadow: 0 6px 16px rgba(16, 185, 129, 0.25);
+          box-shadow: 0 3px 10px rgba(16, 185, 129, 0.2);
         }
 
         .chart-icon-wrapper.warning {
           background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          box-shadow: 0 6px 16px rgba(245, 158, 11, 0.25);
+          box-shadow: 0 3px 10px rgba(245, 158, 11, 0.2);
         }
 
         .chart-icon-wrapper.info {
           background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-          box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25);
+          box-shadow: 0 3px 10px rgba(59, 130, 246, 0.2);
         }
 
         .chart-icon {
-          width: 24px;
-          height: 24px;
+          width: 18px;
+          height: 18px;
           color: #fff;
         }
 
@@ -859,12 +618,12 @@ export default function MiHistorial() {
           display: flex;
           justify-content: center;
           align-items: center;
-          padding: 1rem 0;
+          padding: 0.25rem 0;
         }
 
         .circular-chart {
           width: 100%;
-          max-width: 220px;
+          max-width: 120px;
           height: auto;
         }
 
@@ -880,13 +639,13 @@ export default function MiHistorial() {
         }
 
         .circular-chart-value {
-          font-size: 2.25rem;
+          font-size: 1.5rem;
           font-weight: 800;
           fill: #1f2937;
         }
 
         .circular-chart-label {
-          font-size: 0.875rem;
+          font-size: 0.6875rem;
           font-weight: 600;
           fill: #6b7280;
           text-transform: uppercase;
@@ -897,11 +656,11 @@ export default function MiHistorial() {
         .mini-chart-container {
           display: flex;
           flex-direction: column;
-          gap: 0.875rem;
+          gap: 0.5rem;
         }
 
         .chart-value-large {
-          font-size: 2rem;
+          font-size: 1.375rem;
           font-weight: 800;
           color: #1f2937;
           line-height: 1;
