@@ -136,28 +136,11 @@ export const useAsistencialHistory = () => {
     setError('');
 
     try {
-      // Construir filtros para la API
-      const filters: any = {
-        patient_id: selectedPatientId,
-      };
+      // Usar el endpoint GET específico para historial de paciente
+      // GET /intake/patient/{patient_id}/history
+      const historyResponse = await intakesApi.getPatientHistory(selectedPatientId);
 
-      // Filtro por estado
-      if (filterStatus !== 'all') {
-        filters.status = filterStatus;
-      }
-
-      // Filtro por tratamiento
-      if (filterTreatment !== 'all') {
-        filters.treatment_id = parseInt(filterTreatment);
-      }
-
-      // Usar el endpoint POST /intake/paginated con filtros
-      const intakesResponse = await intakesApi.list({
-        limit: 200, // Límite alto para obtener todo el historial
-        filters,
-      });
-
-      let historyData: HistoryItem[] = intakesResponse.items.map((intake: IntakeLog) => {
+      let historyData: HistoryItem[] = historyResponse.intakes.map((intake: IntakeLog) => {
         // Buscar el tratamiento correspondiente para enriquecer los datos
         const treatment = treatments.find((t) => t.id === intake.treatment_id);
 
@@ -172,7 +155,20 @@ export const useAsistencialHistory = () => {
         };
       });
 
-      // Filtro por fecha (filtro en cliente porque el backend no lo soporta directamente)
+      // Aplicar filtros en el cliente
+
+      // Filtro por estado
+      if (filterStatus !== 'all') {
+        historyData = historyData.filter((item) => item.status === filterStatus);
+      }
+
+      // Filtro por tratamiento
+      if (filterTreatment !== 'all') {
+        const treatmentId = parseInt(filterTreatment);
+        historyData = historyData.filter((item) => item.treatment_id === treatmentId);
+      }
+
+      // Filtro por fecha
       if (filterDate) {
         const filterDateObj = new Date(filterDate);
         filterDateObj.setHours(0, 0, 0, 0);

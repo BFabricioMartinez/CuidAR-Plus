@@ -188,6 +188,8 @@ export const useAsistencialDashboard = () => {
     } catch (err) {
       console.error('Error loading stats:', err);
       // No mostramos error al usuario, las stats son secundarias
+      // Si el endpoint no existe (404), simplemente no mostramos estadísticas
+      setStats(null);
     }
   }, [getUserFromStorage]);
 
