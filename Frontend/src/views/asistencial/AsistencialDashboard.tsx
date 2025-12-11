@@ -1,266 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
 
 // ============================================
-// TIPOS
-// ============================================
-interface Patient {
-  id: number;
-  name: string;
-}
-
-interface Treatment {
-  id: number;
-  patient_id: number;
-  medication_name: string;
-  dosage: string;
-  frequency: string;
-  active: boolean;
-}
-
-interface UpcomingDose {
-  treatment_id: number;
-  med_name: string;
-  dosage: string;
-  time: string;
-  frequency: string;
-  status: 'PENDING' | 'MISSED';
-}
-
-interface MyStats {
-  assigned_patients?: number;
-  today_doses: {
-    taken: number;
-    missed: number;
-    total: number;
-    adherence_percentage: number | null;
-  };
-}
-
-// ============================================
-// COMPONENTE
+// COMPONENTE PRINCIPAL
 // ============================================
 export default function AsistencialDashboard() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
-  const [treatments, setTreatments] = useState<Treatment[]>([]);
-  const [upcomingDoses, setUpcomingDoses] = useState<UpcomingDose[]>([]);
-  const [stats, setStats] = useState<MyStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  // Usar el hook personalizado
+  const {
+    patients,
+    selectedPatientId,
+    treatments,
+    upcomingDoses,
+    stats,
+    loading,
+    error,
+    successMessage,
+    fetchDashboard,
+    selectPatient,
+    markAsTaken,
+    markAsMissed,
+  } = useAsistencialDashboard();
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const token = localStorage.getItem('token');
-
-  // Cargar pacientes asignados al montar
+  // Cargar dashboard al montar el componente
   useEffect(() => {
-    fetchMyPatients();
-    fetchMyStats();
-  }, []);
-
-  // Cuando cambia el paciente seleccionado, cargar sus tratamientos
-  useEffect(() => {
-    if (selectedPatientId) {
-      fetchPatientTreatments();
-    }
-  }, [selectedPatientId]);
-
-  // Obtener mis pacientes asignados
-  const fetchMyPatients = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      // Obtener asignaciones donde soy el cuidador
-      const response = await fetch(
-        `http://localhost:8000/assignments/all?caregiver_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const assignments = await response.json();
-
-      // Obtener detalles de cada paciente
-      const patientPromises = assignments.map(async (assignment: any) => {
-        const patientRes = await fetch(
-          `http://localhost:8000/patients/${assignment.patient_id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          }
-        );
-        return patientRes.json();
-      });
-
-      const patientsData = await Promise.all(patientPromises);
-      setPatients(patientsData);
-
-      // Seleccionar el primero por defecto
-      if (patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener mis estadísticas como cuidador
-  const fetchMyStats = async () => {
-    try {
-      const response = await fetch(
-        `http://localhost:8000/statistics/my-stats?user_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar estadísticas');
-
-      const data = await response.json();
-      setStats(data);
-    } catch (err: any) {
-      console.error('Error stats:', err);
-    }
-  };
-
-  // Obtener tratamientos del paciente seleccionado
-  const fetchPatientTreatments = async () => {
-    if (!selectedPatientId) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/treatments/all?patient_id=${selectedPatientId}&active=true`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar tratamientos');
-
-      const data = await response.json();
-      setTreatments(data);
-
-      // Calcular dosis pendientes
-      calculateUpcomingDoses(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Parsear horarios desde frecuencia
-  const parseTimesFromFrequency = (frequency: string): string[] => {
-    const times: string[] = [];
-    const regex = /\b(\d{1,2}):(\d{2})\b/g;
-    let match;
-
-    while ((match = regex.exec(frequency)) !== null) {
-      const hour = match[1].padStart(2, '0');
-      const minute = match[2];
-      times.push(`${hour}:${minute}`);
-    }
-
-    return [...new Set(times)].sort();
-  };
-
-  // Calcular dosis pendientes de hoy
-  const calculateUpcomingDoses = (treatmentsList: Treatment[]) => {
-    const doses: UpcomingDose[] = [];
-
-    treatmentsList.forEach((treatment) => {
-      const times = parseTimesFromFrequency(treatment.frequency);
-
-      times.forEach((time) => {
-        doses.push({
-          treatment_id: treatment.id,
-          med_name: treatment.medication_name,
-          dosage: treatment.dosage,
-          time,
-          frequency: treatment.frequency,
-          status: 'PENDING',
-        });
-      });
-    });
-
-    doses.sort((a, b) => a.time.localeCompare(b.time));
-    setUpcomingDoses(doses);
-  };
-
-  // Marcar dosis como TOMADA
-  const handleMarkTaken = async (treatmentId: number, time: string) => {
-    try {
-      const response = await fetch(
-        `http://localhost:8000/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${user.id}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al marcar dosis');
-      }
-
-      setSuccessMessage(`Dosis de las ${time} marcada como tomada ✓`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      // Recargar datos
-      fetchPatientTreatments();
-      fetchMyStats();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 3000);
-    }
-  };
-
-  // Marcar dosis como OMITIDA
-  const handleMarkMissed = async (treatmentId: number, time: string) => {
-    try {
-      const response = await fetch(
-        `http://localhost:8000/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${user.id}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al marcar dosis');
-      }
-
-      setSuccessMessage(`Dosis de las ${time} marcada como omitida`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      // Recargar datos
-      fetchPatientTreatments();
-      fetchMyStats();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 3000);
-    }
-  };
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   // Nombre del paciente seleccionado
   const selectedPatientName =
@@ -276,11 +40,11 @@ export default function AsistencialDashboard() {
         </div>
       </div>
 
-      {/* Mensajes */}
+      {/* Mensajes de error y éxito */}
       {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
       {successMessage && <div style={styles.successAlert}>✓ {successMessage}</div>}
 
-      {/* KPIs */}
+      {/* KPIs - Estadísticas del cuidador */}
       {stats && (
         <div style={styles.kpiContainer}>
           <div style={styles.kpiCard}>
@@ -311,7 +75,7 @@ export default function AsistencialDashboard() {
             <div style={styles.kpiIcon}>📊</div>
             <div>
               <div style={styles.kpiValue}>
-                {stats.today_doses.adherence_percentage
+                {stats.today_doses.adherence_percentage !== null
                   ? `${stats.today_doses.adherence_percentage}%`
                   : 'N/A'}
               </div>
@@ -329,7 +93,7 @@ export default function AsistencialDashboard() {
         ) : (
           <select
             value={selectedPatientId || ''}
-            onChange={(e) => setSelectedPatientId(Number(e.target.value))}
+            onChange={(e) => selectPatient(Number(e.target.value))}
             style={styles.selector}
           >
             {patients.map((patient) => (
@@ -341,7 +105,7 @@ export default function AsistencialDashboard() {
         )}
       </div>
 
-      {/* Dosis Pendientes */}
+      {/* Dosis Pendientes de Hoy */}
       {selectedPatientId && (
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>
@@ -365,13 +129,13 @@ export default function AsistencialDashboard() {
                   </div>
                   <div style={styles.doseActions}>
                     <button
-                      onClick={() => handleMarkTaken(dose.treatment_id, dose.time)}
+                      onClick={() => markAsTaken(dose.treatment_id, dose.time)}
                       style={styles.btnTaken}
                     >
                       ✓ Tomada
                     </button>
                     <button
-                      onClick={() => handleMarkMissed(dose.treatment_id, dose.time)}
+                      onClick={() => markAsMissed(dose.treatment_id, dose.time)}
                       style={styles.btnMissed}
                     >
                       ✗ Omitida
@@ -384,7 +148,7 @@ export default function AsistencialDashboard() {
         </div>
       )}
 
-      {/* Tratamientos Activos */}
+      {/* Tratamientos Activos del Paciente */}
       {selectedPatientId && treatments.length > 0 && (
         <div style={styles.section}>
           <h2 style={styles.sectionTitle}>

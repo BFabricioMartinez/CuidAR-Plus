@@ -1,223 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useAsistencialHistory } from '../../hooks/asistencial/useAsistencialHistory';
 
 // ============================================
-// TIPOS
-// ============================================
-interface Patient {
-  id: number;
-  name: string;
-}
-
-interface IntakeLog {
-  id: number;
-  treatment_id: number;
-  taken_at: string;
-  scheduled_time: string;
-  status: 'TAKEN' | 'MISSED';
-  acknowledged: boolean;
-}
-
-interface Treatment {
-  id: number;
-  medication_name: string;
-  dosage: string;
-}
-
-interface HistoryItem extends IntakeLog {
-  medication_name?: string;
-  dosage?: string;
-}
-
-// ============================================
-// COMPONENTE
+// COMPONENTE PRINCIPAL
 // ============================================
 export default function HistorialView() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [treatments, setTreatments] = useState<Treatment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Usar el hook personalizado
+  const {
+    patients,
+    selectedPatientId,
+    history,
+    treatments,
+    loading,
+    error,
+    stats,
+    filterStatus,
+    filterDate,
+    filterTreatment,
+    setFilterStatus,
+    setFilterDate,
+    setFilterTreatment,
+    fetchMyPatients,
+    selectPatient,
+    clearFilters,
+    formatDate,
+    formatTime,
+  } = useAsistencialHistory();
 
-  // Filtros
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterDate, setFilterDate] = useState<string>('');
-  const [filterTreatment, setFilterTreatment] = useState<string>('all');
-
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const token = localStorage.getItem('token');
-
-  // Cargar pacientes al montar
+  // Cargar pacientes al montar el componente
   useEffect(() => {
     fetchMyPatients();
-  }, []);
+  }, [fetchMyPatients]);
 
-  // Cuando cambia el paciente, cargar sus tratamientos e historial
-  useEffect(() => {
-    if (selectedPatientId) {
-      fetchTreatments();
-      fetchHistory();
-    }
-  }, [selectedPatientId]);
-
-  // Recargar historial cuando cambian los filtros
-  useEffect(() => {
-    if (selectedPatientId && treatments.length > 0) {
-      fetchHistory();
-    }
-  }, [filterStatus, filterDate, filterTreatment]);
-
-  // Obtener pacientes asignados
-  const fetchMyPatients = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/assignments/all?caregiver_id=${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const assignments = await response.json();
-
-      const patientPromises = assignments.map(async (assignment: any) => {
-        const patientRes = await fetch(
-          `http://localhost:8000/patients/${assignment.patient_id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          }
-        );
-        return patientRes.json();
-      });
-
-      const patientsData = await Promise.all(patientPromises);
-      setPatients(patientsData);
-
-      if (patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener tratamientos del paciente (para el filtro)
-  const fetchTreatments = async () => {
-    if (!selectedPatientId) return;
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/treatments/all?patient_id=${selectedPatientId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar tratamientos');
-
-      const data = await response.json();
-      setTreatments(data);
-    } catch (err: any) {
-      console.error('Error al cargar tratamientos:', err);
-    }
-  };
-
-  // Obtener historial del paciente
-  const fetchHistory = async () => {
-    if (!selectedPatientId) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      // Construir URL con filtros
-      let url = `http://localhost:8000/tomas/all?patient_id=${selectedPatientId}&`;
-
-      if (filterStatus !== 'all') {
-        url += `status=${filterStatus}&`;
-      }
-
-      if (filterDate) {
-        url += `date_filter=${filterDate}&`;
-      }
-
-      if (filterTreatment !== 'all') {
-        url += `treatment_id=${filterTreatment}&`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al cargar historial');
-
-      const data = await response.json();
-
-      // Enriquecer con datos del tratamiento
-      const enrichedData = data.map((log: IntakeLog) => {
-        const treatment = treatments.find((t) => t.id === log.treatment_id);
-        return {
-          ...log,
-          medication_name: treatment?.medication_name || 'Desconocido',
-          dosage: treatment?.dosage || '',
-        };
-      });
-
-      setHistory(enrichedData);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Formatear fecha
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
-
-  // Formatear hora
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('es-AR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  // Limpiar filtros
-  const clearFilters = () => {
-    setFilterStatus('all');
-    setFilterDate('');
-    setFilterTreatment('all');
-  };
-
-  // Calcular estadísticas
-  const stats = {
-    total: history.length,
-    taken: history.filter((h) => h.status === 'TAKEN').length,
-    missed: history.filter((h) => h.status === 'MISSED').length,
-  };
-
+  // Nombre del paciente seleccionado
   const selectedPatientName =
     patients.find((p) => p.id === selectedPatientId)?.name || '';
 
@@ -239,7 +54,7 @@ export default function HistorialView() {
         ) : (
           <select
             value={selectedPatientId || ''}
-            onChange={(e) => setSelectedPatientId(Number(e.target.value))}
+            onChange={(e) => selectPatient(Number(e.target.value))}
             style={styles.selector}
           >
             {patients.map((patient) => (
@@ -349,7 +164,6 @@ export default function HistorialView() {
                   <thead>
                     <tr style={styles.tableHeader}>
                       <th style={styles.th}>Fecha</th>
-                      <th style={styles.th}>Hora Programada</th>
                       <th style={styles.th}>Hora Registrada</th>
                       <th style={styles.th}>Medicamento</th>
                       <th style={styles.th}>Dosis</th>
@@ -360,7 +174,6 @@ export default function HistorialView() {
                     {history.map((item) => (
                       <tr key={item.id} style={styles.tableRow}>
                         <td style={styles.td}>{formatDate(item.taken_at)}</td>
-                        <td style={styles.td}>{item.scheduled_time}</td>
                         <td style={styles.td}>{formatTime(item.taken_at)}</td>
                         <td style={styles.td}>{item.medication_name}</td>
                         <td style={styles.td}>{item.dosage}</td>
@@ -409,10 +222,6 @@ export default function HistorialView() {
                       <div style={styles.cardRow}>
                         <span style={styles.cardLabel}>Dosis:</span>
                         <span style={styles.cardValue}>{item.dosage}</span>
-                      </div>
-                      <div style={styles.cardRow}>
-                        <span style={styles.cardLabel}>Hora programada:</span>
-                        <span style={styles.cardValue}>{item.scheduled_time}</span>
                       </div>
                       <div style={styles.cardRow}>
                         <span style={styles.cardLabel}>Hora registrada:</span>

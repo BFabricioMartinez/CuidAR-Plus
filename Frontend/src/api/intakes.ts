@@ -75,4 +75,38 @@ export const intakesApi = {
       `/intake/patient/${patientId}/history`
     );
   },
+
+  /**
+   * POST /tomas/marcar-tomada
+   * Marca una dosis como TOMADA
+   * @param treatmentId - ID del tratamiento
+   * @param time - Hora de la dosis en formato HH:MM
+   * @param recordedByUserId - ID del usuario que registra la toma
+   */
+  markAsTaken: async (
+    treatmentId: number,
+    time: string,
+    recordedByUserId: number
+  ): Promise<{ message: string }> => {
+    return apiClient.post<{ message: string }>(
+      `/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}`
+    );
+  },
+
+  /**
+   * POST /tomas/marcar-omitida
+   * Marca una dosis como OMITIDA
+   * @param treatmentId - ID del tratamiento
+   * @param time - Hora de la dosis en formato HH:MM
+   * @param recordedByUserId - ID del usuario que registra la omisión
+   */
+  markAsMissed: async (
+    treatmentId: number,
+    time: string,
+    recordedByUserId: number
+  ): Promise<{ message: string }> => {
+    return apiClient.post<{ message: string }>(
+      `/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}`
+    );
+  },
 };
