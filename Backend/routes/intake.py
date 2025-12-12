@@ -490,3 +490,153 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
             status_code=500,
             content={"message": "Error al obtener historial de tomas del paciente"}
         )
+
+
+@intake.post("/tomas/marcar-tomada")
+async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_user_id: int):
+    """
+    Marca una dosis como TOMADA creando un registro en IntakeLog.
+
+    Puede ser usado por:
+    - Usuario PERSONAL: para marcar sus propias dosis
+    - Usuario ASISTENCIAL: para marcar dosis de pacientes asignados (ej: hogar de ancianos)
+
+    Args:
+        treatment_id: ID del tratamiento
+        time: Hora de la dosis en formato HH:MM
+        recorded_by_user_id: ID del usuario que registra la toma (quien marca, no el paciente)
+
+    Returns:
+        JSONResponse con mensaje de confirmación
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "sub" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            # Verificar que el tratamiento existe
+            stmt_treatment = select(Treatment).where(Treatment.id == treatment_id)
+            result_treatment = await session.execute(stmt_treatment)
+            treatment = result_treatment.scalar_one_or_none()
+
+            if not treatment:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
+                )
+
+            # Crear datetime para hoy con la hora especificada
+            from datetime import datetime, date
+
+            today = date.today()
+            hour, minute = map(int, time.split(':'))
+            taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+
+            # Crear registro de toma
+            new_intake = IntakeLog(
+                treatment_id=treatment_id,
+                taken_at=taken_at_dt,
+                status="TAKEN"
+            )
+
+            session.add(new_intake)
+            await session.commit()
+            await session.refresh(new_intake)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": f"Dosis de las {time} marcada como tomada correctamente",
+                    "data": {
+                        "id": new_intake.id,
+                        "treatment_id": new_intake.treatment_id,
+                        "taken_at": new_intake.taken_at.isoformat() if new_intake.taken_at else None,
+                        "status": new_intake.status
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al marcar dosis como tomada ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al marcar dosis como tomada"}
+        )
+
+
+@intake.post("/tomas/marcar-omitida")
+async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by_user_id: int):
+    """
+    Marca una dosis como OMITIDA creando un registro en IntakeLog.
+
+    Puede ser usado por:
+    - Usuario PERSONAL: para marcar sus propias dosis omitidas
+    - Usuario ASISTENCIAL: para marcar dosis omitidas de pacientes asignados (ej: hogar de ancianos)
+
+    Args:
+        treatment_id: ID del tratamiento
+        time: Hora de la dosis en formato HH:MM
+        recorded_by_user_id: ID del usuario que registra la omisión (quien marca, no el paciente)
+
+    Returns:
+        JSONResponse con mensaje de confirmación
+    """
+    try:
+        # Verificar token
+        has_access = Security.verify_token(req.headers)
+        if "sub" not in has_access:
+            return JSONResponse(status_code=401, content=has_access)
+
+        async with AsyncSessionLocal() as session:
+            # Verificar que el tratamiento existe
+            stmt_treatment = select(Treatment).where(Treatment.id == treatment_id)
+            result_treatment = await session.execute(stmt_treatment)
+            treatment = result_treatment.scalar_one_or_none()
+
+            if not treatment:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
+                )
+
+            # Crear datetime para hoy con la hora especificada
+            from datetime import datetime, date
+
+            today = date.today()
+            hour, minute = map(int, time.split(':'))
+            taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+
+            # Crear registro de toma
+            new_intake = IntakeLog(
+                treatment_id=treatment_id,
+                taken_at=taken_at_dt,
+                status="MISSED"
+            )
+
+            session.add(new_intake)
+            await session.commit()
+            await session.refresh(new_intake)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": f"Dosis de las {time} marcada como omitida correctamente",
+                    "data": {
+                        "id": new_intake.id,
+                        "treatment_id": new_intake.treatment_id,
+                        "taken_at": new_intake.taken_at.isoformat() if new_intake.taken_at else None,
+                        "status": new_intake.status
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al marcar dosis como omitida ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al marcar dosis como omitida"}
+        )
