@@ -88,8 +88,24 @@ export const intakesApi = {
     time: string,
     recordedByUserId: number
   ): Promise<{ message: string }> => {
+    // ============================================================================
+    // FIX: Enviar fecha completa del cliente para evitar problemas de zona horaria
+    // ============================================================================
+    const now = new Date();
+    const [hours, minutes] = time.split(':');
+    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const second = String(now.getSeconds()).padStart(2, '0');
+    const taken_at_full = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+
     return apiClient.post<{ message: string }>(
-      `/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}`
+      `/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
     );
   },
 
@@ -105,8 +121,24 @@ export const intakesApi = {
     time: string,
     recordedByUserId: number
   ): Promise<{ message: string }> => {
+    // ============================================================================
+    // FIX: Enviar fecha completa del cliente para evitar problemas de zona horaria
+    // ============================================================================
+    const now = new Date();
+    const [hours, minutes] = time.split(':');
+    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+    // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const second = String(now.getSeconds()).padStart(2, '0');
+    const taken_at_full = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+
     return apiClient.post<{ message: string }>(
-      `/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}`
+      `/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
     );
   },
 };

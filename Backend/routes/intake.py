@@ -493,7 +493,7 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
 
 
 @intake.post("/tomas/marcar-tomada")
-async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_user_id: int):
+async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
     """
     Marca una dosis como TOMADA creando un registro en IntakeLog.
 
@@ -503,8 +503,9 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
 
     Args:
         treatment_id: ID del tratamiento
-        time: Hora de la dosis en formato HH:MM
+        time: Hora de la dosis en formato HH:MM (usado si no se provee taken_at_full)
         recorded_by_user_id: ID del usuario que registra la toma (quien marca, no el paciente)
+        taken_at_full: (Opcional) Fecha y hora completa en formato "YYYY-MM-DD HH:MM:SS" desde el cliente
 
     Returns:
         JSONResponse con mensaje de confirmación
@@ -527,12 +528,23 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
                     content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
                 )
 
-            # Crear datetime para hoy con la hora especificada
+            # ============================================================================
+            # FIX: Usar fecha completa del cliente si se provee, sino usar fecha del servidor
+            # ============================================================================
             from datetime import datetime, date
 
-            today = date.today()
-            hour, minute = map(int, time.split(':'))
-            taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+            if taken_at_full:
+                # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+                try:
+                    taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # Intentar con formato ISO si falla
+                    taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
+            else:
+                # Fallback: usar fecha del servidor (comportamiento original)
+                today = date.today()
+                hour, minute = map(int, time.split(':'))
+                taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
 
             # Crear registro de toma
             new_intake = IntakeLog(
@@ -568,7 +580,7 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
 
 
 @intake.post("/tomas/marcar-omitida")
-async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by_user_id: int):
+async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
     """
     Marca una dosis como OMITIDA creando un registro en IntakeLog.
 
@@ -578,8 +590,9 @@ async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by
 
     Args:
         treatment_id: ID del tratamiento
-        time: Hora de la dosis en formato HH:MM
+        time: Hora de la dosis en formato HH:MM (usado si no se provee taken_at_full)
         recorded_by_user_id: ID del usuario que registra la omisión (quien marca, no el paciente)
+        taken_at_full: (Opcional) Fecha y hora completa en formato "YYYY-MM-DD HH:MM:SS" desde el cliente
 
     Returns:
         JSONResponse con mensaje de confirmación
@@ -602,12 +615,23 @@ async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by
                     content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
                 )
 
-            # Crear datetime para hoy con la hora especificada
+            # ============================================================================
+            # FIX: Usar fecha completa del cliente si se provee, sino usar fecha del servidor
+            # ============================================================================
             from datetime import datetime, date
 
-            today = date.today()
-            hour, minute = map(int, time.split(':'))
-            taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+            if taken_at_full:
+                # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+                try:
+                    taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    # Intentar con formato ISO si falla
+                    taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
+            else:
+                # Fallback: usar fecha del servidor (comportamiento original)
+                today = date.today()
+                hour, minute = map(int, time.split(':'))
+                taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
 
             # Crear registro de toma
             new_intake = IntakeLog(
