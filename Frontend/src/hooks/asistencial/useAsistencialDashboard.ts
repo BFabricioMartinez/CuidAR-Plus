@@ -28,7 +28,11 @@ export interface UpcomingDose {
 export const useAsistencialDashboard = () => {
   // Estados principales
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  // Leer selectedPatientId del localStorage al inicializar
+  const [selectedPatientId, setSelectedPatientIdState] = useState<number | null>(() => {
+    const stored = localStorage.getItem('selectedPatientId');
+    return stored ? Number(stored) : null;
+  });
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [upcomingDoses, setUpcomingDoses] = useState<UpcomingDose[]>([]);
   const [stats, setStats] = useState<MyStats | null>(null);
@@ -183,7 +187,8 @@ export const useAsistencialDashboard = () => {
 
       if (assignments.length === 0) {
         setPatients([]);
-        setSelectedPatientId(null);
+        setSelectedPatientIdState(null);
+        localStorage.removeItem('selectedPatientId');
         return;
       }
 
@@ -197,7 +202,9 @@ export const useAsistencialDashboard = () => {
 
       // Seleccionar el primero por defecto si no hay ninguno seleccionado
       if (!selectedPatientId && patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
+        const firstPatientId = patientsData[0].id;
+        setSelectedPatientIdState(firstPatientId);
+        localStorage.setItem('selectedPatientId', firstPatientId.toString());
       }
     } catch (err) {
       const errorMsg =
@@ -319,10 +326,40 @@ export const useAsistencialDashboard = () => {
     await Promise.all([fetchMyPatients(), fetchMyStats()]);
   }, [fetchMyPatients, fetchMyStats]);
 
-  // Cambiar paciente seleccionado
+  // Cambiar paciente seleccionado (con sincronización en localStorage)
   const selectPatient = useCallback((patientId: number) => {
-    setSelectedPatientId(patientId);
+    setSelectedPatientIdState(patientId);
+    localStorage.setItem('selectedPatientId', patientId.toString());
+    // Disparar evento personalizado para sincronizar entre componentes
+    window.dispatchEvent(new CustomEvent('patientSelected', { detail: patientId }));
   }, []);
+
+  // Effect: Sincronizar con localStorage cuando cambia desde otro componente
+  useEffect(() => {
+    const handlePatientSelected = (e: CustomEvent<number>) => {
+      if (e.detail !== selectedPatientId) {
+        setSelectedPatientIdState(e.detail);
+      }
+    };
+
+    const handleStorageChange = () => {
+      const stored = localStorage.getItem('selectedPatientId');
+      const storedId = stored ? Number(stored) : null;
+      if (storedId !== selectedPatientId) {
+        setSelectedPatientIdState(storedId);
+      }
+    };
+
+    // Escuchar evento personalizado (mismo tab)
+    window.addEventListener('patientSelected', handlePatientSelected as EventListener);
+    // Escuchar cambios en localStorage (otros tabs)
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('patientSelected', handlePatientSelected as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [selectedPatientId]);
 
   // Effect: Cargar tratamientos cuando cambia el paciente seleccionado
   useEffect(() => {
