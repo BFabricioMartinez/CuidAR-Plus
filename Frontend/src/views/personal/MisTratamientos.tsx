@@ -12,6 +12,10 @@ export default function MisTratamientos() {
   const [newTime, setNewTime] = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  // Estado para el modal de confirmación de eliminación
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [treatmentToDelete, setTreatmentToDelete] = useState<{ id: number; name: string } | null>(null);
+
   const {
     treatments,
     formData,
@@ -129,22 +133,34 @@ export default function MisTratamientos() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de desactivar este tratamiento?')) return;
+  const handleDeleteClick = (treatment: Treatment) => {
+    setTreatmentToDelete({ id: treatment.id, name: treatment.medication_name });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!treatmentToDelete) return;
 
     const loadingToastId = 'delete-treatment';
     toastLoading('Desactivando tratamiento...', loadingToastId);
 
     try {
-      await deleteTreatment(id);
+      await deleteTreatment(treatmentToDelete.id);
       toastDismiss(loadingToastId);
       toastSuccess('Tratamiento desactivado correctamente');
+      setShowDeleteModal(false);
+      setTreatmentToDelete(null);
       fetchTreatments();
     } catch (err) {
       console.error('Error al eliminar tratamiento:', err);
       toastDismiss(loadingToastId);
       toastError('No se pudo desactivar el tratamiento. Intentá nuevamente.');
     }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setTreatmentToDelete(null);
   };
 
   const openEditForm = (treatment: Treatment) => {
@@ -533,7 +549,7 @@ export default function MisTratamientos() {
                     </svg>
                     <span>Editar</span>
                   </button>
-                  <button onClick={() => handleDelete(treatment.id)} className="btn-delete">
+                  <button onClick={() => handleDeleteClick(treatment)} className="btn-delete">
                     <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
@@ -545,6 +561,36 @@ export default function MisTratamientos() {
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={cancelDelete}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon-warning">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+
+            <h3 className="modal-title">¿Desactivar tratamiento?</h3>
+
+            <p className="modal-message">
+              ¿Estás seguro de que querés desactivar el tratamiento de <strong>{treatmentToDelete?.name}</strong>?
+              <br />
+              Esta acción se puede revertir más adelante.
+            </p>
+
+            <div className="modal-actions">
+              <button onClick={cancelDelete} className="btn-modal-cancel">
+                No, cancelar
+              </button>
+              <button onClick={confirmDelete} className="btn-modal-confirm">
+                Sí, desactivar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .treatments-container {
@@ -1433,6 +1479,166 @@ export default function MisTratamientos() {
           .time-chip {
             font-size: 0.875rem;
             padding: 0.5rem 0.875rem;
+          }
+        }
+
+        /* ============================================
+           MODAL DE CONFIRMACIÓN
+           ============================================ */
+
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+          padding: 1rem;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .modal-content {
+          background: #fff;
+          border-radius: 20px;
+          padding: 2.5rem;
+          max-width: 440px;
+          width: 100%;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          animation: slideUp 0.3s ease-out;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .modal-icon-warning {
+          width: 64px;
+          height: 64px;
+          margin-bottom: 1.5rem;
+          background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+          }
+          50% {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+          }
+        }
+
+        .modal-icon-warning svg {
+          width: 32px;
+          height: 32px;
+          color: #ef4444;
+        }
+
+        .modal-title {
+          font-size: 1.375rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 1rem 0;
+        }
+
+        .modal-message {
+          font-size: 0.9375rem;
+          color: #6b7280;
+          line-height: 1.65;
+          margin: 0 0 2rem 0;
+        }
+
+        .modal-message strong {
+          color: #1f2937;
+          font-weight: 600;
+        }
+
+        .modal-actions {
+          display: flex;
+          gap: 0.75rem;
+          width: 100%;
+        }
+
+        .btn-modal-cancel,
+        .btn-modal-confirm {
+          flex: 1;
+          padding: 1rem 1.5rem;
+          border: none;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .btn-modal-cancel {
+          background: #f3f4f6;
+          color: #6b7280;
+          border: 2px solid #e5e7eb;
+        }
+
+        .btn-modal-cancel:hover {
+          background: #e5e7eb;
+          border-color: #d1d5db;
+          transform: translateY(-2px);
+        }
+
+        .btn-modal-confirm {
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          color: #fff;
+          box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-modal-confirm:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 28px rgba(239, 68, 68, 0.4);
+        }
+
+        @media (max-width: 480px) {
+          .modal-content {
+            padding: 2rem 1.5rem;
+          }
+
+          .modal-actions {
+            flex-direction: column;
+            gap: 0.625rem;
+          }
+
+          .btn-modal-cancel,
+          .btn-modal-confirm {
+            width: 100%;
           }
         }
       `}</style>
