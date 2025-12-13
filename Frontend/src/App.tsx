@@ -13,29 +13,17 @@ function App() {
         position="top-right"
         reverseOrder={false}
         gutter={8}
+        containerStyle={{
+          top: 20,
+          right: 20,
+        }}
         toastOptions={{
-          // Configuración por defecto
+          // Duración por defecto
           duration: 4000,
+          // Los estilos específicos se manejan en utils/toast.ts
           style: {
-            background: '#363636',
-            color: '#fff',
-            padding: '16px',
-            borderRadius: '8px',
-          },
-          // Estilos específicos por tipo
-          success: {
-            duration: 3000,
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            duration: 5000,
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
+            fontSize: '14px',
+            maxWidth: '500px',
           },
         }}
       />

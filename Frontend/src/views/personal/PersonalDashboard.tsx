@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDashboard } from '../../hooks/personal/useDashboard';
 import { useTreatmentManagement } from '../../hooks/personal/useTreatmentManagement';
+import { toastDoseTaken, toastDoseMissed, toastError, toastLoading, toastDismiss } from '../../utils/toast';
 import { authApi } from '../../api';
 
 export default function PersonalDashboard() {
@@ -31,6 +32,17 @@ export default function PersonalDashboard() {
 
   const handleMarkTaken = async (treatmentId: number, time: string) => {
     const doseKey = getDoseKey(treatmentId, time);
+    const dose = upcomingDoses.find(d => d.treatment_id === treatmentId && d.time === time);
+    const medicationName = dose?.med_name || 'medicamento';
+
+    // Prevenir múltiples clicks mostrando loading
+    if (fadingDoses.has(doseKey)) {
+      return; // Ya está siendo procesada
+    }
+
+    // Mostrar loading toast con ID único
+    const loadingToastId = `dose-taken-${doseKey}`;
+    toastLoading(`Marcando dosis de ${medicationName}...`, loadingToastId);
 
     try {
       // Agregar a la lista de dosis que se están desvaneciendo
@@ -39,6 +51,10 @@ export default function PersonalDashboard() {
       setMarkedDoses(prev => new Set(prev).add(doseKey));
 
       await markAsTaken(treatmentId, time);
+
+      // Cerrar loading y mostrar success
+      toastDismiss(loadingToastId);
+      toastDoseTaken(medicationName);
 
       // Esperar a que termine la animación, luego solo remover de fadingDoses
       setTimeout(() => {
@@ -52,6 +68,11 @@ export default function PersonalDashboard() {
       }, 600); // 600ms coincide con la duración de la animación
     } catch (err) {
       console.error('Error al marcar dosis:', err);
+
+      // Cerrar loading y mostrar error
+      toastDismiss(loadingToastId);
+      toastError('No se pudo registrar la dosis. Por favor, intentá nuevamente.');
+
       // Remover de ambas listas si hay error
       setFadingDoses(prev => {
         const next = new Set(prev);
@@ -68,6 +89,17 @@ export default function PersonalDashboard() {
 
   const handleMarkMissed = async (treatmentId: number, time: string) => {
     const doseKey = getDoseKey(treatmentId, time);
+    const dose = upcomingDoses.find(d => d.treatment_id === treatmentId && d.time === time);
+    const medicationName = dose?.med_name || 'medicamento';
+
+    // Prevenir múltiples clicks
+    if (fadingDoses.has(doseKey)) {
+      return; // Ya está siendo procesada
+    }
+
+    // Mostrar loading toast con ID único
+    const loadingToastId = `dose-missed-${doseKey}`;
+    toastLoading(`Marcando dosis de ${medicationName}...`, loadingToastId);
 
     try {
       // Agregar a la lista de dosis que se están desvaneciendo
@@ -76,6 +108,10 @@ export default function PersonalDashboard() {
       setMarkedDoses(prev => new Set(prev).add(doseKey));
 
       await markAsMissed(treatmentId, time);
+
+      // Cerrar loading y mostrar warning
+      toastDismiss(loadingToastId);
+      toastDoseMissed(medicationName);
 
       // Esperar a que termine la animación, luego solo remover de fadingDoses
       setTimeout(() => {
@@ -89,6 +125,11 @@ export default function PersonalDashboard() {
       }, 600); // 600ms coincide con la duración de la animación
     } catch (err) {
       console.error('Error al marcar dosis:', err);
+
+      // Cerrar loading y mostrar error
+      toastDismiss(loadingToastId);
+      toastError('No se pudo marcar la dosis como omitida. Por favor, intentá nuevamente.');
+
       // Remover de ambas listas si hay error
       setFadingDoses(prev => {
         const next = new Set(prev);
