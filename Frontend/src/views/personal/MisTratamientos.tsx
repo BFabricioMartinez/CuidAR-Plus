@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTreatmentManagement } from '../../hooks/personal/useTreatmentManagement';
 import type { Treatment } from '../../api';
+import { toastSuccess, toastError, toastLoading, toastDismiss, toastWarning } from '../../utils/toast';
 
 export default function MisTratamientos() {
   const [showForm, setShowForm] = useState(false);
@@ -15,8 +16,6 @@ export default function MisTratamientos() {
     treatments,
     formData,
     loading,
-    error,
-    successMessage,
     fetchTreatments,
     createTreatment,
     updateTreatment,
@@ -51,7 +50,7 @@ export default function MisTratamientos() {
 
     // Validar que no esté duplicado
     if (selectedTimes.includes(timeValue)) {
-      alert('Este horario ya está agregado');
+      toastWarning('Este horario ya está agregado');
       return;
     }
 
@@ -85,8 +84,13 @@ export default function MisTratamientos() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const loadingToastId = 'create-treatment';
+    toastLoading('Creando tratamiento...', loadingToastId);
+
     try {
       await createTreatment(formData);
+      toastDismiss(loadingToastId);
+      toastSuccess(`Tratamiento de ${formData.medication_name} creado correctamente`);
       resetForm();
       setShowForm(false);
       setSelectedTimes([]);
@@ -95,6 +99,8 @@ export default function MisTratamientos() {
       fetchTreatments();
     } catch (err) {
       console.error('Error al crear tratamiento:', err);
+      toastDismiss(loadingToastId);
+      toastError('No se pudo crear el tratamiento. Intentá nuevamente.');
     }
   };
 
@@ -102,8 +108,13 @@ export default function MisTratamientos() {
     e.preventDefault();
     if (!editingTreatment) return;
 
+    const loadingToastId = 'update-treatment';
+    toastLoading('Actualizando tratamiento...', loadingToastId);
+
     try {
       await updateTreatment(editingTreatment.id, formData);
+      toastDismiss(loadingToastId);
+      toastSuccess(`Tratamiento de ${formData.medication_name} actualizado correctamente`);
       resetForm();
       setEditingTreatment(null);
       setShowForm(false);
@@ -113,17 +124,26 @@ export default function MisTratamientos() {
       fetchTreatments();
     } catch (err) {
       console.error('Error al actualizar tratamiento:', err);
+      toastDismiss(loadingToastId);
+      toastError('No se pudo actualizar el tratamiento. Intentá nuevamente.');
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Estás seguro de desactivar este tratamiento?')) return;
 
+    const loadingToastId = 'delete-treatment';
+    toastLoading('Desactivando tratamiento...', loadingToastId);
+
     try {
       await deleteTreatment(id);
+      toastDismiss(loadingToastId);
+      toastSuccess('Tratamiento desactivado correctamente');
       fetchTreatments();
     } catch (err) {
       console.error('Error al eliminar tratamiento:', err);
+      toastDismiss(loadingToastId);
+      toastError('No se pudo desactivar el tratamiento. Intentá nuevamente.');
     }
   };
 
@@ -163,25 +183,6 @@ export default function MisTratamientos() {
       </div>
 
       <div className="treatments-content">
-        {/* Alerts */}
-        {error && (
-          <div className="alert alert-error">
-            <svg className="alert-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="alert alert-success">
-            <svg className="alert-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span>{successMessage}</span>
-          </div>
-        )}
-
         {/* Form */}
         {showForm && (
           <div className="treatment-form-card">
@@ -658,46 +659,6 @@ export default function MisTratamientos() {
           padding: 0 2rem;
           position: relative;
           z-index: 5;
-        }
-
-        .alert {
-          padding: 1rem 1.25rem;
-          border-radius: 14px;
-          margin-bottom: 1.5rem;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          font-weight: 500;
-          animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .alert-error {
-          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-          color: #dc2626;
-          border: 1px solid #fca5a5;
-        }
-
-        .alert-success {
-          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-          color: #065f46;
-          border: 1px solid #6ee7b7;
-        }
-
-        .alert-icon {
-          width: 22px;
-          height: 22px;
-          flex-shrink: 0;
         }
 
         .treatment-form-card {
