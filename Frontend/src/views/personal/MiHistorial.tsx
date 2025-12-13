@@ -322,20 +322,24 @@ export default function MiHistorial() {
     });
   };
 
-  // Detectar scroll para cargar más automáticamente
+  // Detectar scroll para cargar más automáticamente (dentro del contenedor)
   useEffect(() => {
-    const handleScroll = () => {
-      const scrollHeight = document.documentElement.scrollHeight;
-      const scrollTop = document.documentElement.scrollTop;
-      const clientHeight = document.documentElement.clientHeight;
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      const scrollHeight = target.scrollHeight;
+      const scrollTop = target.scrollTop;
+      const clientHeight = target.clientHeight;
 
       if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore) {
         fetchHistory(nextCursor);
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const scrollContainer = document.querySelector('.history-box-content');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll);
+      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    }
   }, [nextCursor, loadingMore, hasMore]);
 
   // Obtener filas filtradas
@@ -438,155 +442,168 @@ export default function MiHistorial() {
           </div>
         )}
 
-        {/* Lista de historial */}
-        {loading ? (
-          <div className="loading-state">
-            <div className="loading-spinner">
-              <div className="spinner-ring"></div>
-              <div className="spinner-ring"></div>
-              <div className="spinner-ring"></div>
-            </div>
-            <p className="loading-text">Cargando historial...</p>
+        {/* Cuadro de historial con scroll */}
+        <div className="history-box">
+          <div className="history-box-header">
+            <h2 className="history-box-title">
+              <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+              </svg>
+              Historial de Tomas
+            </h2>
           </div>
-        ) : filteredRows.length === 0 ? (
-          <div className="empty-history">
-            <div className="empty-icon">📋</div>
-            <h3 className="empty-title">Sin registros</h3>
-            <p className="empty-text">
-              {columnFilters.length > 0
-                ? 'No hay registros que coincidan con los filtros aplicados'
-                : 'Todavía no hay tomas registradas en el historial'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Desktop Table */}
-            <div className="table-container">
-              <table className="history-table">
-                <thead>
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <tr key={headerGroup.id} className="table-header">
-                      {headerGroup.headers.map(header => {
-                        // Ocultar columna treatment_id
-                        if (header.column.id === 'treatment_id') return null;
 
-                        return (
-                          <th key={header.id} className="table-th">
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {filteredRows.map((row, index) => (
-                    <tr
-                      key={row.id}
-                      className="table-row"
-                      style={{ animationDelay: `${index * 0.05}s` }}
-                    >
-                      {row.getVisibleCells().map(cell => {
-                        // Ocultar columna treatment_id
-                        if (cell.column.id === 'treatment_id') return null;
+          <div className="history-box-content">
+            {loading ? (
+              <div className="loading-state">
+                <div className="loading-spinner">
+                  <div className="spinner-ring"></div>
+                  <div className="spinner-ring"></div>
+                  <div className="spinner-ring"></div>
+                </div>
+                <p className="loading-text">Cargando historial...</p>
+              </div>
+            ) : filteredRows.length === 0 ? (
+              <div className="empty-history">
+                <div className="empty-icon">📋</div>
+                <h3 className="empty-title">Sin registros</h3>
+                <p className="empty-text">
+                  {columnFilters.length > 0
+                    ? 'No hay registros que coincidan con los filtros aplicados'
+                    : 'Todavía no hay tomas registradas en el historial'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table */}
+                <div className="table-wrapper">
+                  <table className="history-table">
+                    <thead>
+                      {table.getHeaderGroups().map(headerGroup => (
+                        <tr key={headerGroup.id} className="table-header">
+                          {headerGroup.headers.map(header => {
+                            // Ocultar columna treatment_id
+                            if (header.column.id === 'treatment_id') return null;
 
-                        // Aplicar clases especiales a ciertas columnas
-                        let tdClass = 'table-td';
-                        if (cell.column.id === 'taken_at') tdClass += ' td-date';
-                        if (cell.column.id === 'scheduled_time' || cell.column.id === 'taken_time') tdClass += ' td-time';
-                        if (cell.column.id === 'medication_name') tdClass += ' td-med';
-                        if (cell.column.id === 'dosage') tdClass += ' td-dosage';
+                            return (
+                              <th key={header.id} className="table-th">
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(
+                                      header.column.columnDef.header,
+                                      header.getContext()
+                                    )}
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((row, index) => (
+                        <tr
+                          key={row.id}
+                          className="table-row"
+                          style={{ animationDelay: `${index * 0.05}s` }}
+                        >
+                          {row.getVisibleCells().map(cell => {
+                            // Ocultar columna treatment_id
+                            if (cell.column.id === 'treatment_id') return null;
 
-                        return (
-                          <td key={cell.id} className={tdClass}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                            // Aplicar clases especiales a ciertas columnas
+                            let tdClass = 'table-td';
+                            if (cell.column.id === 'taken_at') tdClass += ' td-date';
+                            if (cell.column.id === 'scheduled_time' || cell.column.id === 'taken_time') tdClass += ' td-time';
+                            if (cell.column.id === 'medication_name') tdClass += ' td-med';
+                            if (cell.column.id === 'dosage') tdClass += ' td-dosage';
 
-            {/* Mobile Cards */}
-            <div className="cards-container">
-              {filteredRows.map((row, index) => {
-                const item = row.original;
-                return (
-                  <div key={item.id} className="history-card" style={{ animationDelay: `${index * 0.1}s` }}>
-                    <div className="card-header">
-                      <span className="card-date">{formatDate(item.taken_at)}</span>
-                      <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
-                        {item.status === 'TAKEN' ? (
-                          <>
-                            <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Tomada
-                          </>
-                        ) : (
-                          <>
-                            <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                            </svg>
-                            Omitida
-                          </>
-                        )}
-                      </span>
+                            return (
+                              <td key={cell.id} className={tdClass}>
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="cards-container">
+                  {filteredRows.map((row, index) => {
+                    const item = row.original;
+                    return (
+                      <div key={item.id} className="history-card" style={{ animationDelay: `${index * 0.1}s` }}>
+                        <div className="card-header">
+                          <span className="card-date">{formatDate(item.taken_at)}</span>
+                          <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
+                            {item.status === 'TAKEN' ? (
+                              <>
+                                <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                                Tomada
+                              </>
+                            ) : (
+                              <>
+                                <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                                Omitida
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="card-body">
+                          <div className="card-row">
+                            <span className="card-label">Medicamento:</span>
+                            <span className="card-value">{item.medication_name}</span>
+                          </div>
+                          <div className="card-row">
+                            <span className="card-label">Dosis:</span>
+                            <span className="card-value">{item.dosage}</span>
+                          </div>
+                          <div className="card-row">
+                            <span className="card-label">Hora programada:</span>
+                            <span className="card-value">{item.scheduled_time}</span>
+                          </div>
+                          <div className="card-row">
+                            <span className="card-label">Hora registrada:</span>
+                            <span className="card-value">{formatTime(item.taken_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Indicador de carga de más registros */}
+                {loadingMore && (
+                  <div className="loading-more">
+                    <div className="loading-spinner-small">
+                      <div className="spinner-ring-small"></div>
+                      <div className="spinner-ring-small"></div>
+                      <div className="spinner-ring-small"></div>
                     </div>
-
-                    <div className="card-body">
-                      <div className="card-row">
-                        <span className="card-label">Medicamento:</span>
-                        <span className="card-value">{item.medication_name}</span>
-                      </div>
-                      <div className="card-row">
-                        <span className="card-label">Dosis:</span>
-                        <span className="card-value">{item.dosage}</span>
-                      </div>
-                      <div className="card-row">
-                        <span className="card-label">Hora programada:</span>
-                        <span className="card-value">{item.scheduled_time}</span>
-                      </div>
-                      <div className="card-row">
-                        <span className="card-label">Hora registrada:</span>
-                        <span className="card-value">{formatTime(item.taken_at)}</span>
-                      </div>
-                    </div>
+                    <p className="loading-more-text">Cargando más registros...</p>
                   </div>
-                );
-              })}
-            </div>
-          </>
-        )}
+                )}
 
-        {/* Indicador de carga de más registros */}
-        {loadingMore && (
-          <div className="loading-more">
-            <div className="loading-spinner-small">
-              <div className="spinner-ring-small"></div>
-              <div className="spinner-ring-small"></div>
-              <div className="spinner-ring-small"></div>
-            </div>
-            <p className="loading-more-text">Cargando más registros...</p>
+                {/* Mensaje cuando no hay más registros */}
+                {!loading && !loadingMore && !hasMore && data.length > 0 && (
+                  <div className="end-of-list">
+                    <svg className="end-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <p className="end-text">Has llegado al final del historial</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        )}
-
-        {/* Mensaje cuando no hay más registros */}
-        {!loading && !loadingMore && !hasMore && data.length > 0 && (
-          <div className="end-of-list">
-            <svg className="end-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <p className="end-text">Has llegado al final del historial</p>
-          </div>
-        )}
+        </div>
       </div>
 
       <style>{`
@@ -822,7 +839,7 @@ export default function MiHistorial() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 4rem 2rem;
+          padding: 3rem 1.5rem;
           gap: 2rem;
         }
 
@@ -874,7 +891,7 @@ export default function MiHistorial() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 3rem 2rem;
+          padding: 2rem 1.5rem;
           gap: 1.5rem;
         }
 
@@ -918,8 +935,8 @@ export default function MiHistorial() {
           align-items: center;
           justify-content: center;
           gap: 0.75rem;
-          padding: 3rem 2rem;
-          margin-top: 2rem;
+          padding: 2rem 1.5rem;
+          margin: 1.5rem;
           background: rgba(102, 126, 234, 0.05);
           border-radius: 16px;
           border: 1px solid rgba(102, 126, 234, 0.1);
@@ -943,7 +960,8 @@ export default function MiHistorial() {
           background: rgba(255, 255, 255, 0.7);
           backdrop-filter: blur(10px);
           border-radius: 24px;
-          padding: 4rem 2rem;
+          padding: 3rem 1.5rem;
+          margin: 1.5rem;
           text-align: center;
           border: 2px dashed #e5e7eb;
         }
@@ -974,14 +992,74 @@ export default function MiHistorial() {
           line-height: 1.6;
         }
 
-        .table-container {
+        /* ============================================
+           CUADRO DE HISTORIAL CON SCROLL
+           ============================================ */
+
+        .history-box {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
-          border-radius: 20px;
-          overflow: hidden;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border-radius: 24px;
           border: 1px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 180px);
           animation: fadeInUp 0.6s ease-out 0.6s both;
+        }
+
+        .history-box-header {
+          padding: 1.75rem 2rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-box-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 0;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .title-icon {
+          width: 26px;
+          height: 26px;
+          flex-shrink: 0;
+        }
+
+        .history-box-content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0;
+        }
+
+        /* Scroll personalizado */
+        .history-box-content::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .history-box-content::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+        }
+
+        .history-box-content::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .history-box-content::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .table-wrapper {
+          border-radius: 12px;
+          overflow: visible;
         }
 
         .history-table {
@@ -998,10 +1076,17 @@ export default function MiHistorial() {
           text-align: left;
           font-size: 0.875rem;
           font-weight: 700;
-          color: #374151;
+          color: #fff;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          border-bottom: 2px solid #e5e7eb;
+          border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+          position: sticky;
+          top: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          backdrop-filter: blur(10px);
+          z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
 
         .table-row {
@@ -1085,6 +1170,7 @@ export default function MiHistorial() {
           display: none;
           flex-direction: column;
           gap: 1.25rem;
+          padding: 1.5rem;
         }
 
         .history-card {
@@ -1138,7 +1224,7 @@ export default function MiHistorial() {
         }
 
         @media (max-width: 1024px) {
-          .table-container {
+          .table-wrapper {
             display: none;
           }
 
