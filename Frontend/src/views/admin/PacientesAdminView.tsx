@@ -1,23 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { usePatientsAdmin } from '../../hooks/admin/usePatientsAdmin';
+import type { Patient } from '../../api';
 
 // ============================================
 // TIPOS
 // ============================================
-interface Patient {
-  id: number;
-  name: string;
-  caregiver_id?: number;
-  notes?: string;
-  active: boolean;
-  created_at?: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  role: string;
-}
-
 interface PatientForm {
   name: string;
   caregiver_id: string;
@@ -28,81 +15,30 @@ interface PatientForm {
 // COMPONENTE
 // ============================================
 export default function PacientesAdminView() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [caregivers, setCaregivers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const {
+    patients,
+    caregivers,
+    loading,
+    error,
+    successMessage,
+    filterActive,
+    searchTerm,
+    setFilterActive,
+    setSearchTerm,
+    createPatient,
+    updatePatient,
+    toggleActive,
+    deletePatient,
+  } = usePatientsAdmin();
+
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
-
-  // Filtros
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterActive, setFilterActive] = useState<string>('all');
 
   const [formData, setFormData] = useState<PatientForm>({
     name: '',
     caregiver_id: '',
     notes: '',
   });
-
-  const token = localStorage.getItem('token');
-
-  // Cargar pacientes y cuidadores al montar
-  useEffect(() => {
-    fetchPatients();
-    fetchCaregivers();
-  }, [filterActive]);
-
-  // Obtener pacientes
-  const fetchPatients = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      let url = 'http://localhost:8000/patients/all?';
-
-      if (filterActive !== 'all') {
-        url += `active=${filterActive === 'true'}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const data = await response.json();
-      setPatients(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener cuidadores (usuarios ASISTENCIAL activos)
-  const fetchCaregivers = async () => {
-    try {
-      const response = await fetch(
-        'http://localhost:8000/users/all?role=ASISTENCIAL&active=true',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar cuidadores');
-
-      const data = await response.json();
-      setCaregivers(data);
-    } catch (err: any) {
-      console.error('Error al cargar cuidadores:', err);
-    }
-  };
 
   // Manejar cambios en formulario
   const handleInputChange = (
@@ -118,45 +54,17 @@ export default function PacientesAdminView() {
   // Crear paciente
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('http://localhost:8000/patients/create', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : null,
-          notes: formData.notes || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al crear paciente');
-      }
-
-      setSuccessMessage('Paciente creado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        name: '',
-        caregiver_id: '',
-        notes: '',
-      });
-      setShowForm(false);
-
-      fetchPatients();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await createPatient({
+      name: formData.name,
+      caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : null,
+      notes: formData.notes || undefined,
+    });
+    setFormData({
+      name: '',
+      caregiver_id: '',
+      notes: '',
+    });
+    setShowForm(false);
   };
 
   // Editar paciente
@@ -164,49 +72,19 @@ export default function PacientesAdminView() {
     e.preventDefault();
     if (!editingPatient) return;
 
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${editingPatient.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : null,
-            notes: formData.notes || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al actualizar paciente');
-      }
-
-      setSuccessMessage('Paciente actualizado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        name: '',
-        caregiver_id: '',
-        notes: '',
-      });
-      setEditingPatient(null);
-      setShowForm(false);
-
-      fetchPatients();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await updatePatient({
+      id: editingPatient.id,
+      name: formData.name,
+      caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : undefined,
+      notes: formData.notes || undefined,
+    });
+    setFormData({
+      name: '',
+      caregiver_id: '',
+      notes: '',
+    });
+    setEditingPatient(null);
+    setShowForm(false);
   };
 
   // Activar/Desactivar paciente
@@ -218,70 +96,13 @@ export default function PacientesAdminView() {
     )
       return;
 
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${patient.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            active: !patient.active,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cambiar estado del paciente');
-
-      setSuccessMessage(
-        `Paciente ${patient.active ? 'desactivado' : 'activado'} exitosamente`
-      );
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      fetchPatients();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await toggleActive(patient);
   };
 
   // Eliminar paciente
   const handleDelete = async (id: number) => {
     if (!confirm('¿Estás seguro de eliminar este paciente?')) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${id}/delete`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al eliminar paciente');
-
-      setSuccessMessage('Paciente eliminado exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      fetchPatients();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await deletePatient(id);
   };
 
   // Abrir formulario para editar
@@ -306,10 +127,6 @@ export default function PacientesAdminView() {
     });
   };
 
-  // Filtrar pacientes por búsqueda
-  const filteredPatients = patients.filter((patient) =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   // Obtener nombre del cuidador
   const getCaregiverName = (caregiverId?: number) => {
@@ -456,7 +273,7 @@ export default function PacientesAdminView() {
               </tr>
             </thead>
             <tbody>
-              {filteredPatients.map((patient) => (
+              {patients.map((patient) => (
                 <tr key={patient.id} style={styles.tableRow}>
                   <td style={styles.td}>
                     <div style={styles.patientName}>{patient.name}</div>

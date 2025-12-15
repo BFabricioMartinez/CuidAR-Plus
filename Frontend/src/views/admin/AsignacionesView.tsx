@@ -1,218 +1,41 @@
-import { useState, useEffect } from 'react';
-
-// ============================================
-// TIPOS
-// ============================================
-interface Assignment {
-  id: number;
-  caregiver_id: number;
-  patient_id: number;
-  active: boolean;
-  created_at?: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-}
-
-interface Patient {
-  id: number;
-  name: string;
-}
-
-interface AssignmentWithNames extends Assignment {
-  caregiver_name: string;
-  patient_name: string;
-}
+import { useState } from 'react';
+import { useAssignmentsAdmin } from '../../hooks/admin/useAssignmentsAdmin';
 
 // ============================================
 // COMPONENTE
 // ============================================
 export default function AsignacionesView() {
-  const [assignments, setAssignments] = useState<AssignmentWithNames[]>([]);
-  const [caregivers, setCaregivers] = useState<User[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const {
+    assignments,
+    caregivers,
+    patients,
+    loading,
+    error,
+    successMessage,
+    filterCaregiver,
+    searchTerm,
+    setFilterCaregiver,
+    setSearchTerm,
+    createAssignment,
+    deleteAssignment,
+  } = useAssignmentsAdmin();
 
-  // Form
+  const [showForm, setShowForm] = useState(false);
   const [selectedCaregiver, setSelectedCaregiver] = useState<string>('');
   const [selectedPatient, setSelectedPatient] = useState<string>('');
-
-  // Filtros
-  const [filterCaregiver, setFilterCaregiver] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const token = localStorage.getItem('token');
-
-  // Cargar datos al montar
-  useEffect(() => {
-    fetchAssignments();
-    fetchCaregivers();
-    fetchPatients();
-  }, []);
-
-  // Obtener asignaciones
-  const fetchAssignments = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('http://localhost:8000/assignments/all', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al cargar asignaciones');
-
-      const data = await response.json();
-
-      // Obtener nombres de cuidadores y pacientes
-      const enrichedData = await Promise.all(
-        data.map(async (assignment: Assignment) => {
-          try {
-            const [caregiverRes, patientRes] = await Promise.all([
-              fetch(`http://localhost:8000/users/${assignment.caregiver_id}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-              }),
-              fetch(`http://localhost:8000/patients/${assignment.patient_id}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-              }),
-            ]);
-
-            const caregiver = await caregiverRes.json();
-            const patient = await patientRes.json();
-
-            return {
-              ...assignment,
-              caregiver_name: caregiver.name || 'Desconocido',
-              patient_name: patient.name || 'Desconocido',
-            };
-          } catch {
-            return {
-              ...assignment,
-              caregiver_name: 'Desconocido',
-              patient_name: 'Desconocido',
-            };
-          }
-        })
-      );
-
-      setAssignments(enrichedData);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener cuidadores (ASISTENCIAL activos)
-  const fetchCaregivers = async () => {
-    try {
-      const response = await fetch(
-        'http://localhost:8000/users/all?role=ASISTENCIAL&active=true',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar cuidadores');
-
-      const data = await response.json();
-      setCaregivers(data);
-    } catch (err: any) {
-      console.error('Error al cargar cuidadores:', err);
-    }
-  };
-
-  // Obtener pacientes activos
-  const fetchPatients = async () => {
-    try {
-      const response = await fetch(
-        'http://localhost:8000/patients/all?active=true',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const data = await response.json();
-      setPatients(data);
-    } catch (err: any) {
-      console.error('Error al cargar pacientes:', err);
-    }
-  };
 
   // Crear asignación
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedCaregiver || !selectedPatient) {
-      setError('Debes seleccionar un cuidador y un paciente');
-      setTimeout(() => setError(''), 3000);
       return;
     }
 
-    // Verificar si ya existe la asignación
-    const exists = assignments.some(
-      (a) =>
-        a.caregiver_id === Number(selectedCaregiver) &&
-        a.patient_id === Number(selectedPatient) &&
-        a.active
-    );
-
-    if (exists) {
-      setError('Esta asignación ya existe');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('http://localhost:8000/assignments/create', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          caregiver_id: Number(selectedCaregiver),
-          patient_id: Number(selectedPatient),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al crear asignación');
-      }
-
-      setSuccessMessage('Asignación creada exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setSelectedCaregiver('');
-      setSelectedPatient('');
-      setShowForm(false);
-
-      fetchAssignments();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await createAssignment(Number(selectedCaregiver), Number(selectedPatient));
+    setSelectedCaregiver('');
+    setSelectedPatient('');
+    setShowForm(false);
   };
 
   // Eliminar asignación
@@ -224,32 +47,7 @@ export default function AsignacionesView() {
     )
       return;
 
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/assignments/${id}/delete`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al eliminar asignación');
-
-      setSuccessMessage('Asignación eliminada exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      fetchAssignments();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await deleteAssignment(id);
   };
 
   // Cancelar formulario
@@ -259,21 +57,8 @@ export default function AsignacionesView() {
     setSelectedPatient('');
   };
 
-  // Filtrar asignaciones
-  const filteredAssignments = assignments.filter((assignment) => {
-    const matchesCaregiver =
-      filterCaregiver === 'all' ||
-      assignment.caregiver_id === Number(filterCaregiver);
-
-    const matchesSearch =
-      assignment.caregiver_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      assignment.patient_name.toLowerCase().includes(searchTerm.toLowerCase());
-
-    return matchesCaregiver && matchesSearch;
-  });
-
   // Agrupar asignaciones por cuidador
-  const groupedAssignments = filteredAssignments.reduce((acc, assignment) => {
+  const groupedAssignments = assignments.reduce((acc, assignment) => {
     const key = assignment.caregiver_id;
     if (!acc[key]) {
       acc[key] = {
@@ -394,7 +179,7 @@ export default function AsignacionesView() {
       {/* Lista de asignaciones */}
       {loading && assignments.length === 0 ? (
         <div style={styles.loading}>Cargando asignaciones...</div>
-      ) : filteredAssignments.length === 0 ? (
+      ) : assignments.length === 0 ? (
         <div style={styles.emptyState}>
           <p>🔗 No hay asignaciones registradas</p>
           <p style={styles.emptyHint}>

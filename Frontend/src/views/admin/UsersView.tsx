@@ -1,18 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useUsersManagement } from '../../hooks/admin/useUsersManagement';
+import type { User } from '../../api';
 
 // ============================================
 // TIPOS
 // ============================================
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: UserRole;
-  active: boolean;
-  created_at?: string;
-}
 
 interface UserForm {
   name: string;
@@ -25,17 +18,25 @@ interface UserForm {
 // COMPONENTE
 // ============================================
 export default function UsersView() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const {
+    users,
+    loading,
+    error,
+    successMessage,
+    filterRole,
+    filterActive,
+    searchTerm,
+    setFilterRole,
+    setFilterActive,
+    setSearchTerm,
+    createUser,
+    updateUser,
+    toggleActive,
+    deleteUser,
+  } = useUsersManagement();
+
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-
-  // Filtros
-  const [filterRole, setFilterRole] = useState<string>('all');
-  const [filterActive, setFilterActive] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
 
   const [formData, setFormData] = useState<UserForm>({
     name: '',
@@ -43,46 +44,6 @@ export default function UsersView() {
     password: '',
     role: 'PERSONAL',
   });
-
-  const token = localStorage.getItem('token');
-
-  // Cargar usuarios al montar
-  useEffect(() => {
-    fetchUsers();
-  }, [filterRole, filterActive]);
-
-  // Obtener usuarios con filtros
-  const fetchUsers = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      let url = 'http://localhost:8000/users/all?';
-
-      if (filterRole !== 'all') {
-        url += `role=${filterRole}&`;
-      }
-
-      if (filterActive !== 'all') {
-        url += `active=${filterActive === 'true'}&`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al cargar usuarios');
-
-      const data = await response.json();
-      setUsers(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Manejar cambios en formulario
   const handleInputChange = (
@@ -98,42 +59,14 @@ export default function UsersView() {
   // Crear usuario
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('http://localhost:8000/users/create', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al crear usuario');
-      }
-
-      setSuccessMessage('Usuario creado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        role: 'PERSONAL',
-      });
-      setShowForm(false);
-
-      fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await createUser(formData);
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      role: 'PERSONAL',
+    });
+    setShowForm(false);
   };
 
   // Editar usuario
@@ -141,57 +74,27 @@ export default function UsersView() {
     e.preventDefault();
     if (!editingUser) return;
 
-    setLoading(true);
-    setError('');
+    const updateData: any = {
+      id: editingUser.id,
+      name: formData.name,
+      email: formData.email,
+      role: formData.role,
+    };
 
-    try {
-      const updateData: any = {
-        name: formData.name,
-        email: formData.email,
-        role: formData.role,
-      };
-
-      // Solo incluir password si se escribió algo
-      if (formData.password) {
-        updateData.password = formData.password;
-      }
-
-      const response = await fetch(
-        `http://localhost:8000/users/${editingUser.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updateData),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al actualizar usuario');
-      }
-
-      setSuccessMessage('Usuario actualizado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        role: 'PERSONAL',
-      });
-      setEditingUser(null);
-      setShowForm(false);
-
-      fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
+    // Solo incluir password si se escribió algo
+    if (formData.password) {
+      updateData.password = formData.password;
     }
+
+    await updateUser(updateData);
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      role: 'PERSONAL',
+    });
+    setEditingUser(null);
+    setShowForm(false);
   };
 
   // Activar/Desactivar usuario
@@ -203,67 +106,13 @@ export default function UsersView() {
     )
       return;
 
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        `http://localhost:8000/users/${user.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            active: !user.active,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cambiar estado del usuario');
-
-      setSuccessMessage(
-        `Usuario ${user.active ? 'desactivado' : 'activado'} exitosamente`
-      );
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await toggleActive(user);
   };
 
   // Eliminar usuario (soft delete)
   const handleDelete = async (id: number) => {
     if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(`http://localhost:8000/users/${id}/delete`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al eliminar usuario');
-
-      setSuccessMessage('Usuario eliminado exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
-
-      fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    } finally {
-      setLoading(false);
-    }
+    await deleteUser(id);
   };
 
   // Abrir formulario para editar
@@ -290,11 +139,6 @@ export default function UsersView() {
     });
   };
 
-  // Filtrar usuarios por búsqueda
-  const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   // Obtener badge de rol
   const getRoleBadge = (role: UserRole) => {
@@ -482,7 +326,7 @@ export default function UsersView() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => (
+              {users.map((user) => (
                 <tr key={user.id} style={styles.tableRow}>
                   <td style={styles.td}>
                     <div style={styles.userName}>{user.name}</div>

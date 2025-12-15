@@ -72,7 +72,7 @@ export interface PatientFilters {
 
 export interface CreatePatientRequest {
   name: string;
-  caregiver_id: number;
+  caregiver_id?: number | null;
   notes?: string;
 }
 
