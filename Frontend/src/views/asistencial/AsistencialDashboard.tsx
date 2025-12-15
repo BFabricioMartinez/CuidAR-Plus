@@ -284,25 +284,6 @@ export default function AsistencialDashboard() {
 
                 {/* Mini Stats Grid */}
                 <div className="mini-stats-grid">
-                  {/* Assigned Patients Chart */}
-                  <div className="chart-card chart-card-info">
-                    <div className="chart-header">
-                      <div className="chart-icon-wrapper info">
-                        <svg className="chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                        </svg>
-                      </div>
-            <div>
-                        <h3 className="chart-title-small">Pacientes</h3>
-                        <div className="chart-subtitle-small">Asignados</div>
-            </div>
-                    </div>
-                    <div className="mini-chart-container">
-                      <div className="chart-value-large">{stats.assigned_patients || 0}</div>
-                    </div>
-                    <div className="chart-decoration info-decoration"></div>
-          </div>
-
                   {/* Taken Doses Chart */}
                   <div className="chart-card chart-card-success">
                     <div className="chart-header">

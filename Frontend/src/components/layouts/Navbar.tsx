@@ -142,26 +142,14 @@ export default function Navbar() {
             <span className="brand-name">CuidAR+</span>
           </div>
 
-          {/* Desktop Navigation */}
-          <div className="nav-links-desktop">
-            {visibleItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
-              >
-                <span className="nav-link-icon">{item.icon}</span>
-                <span className="nav-link-label">{item.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Patient Selector (Solo para usuarios asistenciales) */}
+          {/* Patient Selector (Solo para usuarios asistenciales) - Antes de los nav-links */}
           {isAsistencial && patients.length > 0 && (
-            <div className="patient-selector-navbar">
+            <div className="patient-selector-navbar" title={`${patients.length} paciente${patients.length !== 1 ? 's' : ''} asignado${patients.length !== 1 ? 's' : ''}`}>
               <svg className="patient-selector-icon" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
               </svg>
+              <span className="patients-count-text">{patients.length}</span>
+              <div className="patient-selector-divider"></div>
               <select
                 value={selectedPatientId || ''}
                 onChange={(e) => selectPatient(Number(e.target.value))}
@@ -176,6 +164,20 @@ export default function Navbar() {
               </select>
             </div>
           )}
+
+          {/* Desktop Navigation */}
+          <div className="nav-links-desktop">
+            {visibleItems.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
+              >
+                <span className="nav-link-icon">{item.icon}</span>
+                <span className="nav-link-label">{item.label}</span>
+              </button>
+            ))}
+          </div>
 
           {/* User Menu */}
           <div className="user-section">
@@ -224,7 +226,7 @@ export default function Navbar() {
                   <svg className="patient-selector-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                   </svg>
-                  Paciente:
+                  <span>Paciente ({patients.length}):</span>
                 </label>
                 <select
                   value={selectedPatientId || ''}
@@ -406,12 +408,27 @@ export default function Navbar() {
         .patient-selector-navbar {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.75rem;
           padding: 0.5rem 1rem;
           background: rgba(102, 126, 234, 0.08);
           border-radius: 12px;
           border: 1px solid rgba(102, 126, 234, 0.2);
           transition: all 0.3s ease;
+        }
+
+        .patients-count-text {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #6b7280;
+          line-height: 1;
+          flex-shrink: 0;
+        }
+
+        .patient-selector-divider {
+          width: 1px;
+          height: 24px;
+          background: rgba(102, 126, 234, 0.2);
+          flex-shrink: 0;
         }
 
         .patient-selector-navbar:hover {

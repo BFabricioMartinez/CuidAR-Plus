@@ -76,9 +76,6 @@ export const useAsistencialDashboard = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        console.log('🔍 [DIAGNÓSTICO] Fecha de hoy (local):', today.toDateString());
-        console.log('🔍 [DIAGNÓSTICO] Zona horaria offset (minutos):', new Date().getTimezoneOffset());
-
         const intakesResponse = await intakesApi.list({
           filters: {
             patient_id: patientId,
@@ -87,33 +84,19 @@ export const useAsistencialDashboard = () => {
           limit: 100  // Máximo permitido por el backend
         });
 
-        console.log('🔍 [DIAGNÓSTICO] Total intakes recibidos:', intakesResponse.items.length);
-
         // Crear un Set de dosis ya registradas hoy (treatment_id + time)
         const todayIntakes = new Set<string>();
         intakesResponse.items.forEach((intake: IntakeLog) => {
           if (intake.taken_at) {
             const intakeDate = new Date(intake.taken_at);
-            console.log('🔍 [DIAGNÓSTICO] Intake received:', {
-              treatment_id: intake.treatment_id,
-              taken_at_raw: intake.taken_at,
-              intakeDate_toString: intakeDate.toString(),
-              intakeDate_toDateString: intakeDate.toDateString(),
-              today_toDateString: today.toDateString(),
-              matches: intakeDate.toDateString() === today.toDateString(),
-              time_extracted: intakeDate.toTimeString().slice(0, 5)
-            });
 
             if (intakeDate.toDateString() === today.toDateString()) {
               const time = intakeDate.toTimeString().slice(0, 5); // HH:MM
               const key = `${intake.treatment_id}-${time}`;
               todayIntakes.add(key);
-              console.log('✅ [DIAGNÓSTICO] Agregado a todayIntakes:', key);
             }
           }
         });
-
-        console.log('🔍 [DIAGNÓSTICO] todayIntakes Set:', Array.from(todayIntakes));
 
         // Generar dosis solo si no están registradas
         treatmentsList.forEach((treatment) => {
@@ -122,15 +105,6 @@ export const useAsistencialDashboard = () => {
           times.forEach((time) => {
             const doseKey = `${treatment.id}-${time}`;
             const isRegistered = todayIntakes.has(doseKey);
-
-            console.log('🔍 [DIAGNÓSTICO] Verificando dosis:', {
-              treatment_id: treatment.id,
-              med_name: treatment.medication_name,
-              time,
-              doseKey,
-              isRegistered,
-              willShow: !isRegistered
-            });
 
             // Solo agregar si no está registrada hoy
             if (!todayIntakes.has(doseKey)) {
@@ -147,7 +121,6 @@ export const useAsistencialDashboard = () => {
 
         // Ordenar por hora
         doses.sort((a, b) => a.time.localeCompare(b.time));
-        console.log('🔍 [DIAGNÓSTICO] Dosis finales que se mostrarán:', doses);
         setUpcomingDoses(doses);
       } catch (err) {
         console.error('Error calculating upcoming doses:', err);
@@ -268,15 +241,12 @@ export const useAsistencialDashboard = () => {
           throw new Error('Usuario no autenticado');
         }
 
-        console.log('🔍 [DIAGNÓSTICO] Marcando como tomada:', { treatmentId, time, userId: user.id });
-        const response = await intakesApi.markAsTaken(treatmentId, time, user.id);
-        console.log('🔍 [DIAGNÓSTICO] Respuesta del backend:', response);
+        await intakesApi.markAsTaken(treatmentId, time, user.id);
 
         setSuccessMessage(`Dosis de las ${time} marcada como tomada ✓`);
         setTimeout(() => setSuccessMessage(''), 3000);
 
         // Recargar datos
-        console.log('🔍 [DIAGNÓSTICO] Recargando datos después de marcar como tomada...');
         await fetchPatientTreatments();
         await fetchMyStats();
       } catch (err) {
@@ -299,15 +269,12 @@ export const useAsistencialDashboard = () => {
           throw new Error('Usuario no autenticado');
         }
 
-        console.log('🔍 [DIAGNÓSTICO] Marcando como omitida:', { treatmentId, time, userId: user.id });
-        const response = await intakesApi.markAsMissed(treatmentId, time, user.id);
-        console.log('🔍 [DIAGNÓSTICO] Respuesta del backend:', response);
+        await intakesApi.markAsMissed(treatmentId, time, user.id);
 
         setSuccessMessage(`Dosis de las ${time} marcada como omitida`);
         setTimeout(() => setSuccessMessage(''), 3000);
 
         // Recargar datos
-        console.log('🔍 [DIAGNÓSTICO] Recargando datos después de marcar como omitida...');
         await fetchPatientTreatments();
         await fetchMyStats();
       } catch (err) {
