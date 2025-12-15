@@ -13,7 +13,7 @@ interface User {
 interface NavItem {
   label: string;
   path: string;
-  icon: JSX.Element;
+  icon: React.ReactElement;
   roles: UserRole[];
 }
 
@@ -37,12 +37,6 @@ export default function Navbar() {
       label: 'Dashboard',
       path: '/admin/dashboard',
       icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>,
-      roles: ['ADMIN'],
-    },
-    {
-      label: 'Usuarios',
-      path: '/admin/users',
-      icon: <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" /></svg>,
       roles: ['ADMIN'],
     },
     {

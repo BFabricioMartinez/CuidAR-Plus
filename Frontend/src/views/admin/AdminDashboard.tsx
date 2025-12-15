@@ -176,10 +176,6 @@ export default function AdminDashboard() {
       <div style={styles.section}>
         <h2 style={styles.sectionTitle}>⚡ Acciones Rápidas</h2>
         <div style={styles.actionsGrid}>
-          <a href="/admin/users" style={styles.actionCard}>
-            <div style={styles.actionIcon}>👥</div>
-            <div style={styles.actionText}>Gestionar Usuarios</div>
-          </a>
           <a href="/admin/pacientes" style={styles.actionCard}>
             <div style={styles.actionIcon}>🏥</div>
             <div style={styles.actionText}>Gestionar Pacientes</div>
