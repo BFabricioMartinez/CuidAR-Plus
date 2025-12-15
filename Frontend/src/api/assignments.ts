@@ -93,4 +93,20 @@ export const assignmentsApi = {
   getById: async (assignmentId: number): Promise<AssignmentWithDetails> => {
     return apiClient.get<AssignmentWithDetails>(`/assignment/${assignmentId}`);
   },
+
+  /**
+   * POST /assignment/create
+   * Crea una nueva asignación de cuidador a paciente
+   */
+  create: async (data: { caregiver_id: number; patient_id: number }): Promise<{ message: string; assignment: Assignment }> => {
+    return apiClient.post<{ message: string; assignment: Assignment }>('/assignment/create', data);
+  },
+
+  /**
+   * PUT /assignment/{assignment_id}/deactivate
+   * Desactiva una asignación (soft delete)
+   */
+  deactivate: async (assignmentId: number): Promise<{ message: string }> => {
+    return apiClient.put<{ message: string }>(`/assignment/${assignmentId}/deactivate`);
+  },
 };

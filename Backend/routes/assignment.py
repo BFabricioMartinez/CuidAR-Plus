@@ -193,22 +193,45 @@ async def create_assignment(req: Request, data: InputAssignment):
                     content={"message": "El usuario debe tener rol ASISTENCIAL para ser cuidador"}
                 )
 
-            # Verificar que el paciente existe
-            stmt_patient = select(Patient).where(Patient.id == data.patient_id)
+            # Variable para el patient_id final (puede cambiar si es usuario PERSONAL)
+            final_patient_id = data.patient_id
+
+            # Verificar que el paciente existe (puede ser Patient o User con rol PERSONAL)
+            stmt_patient = select(Patient).where(Patient.id == final_patient_id)
             result_patient = await session.execute(stmt_patient)
             patient = result_patient.scalar_one_or_none()
 
+            # Si no es paciente, verificar si es usuario PERSONAL y crear paciente automáticamente
             if not patient:
-                return JSONResponse(
-                    status_code=404,
-                    content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
+                stmt_user = select(User).where(User.id == final_patient_id).where(User.role == "PERSONAL")
+                result_user = await session.execute(stmt_user)
+                user_personal = result_user.scalar_one_or_none()
+                
+                if not user_personal:
+                    return JSONResponse(
+                        status_code=404,
+                        content={"message": f"Paciente o usuario PERSONAL con ID {final_patient_id} no encontrado"}
+                    )
+                
+                # Crear paciente automáticamente para el usuario PERSONAL
+                patient_name = user_personal.name if user_personal.name else user_personal.email.split('@')[0]
+                new_patient = Patient(
+                    name=patient_name,
+                    caregiver_id=None,
+                    notes=f"Paciente creado automáticamente para usuario PERSONAL: {user_personal.email}"
                 )
+                session.add(new_patient)
+                await session.flush()  # Flush para obtener el ID sin commit
+                await session.refresh(new_patient)
+                
+                # Usar el ID del paciente recién creado
+                final_patient_id = new_patient.id
 
             # Verificar que no existe ya una asignación activa
             stmt_check = (
                 select(Assignment)
                 .where(Assignment.caregiver_id == data.caregiver_id)
-                .where(Assignment.patient_id == data.patient_id)
+                .where(Assignment.patient_id == final_patient_id)
                 .where(Assignment.active.is_(True))
             )
             result_check = await session.execute(stmt_check)
@@ -222,7 +245,7 @@ async def create_assignment(req: Request, data: InputAssignment):
 
             new_assignment = Assignment(
                 caregiver_id=data.caregiver_id,
-                patient_id=data.patient_id
+                patient_id=final_patient_id
             )
 
             session.add(new_assignment)

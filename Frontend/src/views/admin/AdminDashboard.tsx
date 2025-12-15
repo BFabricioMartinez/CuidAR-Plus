@@ -1,127 +1,22 @@
-import { useState, useEffect } from 'react';
-
-// ============================================
-// TIPOS
-// ============================================
-interface OverviewStats {
-  active_users: number;
-  total_patients: number;
-  active_treatments: number;
-  today_doses: {
-    taken: number;
-    missed: number;
-    total: number;
-    adherence_percentage: number | null;
-  };
-}
-
-interface PatientAdherence {
-  patient_id: number;
-  patient_name: string;
-  summary: {
-    taken_count: number;
-    missed_count: number;
-    total_count: number;
-    adherence_percentage: number | null;
-  };
-}
+import { useEffect } from 'react';
+import { useAdminDashboard } from '../../hooks/admin/useAdminDashboard';
 
 // ============================================
 // COMPONENTE
 // ============================================
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<OverviewStats | null>(null);
-  const [patientsAdherence, setPatientsAdherence] = useState<PatientAdherence[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const token = localStorage.getItem('token');
+  const {
+    stats,
+    patientsAdherence,
+    loading,
+    error,
+    fetchDashboard,
+  } = useAdminDashboard();
 
   // Cargar datos al montar
   useEffect(() => {
-    fetchOverviewStats();
-    fetchPatientsAdherence();
-  }, []);
-
-  // Obtener estadísticas generales
-  const fetchOverviewStats = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(
-        'http://localhost:8000/statistics/overview',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar estadísticas');
-
-      const data = await response.json();
-      setStats(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Obtener adherencia de todos los pacientes
-  const fetchPatientsAdherence = async () => {
-    try {
-      // Primero obtener todos los pacientes
-      const patientsRes = await fetch(
-        'http://localhost:8000/patients/all',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!patientsRes.ok) throw new Error('Error al cargar pacientes');
-
-      const patients = await patientsRes.json();
-
-      // Obtener adherencia de cada paciente (últimos 7 días)
-      const adherencePromises = patients.map(async (patient: any) => {
-        try {
-          const adherenceRes = await fetch(
-            `http://localhost:8000/statistics/patients/${patient.id}/adherence?days=7`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (!adherenceRes.ok) return null;
-
-          const adherenceData = await adherenceRes.json();
-          return adherenceData;
-        } catch {
-          return null;
-        }
-      });
-
-      const adherenceResults = await Promise.all(adherencePromises);
-      const validAdherence = adherenceResults.filter((a) => a !== null);
-
-      // Ordenar por adherencia (menor a mayor para ver los más problemáticos)
-      validAdherence.sort((a, b) => {
-        const adhA = a.summary.adherence_percentage || 0;
-        const adhB = b.summary.adherence_percentage || 0;
-        return adhA - adhB;
-      });
-
-      setPatientsAdherence(validAdherence.slice(0, 10)); // Top 10
-    } catch (err: any) {
-      console.error('Error adherencia:', err);
-    }
-  };
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   // Calcular color según adherencia
   const getAdherenceColor = (percentage: number | null) => {
@@ -288,10 +183,6 @@ export default function AdminDashboard() {
       <div style={styles.section}>
         <h2 style={styles.sectionTitle}>⚡ Acciones Rápidas</h2>
         <div style={styles.actionsGrid}>
-          <a href="/admin/users" style={styles.actionCard}>
-            <div style={styles.actionIcon}>👥</div>
-            <div style={styles.actionText}>Gestionar Usuarios</div>
-          </a>
           <a href="/admin/pacientes" style={styles.actionCard}>
             <div style={styles.actionIcon}>🏥</div>
             <div style={styles.actionText}>Gestionar Pacientes</div>

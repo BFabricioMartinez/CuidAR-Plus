@@ -7,6 +7,7 @@ export { treatmentsApi } from './treatments';
 export { intakesApi } from './intakes';
 export { statisticsApi } from './statistics';
 export { assignmentsApi } from './assignments';
+export { usersApi } from './users';
 
 // Re-exportar tipos
 export type * from '../types/api';

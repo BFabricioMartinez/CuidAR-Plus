@@ -1,22 +1,10 @@
 import { useState, useEffect } from 'react';
+import { patientsApi, usersApi, assignmentsApi, ApiError } from '../../api';
+import type { Patient, User } from '../../api';
 
 // ============================================
 // TIPOS
 // ============================================
-interface Patient {
-  id: number;
-  name: string;
-  caregiver_id?: number;
-  notes?: string;
-  active: boolean;
-  created_at?: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  role: string;
-}
 
 interface PatientForm {
   name: string;
@@ -35,6 +23,7 @@ export default function PacientesAdminView() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [caregiverNames, setCaregiverNames] = useState<Record<number, string>>({});
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,7 +35,6 @@ export default function PacientesAdminView() {
     notes: '',
   });
 
-  const token = localStorage.getItem('token');
 
   // Cargar pacientes y cuidadores al montar
   useEffect(() => {
@@ -60,24 +48,20 @@ export default function PacientesAdminView() {
     setError('');
 
     try {
-      let url = 'http://localhost:8000/patients/all?';
-
-      if (filterActive !== 'all') {
-        url += `active=${filterActive === 'true'}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
+      const response = await patientsApi.list({
+        limit: 100,
+        filters: {
+          ...(filterActive !== 'all' && { active: filterActive === 'true' }),
         },
       });
 
-      if (!response.ok) throw new Error('Error al cargar pacientes');
-
-      const data = await response.json();
-      setPatients(data);
+      setPatients(response.items);
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al cargar pacientes');
+      }
     } finally {
       setLoading(false);
     }
@@ -86,21 +70,16 @@ export default function PacientesAdminView() {
   // Obtener cuidadores (usuarios ASISTENCIAL activos)
   const fetchCaregivers = async () => {
     try {
-      const response = await fetch(
-        'http://localhost:8000/users/all?role=ASISTENCIAL&active=true',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cargar cuidadores');
-
-      const data = await response.json();
-      setCaregivers(data);
+      const caregivers = await usersApi.getByRole('ASISTENCIAL');
+      setCaregivers(caregivers);
+      if (caregivers.length === 0) {
+        console.warn('No hay cuidadores (ASISTENCIAL) disponibles en el sistema');
+      }
     } catch (err: any) {
       console.error('Error al cargar cuidadores:', err);
+      if (err instanceof ApiError) {
+        setError(`Error al cargar cuidadores: ${err.message}`);
+      }
     }
   };
 
@@ -121,23 +100,62 @@ export default function PacientesAdminView() {
     setLoading(true);
     setError('');
 
+    // Validar que se haya seleccionado un cuidador
+    if (!formData.caregiver_id) {
+      setError('Debes seleccionar un cuidador para crear el paciente');
+      setTimeout(() => setError(''), 5000);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:8000/patients/create', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : null,
-          notes: formData.notes || null,
-        }),
+      const caregiverId = Number(formData.caregiver_id);
+      
+      // Crear el paciente
+      const createResponse: any = await patientsApi.create({
+        name: formData.name,
+        caregiver_id: caregiverId,
+        notes: formData.notes || undefined,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al crear paciente');
+      // El backend devuelve { message: "...", patient: {...} }
+      console.log('📦 Respuesta completa del backend:', createResponse);
+      const createdPatient = createResponse.patient || createResponse.data;
+      
+      if (!createdPatient || !createdPatient.id) {
+        console.error('❌ No se pudo obtener el ID del paciente creado. Respuesta:', createResponse);
+        setError('Error: No se pudo obtener el ID del paciente creado');
+        setTimeout(() => setError(''), 5000);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('📋 Paciente creado con ID:', createdPatient.id);
+      
+      // Crear también la asignación en la tabla assignments
+      try {
+        console.log('🔗 Creando asignación para paciente ID:', createdPatient.id, 'cuidador ID:', caregiverId);
+        const assignmentResult = await assignmentsApi.create({
+          caregiver_id: caregiverId,
+          patient_id: createdPatient.id,
+        });
+        console.log('✅ Asignación creada exitosamente:', assignmentResult);
+      } catch (assignError: any) {
+        console.error('❌ Error completo al crear asignación:', assignError);
+        // Si la asignación ya existe, no es un error crítico
+        if (assignError instanceof ApiError) {
+          if (assignError.status === 409) {
+            console.log('ℹ️ Asignación ya existe (409), continuando...');
+          } else {
+            console.error('❌ Error de API al crear asignación:', assignError.status, assignError.message);
+            setError(`⚠️ Paciente creado pero error al asignar: ${assignError.message}`);
+            setTimeout(() => setError(''), 7000);
+          }
+        } else {
+          console.error('❌ Error desconocido al crear asignación:', assignError);
+          setError(`⚠️ Paciente creado pero error al asignar. Ver consola para más detalles.`);
+          setTimeout(() => setError(''), 7000);
+        }
       }
 
       setSuccessMessage('Paciente creado exitosamente ✓');
@@ -152,7 +170,11 @@ export default function PacientesAdminView() {
 
       fetchPatients();
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al crear paciente');
+      }
       setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
@@ -168,26 +190,12 @@ export default function PacientesAdminView() {
     setError('');
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${editingPatient.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : null,
-            notes: formData.notes || null,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Error al actualizar paciente');
-      }
+      await patientsApi.update({
+        id: editingPatient.id,
+        name: formData.name,
+        caregiver_id: formData.caregiver_id ? Number(formData.caregiver_id) : undefined,
+        notes: formData.notes || undefined,
+      });
 
       setSuccessMessage('Paciente actualizado exitosamente ✓');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -202,7 +210,11 @@ export default function PacientesAdminView() {
 
       fetchPatients();
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al actualizar paciente');
+      }
       setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
@@ -222,21 +234,10 @@ export default function PacientesAdminView() {
     setError('');
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${patient.id}/update`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            active: !patient.active,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al cambiar estado del paciente');
+      await patientsApi.update({
+        id: patient.id,
+        active: !patient.active,
+      });
 
       setSuccessMessage(
         `Paciente ${patient.active ? 'desactivado' : 'activado'} exitosamente`
@@ -245,7 +246,11 @@ export default function PacientesAdminView() {
 
       fetchPatients();
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al cambiar estado del paciente');
+      }
       setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
@@ -260,24 +265,18 @@ export default function PacientesAdminView() {
     setError('');
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/patients/${id}/delete`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error('Error al eliminar paciente');
+      await patientsApi.deactivate(id);
 
       setSuccessMessage('Paciente eliminado exitosamente');
       setTimeout(() => setSuccessMessage(''), 3000);
 
       fetchPatients();
     } catch (err: any) {
-      setError(err.message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al eliminar paciente');
+      }
       setTimeout(() => setError(''), 5000);
     } finally {
       setLoading(false);
@@ -312,10 +311,55 @@ export default function PacientesAdminView() {
   );
 
   // Obtener nombre del cuidador
-  const getCaregiverName = (caregiverId?: number) => {
+  const getCaregiverName = async (caregiverId?: number): Promise<string> => {
     if (!caregiverId) return 'Sin asignar';
     const caregiver = caregivers.find((c) => c.id === caregiverId);
-    return caregiver?.name || 'Desconocido';
+    if (caregiver) return caregiver.name || 'Sin nombre';
+    
+    // Si no está en el array, intentar cargarlo desde la API
+    try {
+      const caregiverData = await usersApi.getById(caregiverId);
+      return caregiverData.name || 'Sin nombre';
+    } catch {
+      return 'Desconocido';
+    }
+  };
+
+  // Cargar nombres de cuidadores que no están en el array
+  useEffect(() => {
+    const loadMissingCaregiverNames = async () => {
+      const missingIds = patients
+        .filter(p => p.caregiver_id && !caregivers.find(c => c.id === p.caregiver_id))
+        .map(p => p.caregiver_id!)
+        .filter((id, index, self) => self.indexOf(id) === index); // unique
+
+      if (missingIds.length === 0) return;
+
+      const names: Record<number, string> = {};
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const caregiver = await usersApi.getById(id);
+            names[id] = caregiver.name || 'Sin nombre';
+          } catch {
+            names[id] = 'Desconocido';
+          }
+        })
+      );
+      setCaregiverNames(prev => ({ ...prev, ...names }));
+    };
+
+    if (patients.length > 0) {
+      loadMissingCaregiverNames();
+    }
+  }, [patients, caregivers]);
+
+  // Función síncrona para obtener nombre del cuidador
+  const getCaregiverNameSync = (caregiverId?: number): string => {
+    if (!caregiverId) return 'Sin asignar';
+    const caregiver = caregivers.find((c) => c.id === caregiverId);
+    if (caregiver) return caregiver.name || 'Sin nombre';
+    return caregiverNames[caregiverId] || 'Cargando...';
   };
 
   return (
@@ -359,23 +403,37 @@ export default function PacientesAdminView() {
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.label}>Cuidador asignado</label>
+              <label style={styles.label}>Cuidador asignado *</label>
               <select
                 name="caregiver_id"
                 value={formData.caregiver_id}
                 onChange={handleInputChange}
                 style={styles.select}
+                required
               >
-                <option value="">Sin asignar</option>
-                {caregivers.map((caregiver) => (
-                  <option key={caregiver.id} value={caregiver.id}>
-                    {caregiver.name}
+                <option value="">Seleccionar cuidador...</option>
+                {caregivers.length === 0 ? (
+                  <option value="" disabled>
+                    No hay cuidadores disponibles
                   </option>
-                ))}
+                ) : (
+                  caregivers.map((caregiver) => (
+                    <option key={caregiver.id} value={caregiver.id}>
+                      {caregiver.name} ({caregiver.email})
+                    </option>
+                  ))
+                )}
               </select>
-              <small style={styles.hint}>
-                Opcional - Puedes asignar un cuidador ahora o después
-              </small>
+              {caregivers.length === 0 && (
+                <small style={{ ...styles.hint, color: '#dc2626' }}>
+                  ⚠️ No hay cuidadores (ASISTENCIAL) activos en el sistema. Debes crear al menos uno antes de crear pacientes.
+                </small>
+              )}
+              {caregivers.length > 0 && (
+                <small style={styles.hint}>
+                  Requerido - Selecciona un cuidador para asignar al paciente
+                </small>
+              )}
             </div>
 
             <div style={styles.formGroup}>
@@ -469,7 +527,7 @@ export default function PacientesAdminView() {
                         color: patient.caregiver_id ? '#4338ca' : '#6b7280',
                       }}
                     >
-                      {getCaregiverName(patient.caregiver_id)}
+                      {getCaregiverNameSync(patient.caregiver_id)}
                     </span>
                   </td>
                   <td style={styles.td}>
