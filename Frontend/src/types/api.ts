@@ -10,6 +10,7 @@ export interface LoginRequest {
 }
 
 export interface SignupRequest {
+  name: string;
   email: string;
   password: string;
   role?: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
