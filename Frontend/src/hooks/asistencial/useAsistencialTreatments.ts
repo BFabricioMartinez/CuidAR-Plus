@@ -36,7 +36,11 @@ const initialFormData: TreatmentFormData = {
 export const useAsistencialTreatments = () => {
   // Estados principales
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  // Leer selectedPatientId desde localStorage al inicializar
+  const [selectedPatientId, setSelectedPatientIdState] = useState<number | null>(() => {
+    const stored = localStorage.getItem('selectedPatientId');
+    return stored ? Number(stored) : null;
+  });
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [formData, setFormData] = useState<TreatmentFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
@@ -72,7 +76,8 @@ export const useAsistencialTreatments = () => {
 
       if (assignments.length === 0) {
         setPatients([]);
-        setSelectedPatientId(null);
+        setSelectedPatientIdState(null);
+        localStorage.removeItem('selectedPatientId');
         return;
       }
 
@@ -86,7 +91,10 @@ export const useAsistencialTreatments = () => {
 
       // Seleccionar el primero por defecto si no hay ninguno seleccionado
       if (!selectedPatientId && patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
+        const firstPatientId = patientsData[0].id;
+        setSelectedPatientIdState(firstPatientId);
+        localStorage.setItem('selectedPatientId', firstPatientId.toString());
+        window.dispatchEvent(new CustomEvent('patientSelected', { detail: firstPatientId }));
       }
     } catch (err) {
       const errorMsg =
@@ -286,10 +294,40 @@ export const useAsistencialTreatments = () => {
 
   // Cambiar paciente seleccionado
   const selectPatient = useCallback((patientId: number) => {
-    setSelectedPatientId(patientId);
+    setSelectedPatientIdState(patientId);
+    localStorage.setItem('selectedPatientId', patientId.toString());
+    window.dispatchEvent(new CustomEvent('patientSelected', { detail: patientId }));
     setShowForm(false);
     setEditingTreatment(null);
   }, []);
+
+  // Effect: Sincronizar selectedPatientId cuando cambia desde otro componente
+  useEffect(() => {
+    const handlePatientSelected = (e: Event) => {
+      const customEvent = e as CustomEvent<number>;
+      if (customEvent.detail !== selectedPatientId) {
+        setSelectedPatientIdState(customEvent.detail);
+      }
+    };
+
+    const handleStorageChange = () => {
+      const stored = localStorage.getItem('selectedPatientId');
+      const storedId = stored ? Number(stored) : null;
+      if (storedId !== selectedPatientId) {
+        setSelectedPatientIdState(storedId);
+      }
+    };
+
+    // Escuchar evento personalizado (mismo tab)
+    window.addEventListener('patientSelected', handlePatientSelected);
+    // Escuchar cambios en localStorage (otros tabs)
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('patientSelected', handlePatientSelected);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [selectedPatientId]);
 
   // Limpiar mensajes
   const clearMessages = useCallback(() => {

@@ -45,11 +45,18 @@ export interface HistoryStats {
 export const useAsistencialHistory = () => {
   // Estados principales
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  // Leer paciente seleccionado desde localStorage al inicializar
+  const [selectedPatientId, setSelectedPatientIdState] = useState<number | null>(() => {
+    const stored = localStorage.getItem('selectedPatientId');
+    return stored ? Number(stored) : null;
+  });
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(true);
 
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -83,7 +90,8 @@ export const useAsistencialHistory = () => {
 
       if (assignments.length === 0) {
         setPatients([]);
-        setSelectedPatientId(null);
+        setSelectedPatientIdState(null);
+        localStorage.removeItem('selectedPatientId');
         return;
       }
 
@@ -97,7 +105,10 @@ export const useAsistencialHistory = () => {
 
       // Seleccionar el primero por defecto si no hay ninguno seleccionado
       if (!selectedPatientId && patientsData.length > 0) {
-        setSelectedPatientId(patientsData[0].id);
+        const firstPatientId = patientsData[0].id;
+        setSelectedPatientIdState(firstPatientId);
+        localStorage.setItem('selectedPatientId', firstPatientId.toString());
+        window.dispatchEvent(new CustomEvent('patientSelected', { detail: firstPatientId }));
       }
     } catch (err) {
       const errorMsg =
@@ -126,85 +137,166 @@ export const useAsistencialHistory = () => {
   }, [selectedPatientId]);
 
   // Cargar historial del paciente seleccionado con filtros
-  const fetchHistory = useCallback(async () => {
-    if (!selectedPatientId) {
-      setHistory([]);
-      return;
-    }
+  const fetchHistory = useCallback(
+    async (cursor: number | null = null) => {
+      if (!selectedPatientId) {
+        setHistory([]);
+        setNextCursor(null);
+        setHasMore(true);
+        return;
+      }
 
-    setLoading(true);
-    setError('');
+      const isInitialLoad = cursor === null;
 
-    try {
-      // Usar el endpoint GET específico para historial de paciente
-      // GET /intake/patient/{patient_id}/history
-      const historyResponse = await intakesApi.getPatientHistory(selectedPatientId);
+      if (isInitialLoad) {
+        setLoading(true);
+        setHistory([]);
+        setNextCursor(null);
+        setHasMore(true);
+      } else {
+        if (!hasMore) return;
+        setLoadingMore(true);
+      }
 
-      let historyData: HistoryItem[] = historyResponse.intakes.map((intake: IntakeLog) => {
-        // Buscar el tratamiento correspondiente para enriquecer los datos
-        const treatment = treatments.find((t) => t.id === intake.treatment_id);
+      setError('');
 
-        return {
-          id: intake.id,
-          treatment_id: intake.treatment_id,
-          taken_at: intake.taken_at,
-          status: intake.status,
-          medication_name: treatment?.medication_name || intake.treatment?.medication_name || 'Desconocido',
-          dosage: treatment?.dosage || intake.treatment?.dosage || '',
-          treatment: intake.treatment,
+      try {
+        const token = localStorage.getItem('token');
+
+        // Preparar filtros para el backend
+        const filters: any = {
+          patient_id: selectedPatientId,
+          order: 'desc',
         };
-      });
 
-      // Aplicar filtros en el cliente
+        // Filtro por estado
+        if (filterStatus !== 'all') {
+          filters.status = filterStatus;
+        }
 
-      // Filtro por estado
-      if (filterStatus !== 'all') {
-        historyData = historyData.filter((item) => item.status === filterStatus);
-      }
+        // Filtro por tratamiento
+        if (filterTreatment !== 'all') {
+          const treatmentId = parseInt(filterTreatment);
+          filters.treatment_id = treatmentId;
+        }
 
-      // Filtro por tratamiento
-      if (filterTreatment !== 'all') {
-        const treatmentId = parseInt(filterTreatment);
-        historyData = historyData.filter((item) => item.treatment_id === treatmentId);
-      }
-
-      // Filtro por fecha
-      if (filterDate) {
-        const filterDateObj = new Date(filterDate);
-        filterDateObj.setHours(0, 0, 0, 0);
-
-        historyData = historyData.filter((item) => {
-          const itemDate = new Date(item.taken_at);
-          itemDate.setHours(0, 0, 0, 0);
-          return itemDate.getTime() === filterDateObj.getTime();
+        const response = await fetch('http://localhost:8000/intake/paginated', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            limit: 20,
+            last_seen_id: cursor,
+            filters,
+          }),
         });
-      }
 
-      setHistory(historyData);
-    } catch (err) {
-      const errorMsg =
-        err instanceof ApiError ? err.message : 'Error al cargar historial';
-      setError(errorMsg);
-      console.error('Error loading history:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedPatientId, filterStatus, filterDate, filterTreatment, treatments]);
+        if (!response.ok) {
+          throw new Error('Error al cargar historial');
+        }
+
+        const responseData = await response.json();
+        let intakes = responseData.intakes || [];
+
+        // Enriquecer con datos del tratamiento
+        let historyData: HistoryItem[] = intakes.map((intake: IntakeLog) => {
+          const treatment = treatments.find((t) => t.id === intake.treatment_id) || intake.treatment || null;
+
+          return {
+            id: intake.id,
+            treatment_id: intake.treatment_id,
+            taken_at: intake.taken_at,
+            status: intake.status,
+            medication_name: treatment?.medication_name || 'Desconocido',
+            dosage: treatment?.dosage || '',
+            treatment: intake.treatment,
+          };
+        });
+
+        // Filtro por fecha en el cliente (para no depender del backend)
+        if (filterDate) {
+          const filterDateObj = new Date(filterDate);
+          filterDateObj.setHours(0, 0, 0, 0);
+
+          historyData = historyData.filter((item) => {
+            const itemDate = new Date(item.taken_at);
+            itemDate.setHours(0, 0, 0, 0);
+            return itemDate.getTime() === filterDateObj.getTime();
+          });
+        }
+
+        // Actualizar datos
+        if (isInitialLoad) {
+          setHistory(historyData);
+        } else {
+          setHistory((prev) => [...prev, ...historyData]);
+        }
+
+        // Actualizar cursor y estado de hasMore
+        setNextCursor(responseData.next_cursor);
+        setHasMore(responseData.next_cursor !== null);
+      } catch (err) {
+        const errorMsg =
+          err instanceof ApiError ? err.message : 'Error al cargar historial';
+        setError(errorMsg);
+        console.error('Error loading history:', err);
+      } finally {
+        if (isInitialLoad) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
+    },
+    [selectedPatientId, filterStatus, filterDate, filterTreatment, treatments, hasMore]
+  );
 
   // Cambiar paciente seleccionado
   const selectPatient = useCallback((patientId: number) => {
-    setSelectedPatientId(patientId);
+    setSelectedPatientIdState(patientId);
+    localStorage.setItem('selectedPatientId', patientId.toString());
+    window.dispatchEvent(new CustomEvent('patientSelected', { detail: patientId }));
     // Resetear filtros al cambiar de paciente
     setFilterStatus('all');
     setFilterDate('');
     setFilterTreatment('all');
   }, []);
 
+  // Sincronizar paciente seleccionado cuando cambia desde navbar / otros componentes
+  useEffect(() => {
+    const handlePatientSelected = (e: Event) => {
+      const customEvent = e as CustomEvent<number>;
+      if (customEvent.detail !== selectedPatientId) {
+        setSelectedPatientIdState(customEvent.detail);
+      }
+    };
+
+    const handleStorageChange = () => {
+      const stored = localStorage.getItem('selectedPatientId');
+      const storedId = stored ? Number(stored) : null;
+      if (storedId !== selectedPatientId) {
+        setSelectedPatientIdState(storedId);
+      }
+    };
+
+    window.addEventListener('patientSelected', handlePatientSelected);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('patientSelected', handlePatientSelected);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [selectedPatientId]);
+
   // Limpiar todos los filtros
   const clearFilters = useCallback(() => {
     setFilterStatus('all');
     setFilterDate('');
     setFilterTreatment('all');
+    setNextCursor(null);
+    setHasMore(true);
   }, []);
 
   // Calcular estadísticas del historial
@@ -242,10 +334,10 @@ export const useAsistencialHistory = () => {
 
   // Effect: Cargar historial cuando cambian los filtros o tratamientos
   useEffect(() => {
-    if (selectedPatientId && treatments.length >= 0) {
+    if (selectedPatientId) {
       fetchHistory();
     }
-  }, [selectedPatientId, treatments, fetchHistory]);
+  }, [selectedPatientId, filterStatus, filterDate, filterTreatment, fetchHistory]);
 
   return {
     // Estados
@@ -255,6 +347,9 @@ export const useAsistencialHistory = () => {
     treatments,
     loading,
     error,
+    loadingMore,
+    nextCursor,
+    hasMore,
     stats,
 
     // Filtros

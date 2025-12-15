@@ -181,68 +181,6 @@ async def get_user_by_id(req: Request, user_id: int):
         )
 
 
-@user.post("/user/create")
-async def create_user(req: Request, data: InputUser):
-    """
-    Crea un nuevo usuario.
-
-    Args:
-        data: Datos del usuario (InputUser)
-
-    Returns:
-        JSONResponse con el usuario creado
-    """
-    try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
-
-        async with AsyncSessionLocal() as session:
-            # Verificar que el email no exista
-            stmt_check = select(User).where(User.email == data.email)
-            result_check = await session.execute(stmt_check)
-            existing_user = result_check.scalar_one_or_none()
-
-            if existing_user:
-                return JSONResponse(
-                    status_code=409,
-                    content={"message": f"El email {data.email} ya está registrado"}
-                )
-
-            # Crear usuario
-            new_user = User(
-                name=data.name,
-                email=data.email,
-                password=data.password,  # Debe hashearse en producción
-                role=data.role.upper() if data.role else "PERSONAL"
-            )
-
-            session.add(new_user)
-            await session.commit()
-            await session.refresh(new_user)
-
-            return JSONResponse(
-                status_code=201,
-                content={
-                    "message": "Usuario creado correctamente",
-                    "user": {
-                        "id": new_user.id,
-                        "name": new_user.name,
-                        "email": new_user.email,
-                        "role": new_user.role,
-                        "active": new_user.active
-                    }
-                }
-            )
-
-    except Exception as error:
-        print("Error al crear usuario ----> ", error)
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"message": "Error al crear usuario"}
-        )
 
 
 @user.put("/user/update")

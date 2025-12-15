@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useAdminDashboard } from '../../hooks/admin/useAdminDashboard';
 
 // ============================================
@@ -9,7 +10,13 @@ export default function AdminDashboard() {
     patientsAdherence,
     loading,
     error,
+    fetchDashboard,
   } = useAdminDashboard();
+
+  // Cargar datos al montar
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   // Calcular color según adherencia
   const getAdherenceColor = (percentage: number | null) => {

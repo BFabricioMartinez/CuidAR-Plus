@@ -1,41 +1,239 @@
-import { useState } from 'react';
-import { useAssignmentsAdmin } from '../../hooks/admin/useAssignmentsAdmin';
+import { useState, useEffect } from 'react';
+import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
+import type { Assignment, AssignmentWithDetails, User, Patient } from '../../api';
+
+// ============================================
+// TIPOS
+// ============================================
+interface AssignmentWithNames {
+  id: number;
+  caregiver_id: number;
+  patient_id: number;
+  active: boolean;
+  created_at?: string;
+  caregiver_name: string;
+  patient_name: string;
+}
+
+interface AssignableItem {
+  id: number;
+  name: string;
+  type: 'patient' | 'personal';
+  email?: string;
+}
 
 // ============================================
 // COMPONENTE
 // ============================================
 export default function AsignacionesView() {
-  const {
-    assignments,
-    caregivers,
-    patients,
-    loading,
-    error,
-    successMessage,
-    filterCaregiver,
-    searchTerm,
-    setFilterCaregiver,
-    setSearchTerm,
-    createAssignment,
-    deleteAssignment,
-  } = useAssignmentsAdmin();
-
+  const [assignments, setAssignments] = useState<AssignmentWithNames[]>([]);
+  const [caregivers, setCaregivers] = useState<User[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [personalUsers, setPersonalUsers] = useState<User[]>([]);
+  const [assignableItems, setAssignableItems] = useState<AssignableItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+
+  // Form
   const [selectedCaregiver, setSelectedCaregiver] = useState<string>('');
   const [selectedPatient, setSelectedPatient] = useState<string>('');
+
+  // Búsqueda en selects
+  const [caregiverSearch, setCaregiverSearch] = useState<string>('');
+  const [patientSearch, setPatientSearch] = useState<string>('');
+
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Cargar datos al montar
+  useEffect(() => {
+    fetchAssignments();
+    fetchCaregivers();
+    fetchPatients();
+    fetchPersonalUsers();
+  }, []);
+
+  // Combinar pacientes y usuarios PERSONAL en una lista unificada
+  useEffect(() => {
+    const items: AssignableItem[] = [
+      ...patients.map(p => ({
+        id: p.id,
+        name: p.name,
+        type: 'patient' as const,
+      })),
+      ...personalUsers.map(u => {
+        // Si no tiene nombre, usar la parte antes del @ del email
+        let displayName = u.name;
+        if (!displayName && u.email) {
+          displayName = u.email.split('@')[0];
+        } else if (!displayName) {
+          displayName = 'Sin nombre';
+        }
+        return {
+          id: u.id,
+          name: displayName,
+          type: 'personal' as const,
+          email: u.email,
+        };
+      }),
+    ];
+    setAssignableItems(items);
+  }, [patients, personalUsers]);
+
+  // Obtener asignaciones
+  const fetchAssignments = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const assignments = await assignmentsApi.getAll();
+
+      // Obtener nombres de cuidadores y pacientes/usuarios PERSONAL
+      const enrichedData = await Promise.all(
+        assignments.map(async (assignment: Assignment) => {
+          try {
+            const caregiver = await usersApi.getById(assignment.caregiver_id);
+            let patientName = 'Desconocido';
+            
+            // Intentar obtener como paciente primero
+            try {
+              const patient = await patientsApi.getById(assignment.patient_id);
+              patientName = patient.name || 'Desconocido';
+            } catch {
+              // Si no es paciente, intentar como usuario PERSONAL
+              try {
+                const user = await usersApi.getById(assignment.patient_id);
+                patientName = user.name || user.email || 'Desconocido';
+              } catch {
+                patientName = 'Desconocido';
+              }
+            }
+
+            // Obtener nombre del cuidador (nombre o parte antes del @ del email)
+            let caregiverName = caregiver.name;
+            if (!caregiverName && caregiver.email) {
+              caregiverName = caregiver.email.split('@')[0];
+            } else if (!caregiverName) {
+              caregiverName = 'Desconocido';
+            }
+
+            return {
+              ...assignment,
+              caregiver_name: caregiverName,
+              patient_name: patientName,
+            };
+          } catch {
+            return {
+              ...assignment,
+              caregiver_name: 'Desconocido',
+              patient_name: 'Desconocido',
+            };
+          }
+        })
+      );
+
+      setAssignments(enrichedData);
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al cargar asignaciones');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Obtener cuidadores (ASISTENCIAL activos)
+  const fetchCaregivers = async () => {
+    try {
+      const caregivers = await usersApi.getByRole('ASISTENCIAL');
+      setCaregivers(caregivers);
+    } catch (err: any) {
+      console.error('Error al cargar cuidadores:', err);
+    }
+  };
+
+  // Obtener pacientes activos
+  const fetchPatients = async () => {
+    try {
+      const response = await patientsApi.list({
+        limit: 100,
+        filters: {
+          active: true,
+        },
+      });
+      setPatients(response.items);
+    } catch (err: any) {
+      console.error('Error al cargar pacientes:', err);
+    }
+  };
+
+  // Obtener usuarios PERSONAL activos
+  const fetchPersonalUsers = async () => {
+    try {
+      const personalUsers = await usersApi.getByRole('PERSONAL');
+      setPersonalUsers(personalUsers);
+    } catch (err: any) {
+      console.error('Error al cargar usuarios PERSONAL:', err);
+    }
+  };
 
   // Crear asignación
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedCaregiver || !selectedPatient) {
+      setError('Debes seleccionar un cuidador y un paciente');
+      setTimeout(() => setError(''), 3000);
       return;
     }
 
-    await createAssignment(Number(selectedCaregiver), Number(selectedPatient));
-    setSelectedCaregiver('');
-    setSelectedPatient('');
-    setShowForm(false);
+    // Verificar si ya existe la asignación
+    const exists = assignments.some(
+      (a) =>
+        a.caregiver_id === Number(selectedCaregiver) &&
+        a.patient_id === Number(selectedPatient) &&
+        a.active
+    );
+
+    if (exists) {
+      setError('Esta asignación ya existe');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await assignmentsApi.create({
+        caregiver_id: Number(selectedCaregiver),
+        patient_id: Number(selectedPatient),
+      });
+
+      setSuccessMessage('Asignación creada exitosamente ✓');
+      setTimeout(() => setSuccessMessage(''), 3000);
+
+      setSelectedCaregiver('');
+      setSelectedPatient('');
+      setCaregiverSearch('');
+      setPatientSearch('');
+      setShowForm(false);
+
+      fetchAssignments();
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al crear asignación');
+      }
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Eliminar asignación
@@ -47,7 +245,26 @@ export default function AsignacionesView() {
     )
       return;
 
-    await deleteAssignment(id);
+    setLoading(true);
+    setError('');
+
+    try {
+      await assignmentsApi.deactivate(id);
+
+      setSuccessMessage('Asignación eliminada exitosamente');
+      setTimeout(() => setSuccessMessage(''), 3000);
+
+      fetchAssignments();
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al eliminar asignación');
+      }
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Cancelar formulario
@@ -55,10 +272,47 @@ export default function AsignacionesView() {
     setShowForm(false);
     setSelectedCaregiver('');
     setSelectedPatient('');
+    setCaregiverSearch('');
+    setPatientSearch('');
   };
 
-  // Agrupar asignaciones por cuidador
-  const groupedAssignments = assignments.reduce((acc, assignment) => {
+  // Filtrar cuidadores por búsqueda
+  const filteredCaregivers = caregivers.filter((caregiver) =>
+    caregiver.name?.toLowerCase().includes(caregiverSearch.toLowerCase()) ||
+    caregiver.email.toLowerCase().includes(caregiverSearch.toLowerCase())
+  );
+
+  // Obtener IDs de pacientes/usuarios que ya tienen asignación activa
+  const assignedIds = new Set(
+    assignments
+      .filter(a => a.active)
+      .map(a => a.patient_id)
+  );
+
+  // Filtrar items asignables: excluir los que ya tienen asignación y aplicar búsqueda
+  const filteredAssignableItems = assignableItems.filter((item) => {
+    // Excluir si ya tiene asignación activa
+    if (assignedIds.has(item.id)) {
+      return false;
+    }
+    // Aplicar filtro de búsqueda
+    return (
+      item.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
+      (item.email && item.email.toLowerCase().includes(patientSearch.toLowerCase()))
+    );
+  });
+
+  // Filtrar asignaciones
+  const filteredAssignments = assignments.filter((assignment) => {
+    const matchesSearch =
+      assignment.caregiver_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assignment.patient_name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return matchesSearch;
+  });
+
+  // Agrupar asignaciones por cuidador (usar filteredAssignments para mostrar solo las filtradas)
+  const groupedAssignments = filteredAssignments.reduce((acc, assignment) => {
     const key = assignment.caregiver_id;
     if (!acc[key]) {
       acc[key] = {
@@ -99,36 +353,58 @@ export default function AsignacionesView() {
             <div style={styles.formRow}>
               <div style={styles.formGroup}>
                 <label style={styles.label}>Cuidador *</label>
+                <input
+                  type="text"
+                  placeholder="Buscar cuidador..."
+                  value={caregiverSearch}
+                  onChange={(e) => setCaregiverSearch(e.target.value)}
+                  style={styles.searchInput}
+                />
                 <select
                   value={selectedCaregiver}
                   onChange={(e) => setSelectedCaregiver(e.target.value)}
-                  style={styles.select}
+                  style={styles.selectWithScroll}
                   required
+                  size={5}
                 >
                   <option value="">Seleccionar cuidador...</option>
-                  {caregivers.map((caregiver) => (
+                  {filteredCaregivers.map((caregiver) => (
                     <option key={caregiver.id} value={caregiver.id}>
                       {caregiver.name} ({caregiver.email})
                     </option>
                   ))}
                 </select>
+                {filteredCaregivers.length === 0 && caregiverSearch && (
+                  <small style={styles.hint}>No se encontraron cuidadores</small>
+                )}
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.label}>Paciente *</label>
+                <label style={styles.label}>Paciente o Usuario Personal *</label>
+                <input
+                  type="text"
+                  placeholder="Buscar paciente o usuario personal..."
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  style={styles.searchInput}
+                />
                 <select
                   value={selectedPatient}
                   onChange={(e) => setSelectedPatient(e.target.value)}
-                  style={styles.select}
+                  style={styles.selectWithScroll}
                   required
+                  size={5}
                 >
-                  <option value="">Seleccionar paciente...</option>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.name}
+                  <option value="">Seleccionar paciente o usuario personal...</option>
+                  {filteredAssignableItems.map((item) => (
+                    <option key={`${item.type}-${item.id}`} value={item.id}>
+                      {item.name} {item.type === 'personal' ? ' [PERSONAL]' : ' [Paciente]'}
                     </option>
                   ))}
                 </select>
+                {filteredAssignableItems.length === 0 && patientSearch && (
+                  <small style={styles.hint}>No se encontraron pacientes ni usuarios personal</small>
+                )}
               </div>
             </div>
 
@@ -146,45 +422,27 @@ export default function AsignacionesView() {
 
       {/* Filtros */}
       <div style={styles.filtersCard}>
-        <div style={styles.filtersGrid}>
-          <div style={styles.filterGroup}>
-            <label style={styles.filterLabel}>Buscar</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.filterInput}
-              placeholder="Cuidador o paciente..."
-            />
-          </div>
-
-          <div style={styles.filterGroup}>
-            <label style={styles.filterLabel}>Cuidador</label>
-            <select
-              value={filterCaregiver}
-              onChange={(e) => setFilterCaregiver(e.target.value)}
-              style={styles.filterSelect}
-            >
-              <option value="all">Todos los cuidadores</option>
-              {caregivers.map((caregiver) => (
-                <option key={caregiver.id} value={caregiver.id}>
-                  {caregiver.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Buscar</label>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={styles.filterInput}
+            placeholder="Cuidador o paciente..."
+          />
         </div>
       </div>
 
       {/* Lista de asignaciones */}
       {loading && assignments.length === 0 ? (
         <div style={styles.loading}>Cargando asignaciones...</div>
-      ) : assignments.length === 0 ? (
+      ) : filteredAssignments.length === 0 ? (
         <div style={styles.emptyState}>
           <p>🔗 No hay asignaciones registradas</p>
           <p style={styles.emptyHint}>
-            {searchTerm || filterCaregiver !== 'all'
-              ? 'Probá cambiando los filtros'
+            {searchTerm
+              ? 'Probá cambiando el filtro de búsqueda'
               : 'Hacé clic en "Nueva Asignación" para comenzar'}
           </p>
         </div>
@@ -336,6 +594,31 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     cursor: 'pointer',
     backgroundColor: '#fff',
+  },
+  searchInput: {
+    padding: '10px',
+    fontSize: '14px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    outline: 'none',
+    marginBottom: '8px',
+    transition: 'border-color 0.2s',
+  },
+  selectWithScroll: {
+    padding: '8px',
+    fontSize: '14px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    outline: 'none',
+    cursor: 'pointer',
+    backgroundColor: '#fff',
+    overflowY: 'auto',
+    maxHeight: '150px',
+  },
+  hint: {
+    fontSize: '12px',
+    color: '#9ca3af',
+    marginTop: '4px',
   },
   formActions: {
     display: 'flex',

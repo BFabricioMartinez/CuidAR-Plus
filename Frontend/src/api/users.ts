@@ -93,7 +93,3 @@ export const usersApi = {
     return apiClient.put<MessageResponse>(`/user/${userId}/deactivate`);
   },
 };
-
-
-
-

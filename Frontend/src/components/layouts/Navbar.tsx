@@ -1,5 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
+import type { JSX } from 'react/jsx-dev-runtime';
 
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
 
@@ -24,6 +26,22 @@ export default function Navbar() {
 
   const userStr = localStorage.getItem('user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
+
+  // Hook para selección de paciente (solo para usuarios asistenciales)
+  const isAsistencial = user?.role === 'ASISTENCIAL';
+  const {
+    patients,
+    selectedPatientId,
+    fetchMyPatients,
+    selectPatient,
+  } = useAsistencialDashboard();
+
+  // Cargar pacientes solo si es usuario asistencial
+  useEffect(() => {
+    if (isAsistencial) {
+      fetchMyPatients();
+    }
+  }, [isAsistencial, fetchMyPatients]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -138,6 +156,27 @@ export default function Navbar() {
             ))}
           </div>
 
+          {/* Patient Selector (Solo para usuarios asistenciales) */}
+          {isAsistencial && patients.length > 0 && (
+            <div className="patient-selector-navbar">
+              <svg className="patient-selector-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+              </svg>
+              <select
+                value={selectedPatientId || ''}
+                onChange={(e) => selectPatient(Number(e.target.value))}
+                className="patient-selector-dropdown"
+                title="Seleccionar paciente"
+              >
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* User Menu */}
           <div className="user-section">
             <div className="user-info">
@@ -178,6 +217,28 @@ export default function Navbar() {
         {/* Mobile Menu */}
         {menuOpen && (
           <div className="mobile-menu">
+            {/* Patient Selector Mobile (Solo para usuarios asistenciales) */}
+            {isAsistencial && patients.length > 0 && (
+              <div className="patient-selector-mobile">
+                <label className="patient-selector-mobile-label">
+                  <svg className="patient-selector-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                  </svg>
+                  Paciente:
+                </label>
+                <select
+                  value={selectedPatientId || ''}
+                  onChange={(e) => selectPatient(Number(e.target.value))}
+                  className="patient-selector-dropdown-mobile"
+                >
+                  {patients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="mobile-menu-links">
               {visibleItems.map((item) => (
                 <button
@@ -340,6 +401,93 @@ export default function Navbar() {
         .nav-link-icon svg {
           width: 100%;
           height: 100%;
+        }
+
+        .patient-selector-navbar {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(102, 126, 234, 0.08);
+          border-radius: 12px;
+          border: 1px solid rgba(102, 126, 234, 0.2);
+          transition: all 0.3s ease;
+        }
+
+        .patient-selector-navbar:hover {
+          background: rgba(102, 126, 234, 0.12);
+          border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .patient-selector-icon {
+          width: 18px;
+          height: 18px;
+          color: #667eea;
+          flex-shrink: 0;
+        }
+
+        .patient-selector-dropdown {
+          background: transparent;
+          border: none;
+          color: #1f2937;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          font-family: inherit;
+          padding: 0.25rem 0.5rem;
+          min-width: 150px;
+          max-width: 200px;
+        }
+
+        .patient-selector-dropdown:hover {
+          color: #667eea;
+        }
+
+        .patient-selector-dropdown:focus {
+          color: #667eea;
+        }
+
+        .patient-selector-mobile {
+          padding: 1rem;
+          margin-bottom: 1rem;
+          background: rgba(102, 126, 234, 0.08);
+          border-radius: 12px;
+          border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .patient-selector-mobile-label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #667eea;
+          margin-bottom: 0.5rem;
+        }
+
+        .patient-selector-dropdown-mobile {
+          width: 100%;
+          padding: 0.75rem;
+          background: #fff;
+          border: 2px solid rgba(102, 126, 234, 0.2);
+          border-radius: 8px;
+          color: #1f2937;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          font-family: inherit;
+          transition: all 0.3s ease;
+        }
+
+        .patient-selector-dropdown-mobile:hover {
+          border-color: #667eea;
+        }
+
+        .patient-selector-dropdown-mobile:focus {
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .user-section {
@@ -527,6 +675,10 @@ export default function Navbar() {
           }
 
           .logout-text {
+            display: none;
+          }
+
+          .patient-selector-navbar {
             display: none;
           }
 

@@ -96,7 +96,7 @@ export const assignmentsApi = {
 
   /**
    * POST /assignment/create
-   * Crea una nueva asignación
+   * Crea una nueva asignación de cuidador a paciente
    */
   create: async (data: { caregiver_id: number; patient_id: number }): Promise<{ message: string; assignment: Assignment }> => {
     return apiClient.post<{ message: string; assignment: Assignment }>('/assignment/create', data);
@@ -106,7 +106,7 @@ export const assignmentsApi = {
    * PUT /assignment/{assignment_id}/deactivate
    * Desactiva una asignación (soft delete)
    */
-  delete: async (assignmentId: number): Promise<{ message: string }> => {
+  deactivate: async (assignmentId: number): Promise<{ message: string }> => {
     return apiClient.put<{ message: string }>(`/assignment/${assignmentId}/deactivate`);
   },
 };
