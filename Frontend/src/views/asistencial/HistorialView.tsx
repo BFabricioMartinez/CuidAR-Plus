@@ -5,7 +5,6 @@ import { useAsistencialHistory } from '../../hooks/asistencial/useAsistencialHis
 // COMPONENTE PRINCIPAL
 // ============================================
 export default function HistorialView() {
-  // Usar el hook personalizado
   const {
     patients,
     selectedPatientId,
@@ -13,7 +12,9 @@ export default function HistorialView() {
     treatments,
     loading,
     error,
-    stats,
+    loadingMore,
+    nextCursor,
+    hasMore,
     filterStatus,
     filterDate,
     filterTreatment,
@@ -21,468 +22,968 @@ export default function HistorialView() {
     setFilterDate,
     setFilterTreatment,
     fetchMyPatients,
-    selectPatient,
     clearFilters,
     formatDate,
     formatTime,
+    fetchHistory,
   } = useAsistencialHistory();
 
-  // Cargar pacientes al montar el componente
   useEffect(() => {
     fetchMyPatients();
   }, [fetchMyPatients]);
 
-  // Nombre del paciente seleccionado
+  // Scroll infinito dentro del cuadro de historial (como en MiHistorial)
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      const scrollHeight = target.scrollHeight;
+      const scrollTop = target.scrollTop;
+      const clientHeight = target.clientHeight;
+
+      if (
+        scrollHeight - scrollTop - clientHeight < 300 &&
+        nextCursor &&
+        !loadingMore &&
+        hasMore
+      ) {
+        fetchHistory(nextCursor);
+      }
+    };
+
+    const scrollContainer = document.querySelector('.history-box-content');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll);
+      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    }
+  }, [nextCursor, loadingMore, hasMore, fetchHistory]);
+
   const selectedPatientName =
     patients.find((p) => p.id === selectedPatientId)?.name || '';
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Historial de Tomas</h1>
-          <p style={styles.subtitle}>Registro de medicación de tus pacientes</p>
+    <div className="history-container">
+      {/* Header with Gradient */}
+      <div className="history-header">
+        <div className="header-content-history">
+          <div className="title-section">
+            <h1 className="page-title">Historial de Tomas</h1>
+            <p className="page-subtitle">Registro de medicación de tus pacientes</p>
+            {selectedPatientName && (
+              <p className="page-subtitle-secondary">
+                Paciente seleccionado: <strong>{selectedPatientName}</strong>
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Selector de Paciente */}
-      <div style={styles.selectorCard}>
-        <label style={styles.selectorLabel}>Seleccionar Paciente:</label>
-        {patients.length === 0 ? (
-          <p style={styles.noPatients}>No tenés pacientes asignados</p>
-        ) : (
-          <select
-            value={selectedPatientId || ''}
-            onChange={(e) => selectPatient(Number(e.target.value))}
-            style={styles.selector}
-          >
-            {patients.map((patient) => (
-              <option key={patient.id} value={patient.id}>
-                {patient.name}
-              </option>
-            ))}
-          </select>
+      <div className="history-content">
+        {/* Estado cuando no hay paciente */}
+        {!selectedPatientId && (
+          <div className="empty-history">
+            <div className="empty-icon">👥</div>
+            <h3 className="empty-title">Seleccioná un paciente</h3>
+            <p className="empty-text">
+              Utilizá el selector de paciente en la barra superior para ver
+              el historial de tomas de un paciente asignado.
+            </p>
+          </div>
+        )}
+
+        {selectedPatientId && (
+          <>
+            {/* Filtros (misma UI que MiHistorial) */}
+            <div className="filters-card">
+              <div className="filters-header">
+                <h3 className="filters-title">
+                  <svg className="filters-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                  </svg>
+                  Filtros de Búsqueda
+                </h3>
+                <button onClick={clearFilters} className="btn-clear-filters">
+                  <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                  Limpiar
+                </button>
+              </div>
+
+              <div className="filters-grid">
+                <div className="filter-field">
+                  <label className="filter-label">
+                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Estado
+                  </label>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="filter-select"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="TAKEN">Tomadas</option>
+                    <option value="MISSED">Omitidas</option>
+                  </select>
+                </div>
+
+                <div className="filter-field">
+                  <label className="filter-label">
+                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                    Fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="filter-input"
+                  />
+                </div>
+
+                <div className="filter-field">
+                  <label className="filter-label">
+                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                    </svg>
+                    Medicamento
+                  </label>
+                  <select
+                    value={filterTreatment}
+                    onChange={(e) => setFilterTreatment(e.target.value)}
+                    className="filter-select"
+                  >
+                    <option value="all">Todos</option>
+                    {treatments.map((treatment) => (
+                      <option key={treatment.id} value={treatment.id}>
+                        {treatment.medication_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="alert alert-error">
+                <svg className="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Cuadro de historial */}
+            <div className="history-box">
+              <div className="history-box-header">
+                <h2 className="history-box-title">
+                  <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                  </svg>
+                  Historial de Tomas del Paciente
+                </h2>
+              </div>
+
+              <div className="history-box-content">
+                {loading ? (
+                  <div className="loading-state">
+                    <div className="loading-spinner">
+                      <div className="spinner-ring"></div>
+                      <div className="spinner-ring"></div>
+                      <div className="spinner-ring"></div>
+                    </div>
+                    <p className="loading-text">Cargando historial...</p>
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="empty-history">
+                    <div className="empty-icon">📋</div>
+                    <h3 className="empty-title">Sin registros</h3>
+                    <p className="empty-text">
+                      {filterStatus !== 'all' || filterDate || filterTreatment !== 'all'
+                        ? 'No hay registros que coincidan con los filtros aplicados'
+                        : 'Todavía no hay tomas registradas para este paciente'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop Table */}
+                    <div className="table-wrapper">
+                      <table className="history-table">
+                        <thead>
+                          <tr className="table-header">
+                            <th className="table-th">Fecha</th>
+                            <th className="table-th">Hora Registrada</th>
+                            <th className="table-th">Medicamento</th>
+                            <th className="table-th">Dosis</th>
+                            <th className="table-th">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {history.map((item, index) => (
+                            <tr
+                              key={item.id}
+                              className="table-row"
+                              style={{ animationDelay: `${index * 0.05}s` }}
+                            >
+                              <td className="table-td td-date">{formatDate(item.taken_at)}</td>
+                              <td className="table-td td-time">{formatTime(item.taken_at)}</td>
+                              <td className="table-td td-med">{item.medication_name}</td>
+                              <td className="table-td td-dosage">{item.dosage}</td>
+                              <td className="table-td">
+                                <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
+                                  {item.status === 'TAKEN' ? (
+                                    <>
+                                      <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      Tomada
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                      </svg>
+                                      Omitida
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="cards-container">
+                      {history.map((item, index) => (
+                        <div key={item.id} className="history-card" style={{ animationDelay: `${index * 0.1}s` }}>
+                          <div className="card-header">
+                            <span className="card-date">{formatDate(item.taken_at)}</span>
+                            <span className={`status-badge ${item.status === 'TAKEN' ? 'badge-taken' : 'badge-missed'}`}>
+                              {item.status === 'TAKEN' ? (
+                                <>
+                                  <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                  Tomada
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="badge-icon" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                  </svg>
+                                  Omitida
+                                </>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="card-body">
+                            <div className="card-row">
+                              <span className="card-label">Medicamento:</span>
+                              <span className="card-value">{item.medication_name}</span>
+                            </div>
+                            <div className="card-row">
+                              <span className="card-label">Dosis:</span>
+                              <span className="card-value">{item.dosage}</span>
+                            </div>
+                            <div className="card-row">
+                              <span className="card-label">Hora registrada:</span>
+                              <span className="card-value">{formatTime(item.taken_at)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Indicador de carga de más registros */}
+                    {loadingMore && (
+                      <div className="loading-more">
+                        <div className="loading-spinner-small">
+                          <div className="spinner-ring-small"></div>
+                          <div className="spinner-ring-small"></div>
+                          <div className="spinner-ring-small"></div>
+                        </div>
+                        <p className="loading-more-text">Cargando más registros...</p>
+                      </div>
+                    )}
+
+                    {/* Mensaje cuando no hay más registros */}
+                    {!loading && !loadingMore && !hasMore && history.length > 0 && (
+                      <div className="end-of-list">
+                        <svg className="end-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <p className="end-text">Has llegado al final del historial</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
-      {selectedPatientId && (
-        <>
-          {/* Estadísticas */}
-          <div style={styles.statsContainer}>
-            <div style={styles.statCard}>
-              <div style={styles.statValue}>{stats.total}</div>
-              <div style={styles.statLabel}>Total Registros</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={{ ...styles.statValue, color: '#10b981' }}>{stats.taken}</div>
-              <div style={styles.statLabel}>Tomadas</div>
-            </div>
-            <div style={styles.statCard}>
-              <div style={{ ...styles.statValue, color: '#f59e0b' }}>{stats.missed}</div>
-              <div style={styles.statLabel}>Omitidas</div>
-            </div>
-          </div>
+      <style>{`
+        .history-container {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          padding-bottom: 4rem;
+        }
 
-          {/* Filtros */}
-          <div style={styles.filtersCard}>
-            <h3 style={styles.filtersTitle}>🔍 Filtros</h3>
+        .history-header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          padding: 3rem 2rem;
+          position: relative;
+          overflow: hidden;
+        }
 
-            <div style={styles.filtersGrid}>
-              {/* Filtro por estado */}
-              <div style={styles.filterGroup}>
-                <label style={styles.filterLabel}>Estado</label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  style={styles.filterSelect}
-                >
-                  <option value="all">Todos</option>
-                  <option value="TAKEN">Tomadas</option>
-                  <option value="MISSED">Omitidas</option>
-                </select>
-              </div>
+        .history-header::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: url('data:image/svg+xml,<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="1.5" fill="rgba(255,255,255,0.1)"/></svg>');
+          opacity: 0.5;
+        }
 
-              {/* Filtro por fecha */}
-              <div style={styles.filterGroup}>
-                <label style={styles.filterLabel}>Fecha</label>
-                <input
-                  type="date"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
-                  style={styles.filterInput}
-                />
-              </div>
+        .header-content-history {
+          max-width: 1400px;
+          margin: 0 auto;
+          position: relative;
+          z-index: 1;
+        }
 
-              {/* Filtro por tratamiento */}
-              <div style={styles.filterGroup}>
-                <label style={styles.filterLabel}>Medicamento</label>
-                <select
-                  value={filterTreatment}
-                  onChange={(e) => setFilterTreatment(e.target.value)}
-                  style={styles.filterSelect}
-                >
-                  <option value="all">Todos</option>
-                  {treatments.map((treatment) => (
-                    <option key={treatment.id} value={treatment.id}>
-                      {treatment.medication_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        .title-section {
+          animation: slideInLeft 0.6s ease-out;
+        }
 
-              {/* Botón limpiar */}
-              <div style={styles.filterGroup}>
-                <label style={styles.filterLabel}>&nbsp;</label>
-                <button onClick={clearFilters} style={styles.btnClear}>
-                  Limpiar Filtros
-                </button>
-              </div>
-            </div>
-          </div>
+        @keyframes slideInLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
 
-          {/* Error */}
-          {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
+        .page-title {
+          font-size: 2.5rem;
+          font-weight: 800;
+          color: #fff;
+          margin: 0 0 0.5rem 0;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
 
-          {/* Lista de historial */}
-          {loading ? (
-            <div style={styles.loading}>Cargando historial...</div>
-          ) : history.length === 0 ? (
-            <div style={styles.emptyState}>
-              <p>📋 No hay registros para {selectedPatientName}</p>
-              <p style={styles.emptyHint}>
-                {filterStatus !== 'all' || filterDate || filterTreatment !== 'all'
-                  ? 'Probá cambiando los filtros'
-                  : 'Todavía no hay tomas registradas'}
-              </p>
-            </div>
-          ) : (
-            <div style={styles.historyList}>
-              {/* Tabla Desktop */}
-              <div style={styles.tableContainer}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr style={styles.tableHeader}>
-                      <th style={styles.th}>Fecha</th>
-                      <th style={styles.th}>Hora Registrada</th>
-                      <th style={styles.th}>Medicamento</th>
-                      <th style={styles.th}>Dosis</th>
-                      <th style={styles.th}>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((item) => (
-                      <tr key={item.id} style={styles.tableRow}>
-                        <td style={styles.td}>{formatDate(item.taken_at)}</td>
-                        <td style={styles.td}>{formatTime(item.taken_at)}</td>
-                        <td style={styles.td}>{item.medication_name}</td>
-                        <td style={styles.td}>{item.dosage}</td>
-                        <td style={styles.td}>
-                          <span
-                            style={{
-                              ...styles.badge,
-                              backgroundColor:
-                                item.status === 'TAKEN' ? '#d1fae5' : '#fed7aa',
-                              color:
-                                item.status === 'TAKEN' ? '#065f46' : '#92400e',
-                            }}
-                          >
-                            {item.status === 'TAKEN' ? '✓ Tomada' : '✗ Omitida'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        .page-subtitle {
+          font-size: 1.125rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          font-weight: 500;
+        }
 
-              {/* Cards Mobile */}
-              <div style={styles.cardsContainer}>
-                {history.map((item) => (
-                  <div key={item.id} style={styles.historyCard}>
-                    <div style={styles.cardHeader}>
-                      <span style={styles.cardDate}>{formatDate(item.taken_at)}</span>
-                      <span
-                        style={{
-                          ...styles.badge,
-                          backgroundColor:
-                            item.status === 'TAKEN' ? '#d1fae5' : '#fed7aa',
-                          color: item.status === 'TAKEN' ? '#065f46' : '#92400e',
-                        }}
-                      >
-                        {item.status === 'TAKEN' ? '✓ Tomada' : '✗ Omitida'}
-                      </span>
-                    </div>
+        .page-subtitle-secondary {
+          margin-top: 0.5rem;
+          font-size: 0.95rem;
+          color: rgba(255, 255, 255, 0.9);
+        }
 
-                    <div style={styles.cardBody}>
-                      <div style={styles.cardRow}>
-                        <span style={styles.cardLabel}>Medicamento:</span>
-                        <span style={styles.cardValue}>{item.medication_name}</span>
-                      </div>
-                      <div style={styles.cardRow}>
-                        <span style={styles.cardLabel}>Dosis:</span>
-                        <span style={styles.cardValue}>{item.dosage}</span>
-                      </div>
-                      <div style={styles.cardRow}>
-                        <span style={styles.cardLabel}>Hora registrada:</span>
-                        <span style={styles.cardValue}>
-                          {formatTime(item.taken_at)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+        .history-content {
+          max-width: 1400px;
+          margin: -2rem auto 0;
+          padding: 0 2rem;
+          position: relative;
+          z-index: 5;
+        }
+
+        .filters-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 20px;
+          padding: 1.75rem 2rem;
+          margin-bottom: 2rem;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          animation: scaleIn 0.4s ease-out 0.5s both;
+        }
+
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        .filters-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+        }
+
+        .filters-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+        }
+
+        .filters-icon {
+          width: 22px;
+          height: 22px;
+          color: #667eea;
+        }
+
+        .btn-clear-filters {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.625rem 1.25rem;
+          background: rgba(102, 126, 234, 0.1);
+          border: 2px solid #667eea;
+          color: #667eea;
+          border-radius: 10px;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .btn-clear-filters:hover {
+          background: #667eea;
+          color: #fff;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-icon {
+          width: 18px;
+          height: 18px;
+        }
+
+        .filters-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 1.25rem;
+        }
+
+        .filter-field {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .filter-label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+        }
+
+        .filter-label-icon {
+          width: 16px;
+          height: 16px;
+          color: #667eea;
+        }
+
+        .filter-select,
+        .filter-input {
+          padding: 0.875rem 1rem;
+          font-size: 1rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 10px;
+          outline: none;
+          transition: all 0.3s ease;
+          background: #f9fafb;
+          font-family: inherit;
+        }
+
+        .filter-select:focus,
+        .filter-input:focus {
+          border-color: #667eea;
+          background: #fff;
+          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .filter-select {
+          cursor: pointer;
+        }
+
+        .alert {
+          padding: 1rem 1.25rem;
+          border-radius: 14px;
+          margin-bottom: 1.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-weight: 500;
+          animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .alert-error {
+          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+          color: #dc2626;
+          border: 1px solid #fca5a5;
+        }
+
+        .alert-icon {
+          width: 22px;
+          height: 22px;
+          flex-shrink: 0;
+        }
+
+        .loading-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 3rem 1.5rem;
+          gap: 2rem;
+        }
+
+        .loading-spinner {
+          position: relative;
+          width: 80px;
+          height: 80px;
+        }
+
+        .spinner-ring {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border: 4px solid transparent;
+          border-top-color: #667eea;
+          border-radius: 50%;
+          animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+        }
+
+        .spinner-ring:nth-child(1) {
+          animation-delay: -0.45s;
+        }
+
+        .spinner-ring:nth-child(2) {
+          animation-delay: -0.3s;
+        }
+
+        .spinner-ring:nth-child(3) {
+          animation-delay: -0.15s;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+          font-size: 1.125rem;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .empty-history {
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 3rem 1.5rem;
+          margin: 1.5rem 0;
+          text-align: center;
+          border: 2px dashed #e5e7eb;
+        }
+
+        .empty-icon {
+          font-size: 5rem;
+          margin-bottom: 1.5rem;
+          opacity: 0.5;
+          animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+
+        .empty-title {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: #4b5563;
+          margin: 0 0 0.75rem 0;
+        }
+
+        .empty-text {
+          font-size: 1rem;
+          color: #6b7280;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        /* Loading more / fin de lista (paginación) */
+        .loading-more {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem 1.5rem;
+          gap: 1.5rem;
+        }
+
+        .loading-spinner-small {
+          position: relative;
+          width: 50px;
+          height: 50px;
+        }
+
+        .spinner-ring-small {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border: 3px solid transparent;
+          border-top-color: #667eea;
+          border-radius: 50%;
+          animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+        }
+
+        .spinner-ring-small:nth-child(1) {
+          animation-delay: -0.45s;
+        }
+
+        .spinner-ring-small:nth-child(2) {
+          animation-delay: -0.3s;
+        }
+
+        .spinner-ring-small:nth-child(3) {
+          animation-delay: -0.15s;
+        }
+
+        .loading-more-text {
+          font-size: 1rem;
+          color: #6b7280;
+          font-weight: 500;
+          margin: 0;
+        }
+
+        .end-of-list {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          padding: 2rem 1.5rem;
+          margin: 1.5rem;
+          background: rgba(102, 126, 234, 0.05);
+          border-radius: 16px;
+          border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .end-icon {
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+          flex-shrink: 0;
+        }
+
+        .end-text {
+          font-size: 1rem;
+          color: #6b7280;
+          font-weight: 600;
+          margin: 0;
+        }
+
+        .history-box {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 180px);
+          animation: fadeInUp 0.6s ease-out 0.6s both;
+        }
+
+        .history-box-header {
+          padding: 1.75rem 2rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-box-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 0;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .title-icon {
+          width: 26px;
+          height: 26px;
+          flex-shrink: 0;
+        }
+
+        .history-box-content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0;
+        }
+
+        .history-box-content::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .history-box-content::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+        }
+
+        .history-box-content::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .history-box-content::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .table-wrapper {
+          border-radius: 12px;
+          overflow: visible;
+        }
+
+        .history-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .table-header {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+
+        .table-th {
+          padding: 1.25rem 1.5rem;
+          text-align: left;
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #fff;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+          position: sticky;
+          top: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          backdrop-filter: blur(10px);
+          z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .table-row {
+          border-bottom: 1px solid #f3f4f6;
+          transition: all 0.2s ease;
+          animation: fadeIn 0.3s ease-out both;
+        }
+
+        .table-row:hover {
+          background: rgba(102, 126, 234, 0.05);
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .table-td {
+          padding: 1.25rem 1.5rem;
+          font-size: 0.9375rem;
+          color: #1f2937;
+        }
+
+        .td-date {
+          font-weight: 600;
+        }
+
+        .td-time {
+          font-weight: 500;
+          color: #4b5563;
+        }
+
+        .td-med {
+          font-weight: 700;
+          color: #667eea;
+        }
+
+        .td-dosage {
+          color: #6b7280;
+        }
+
+        .status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 50px;
+          font-size: 0.875rem;
+          font-weight: 700;
+        }
+
+        .badge-taken {
+          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+          color: #065f46;
+          border: 1px solid #6ee7b7;
+        }
+
+        .badge-missed {
+          background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+          color: #92400e;
+          border: 1px solid #fb923c;
+        }
+
+        .badge-icon {
+          width: 18px;
+          height: 18px;
+        }
+
+        .cards-container {
+          display: none;
+          flex-direction: column;
+          gap: 1.25rem;
+          padding: 1.5rem;
+        }
+
+        .history-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 16px;
+          overflow: hidden;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+          animation: fadeInUp 0.4s ease-out both;
+        }
+
+        .card-header {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+          padding: 1.25rem 1.5rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid #f3f4f6;
+        }
+
+        .card-date {
+          font-size: 0.9375rem;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .card-body {
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .card-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .card-label {
+          font-size: 0.875rem;
+          color: #6b7280;
+          font-weight: 500;
+        }
+
+        .card-value {
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        @media (max-width: 1024px) {
+          .table-wrapper {
+            display: none;
+          }
+
+          .cards-container {
+            display: flex;
+            animation: fadeInUp 0.6s ease-out 0.6s both;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .history-header {
+            padding: 2rem 1.5rem;
+          }
+
+          .page-title {
+            font-size: 2rem;
+          }
+
+          .history-content {
+            padding: 0 1.5rem;
+          }
+
+          .filters-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .filters-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1rem;
+          }
+
+          .btn-clear-filters {
+            width: 100%;
+            justify-content: center;
+          }
+        }
+      `}</style>
     </div>
   );
-}
-
-// ============================================
-// ESTILOS
-// ============================================
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  header: {
-    marginBottom: '30px',
-  },
-  title: {
-    fontSize: '32px',
-    fontWeight: 700,
-    color: '#1f2937',
-    margin: '0 0 8px 0',
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#6b7280',
-    margin: 0,
-  },
-  selectorCard: {
-    backgroundColor: '#fff',
-    padding: '24px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    marginBottom: '30px',
-  },
-  selectorLabel: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: '#1f2937',
-    display: 'block',
-    marginBottom: '12px',
-  },
-  selector: {
-    width: '100%',
-    padding: '12px 16px',
-    fontSize: '16px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    cursor: 'pointer',
-    backgroundColor: '#fff',
-  },
-  noPatients: {
-    color: '#6b7280',
-    fontStyle: 'italic',
-  },
-  statsContainer: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '15px',
-    marginBottom: '30px',
-  },
-  statCard: {
-    backgroundColor: '#fff',
-    padding: '20px',
-    borderRadius: '10px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    textAlign: 'center',
-  },
-  statValue: {
-    fontSize: '32px',
-    fontWeight: 700,
-    color: '#667eea',
-    marginBottom: '8px',
-  },
-  statLabel: {
-    fontSize: '14px',
-    color: '#6b7280',
-  },
-  filtersCard: {
-    backgroundColor: '#fff',
-    padding: '24px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    marginBottom: '30px',
-  },
-  filtersTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '20px',
-  },
-  filtersGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '15px',
-  },
-  filterGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  filterLabel: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: '#374151',
-  },
-  filterSelect: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  filterInput: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-  },
-  btnClear: {
-    padding: '10px',
-    fontSize: '14px',
-    fontWeight: 600,
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-    color: '#6b7280',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  loading: {
-    textAlign: 'center',
-    padding: '40px',
-    color: '#6b7280',
-  },
-  errorAlert: {
-    backgroundColor: '#fef2f2',
-    color: '#dc2626',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    border: '1px solid #fecaca',
-  },
-  emptyState: {
-    backgroundColor: '#f9fafb',
-    padding: '60px 40px',
-    borderRadius: '12px',
-    textAlign: 'center',
-    color: '#6b7280',
-  },
-  emptyHint: {
-    fontSize: '14px',
-    marginTop: '8px',
-  },
-  historyList: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
-  },
-  tableContainer: {
-    overflowX: 'auto',
-    display: 'block',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-  },
-  tableHeader: {
-    backgroundColor: '#f9fafb',
-  },
-  th: {
-    padding: '16px',
-    textAlign: 'left',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#374151',
-    borderBottom: '2px solid #e5e7eb',
-  },
-  tableRow: {
-    borderBottom: '1px solid #e5e7eb',
-    transition: 'background-color 0.2s',
-  },
-  td: {
-    padding: '16px',
-    fontSize: '14px',
-    color: '#1f2937',
-  },
-  badge: {
-    padding: '4px 12px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    display: 'inline-block',
-  },
-  cardsContainer: {
-    display: 'none',
-    flexDirection: 'column',
-    gap: '12px',
-    padding: '15px',
-  },
-  historyCard: {
-    border: '1px solid #e5e7eb',
-    borderRadius: '10px',
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    backgroundColor: '#f9fafb',
-    padding: '12px 15px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '1px solid #e5e7eb',
-  },
-  cardDate: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#1f2937',
-  },
-  cardBody: {
-    padding: '15px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  cardRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-  },
-  cardLabel: {
-    fontSize: '13px',
-    color: '#6b7280',
-  },
-  cardValue: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: '#1f2937',
-  },
-};
-
-// Media query para mobile
-const mediaQuery = window.matchMedia('(max-width: 768px)');
-if (mediaQuery.matches) {
-  styles.tableContainer = { display: 'none' };
-  styles.cardsContainer = { ...styles.cardsContainer, display: 'flex' };
 }
