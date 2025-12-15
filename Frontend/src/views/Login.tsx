@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, ApiError } from '../api';
+import { toastSuccess } from '../utils/toast';
 
 // ============================================
 // TIPOS
@@ -84,7 +85,7 @@ const Login: React.FC = () => {
         setIsLogin(true);
         setFormData({ email: '', password: '', confirmPassword: '', role: 'PERSONAL', name: '' });
         setError('');
-        alert('Cuenta creada exitosamente. Ahora puedes iniciar sesión.');
+        toastSuccess('Cuenta creada exitosamente. Ahora puedes iniciar sesión.');
       }
     } catch (err) {
       if (err instanceof ApiError) {
