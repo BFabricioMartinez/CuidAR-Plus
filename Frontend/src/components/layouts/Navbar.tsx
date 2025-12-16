@@ -716,12 +716,24 @@ export default function Navbar() {
             display: none;
           }
 
-          .logout-text {
+          .logout-btn {
             display: none;
           }
 
+          /* Mantener selector de pacientes visible en mobile */
           .patient-selector-navbar {
-            display: none;
+            display: flex;
+          }
+
+          /* Ajustar tamaño del selector en mobile */
+          .patient-selector-dropdown {
+            min-width: 120px;
+            max-width: 150px;
+            font-size: 0.875rem;
+          }
+
+          .patients-count-text {
+            font-size: 0.8125rem;
           }
 
           .mobile-menu-toggle {
@@ -734,14 +746,37 @@ export default function Navbar() {
         @media (max-width: 640px) {
           .navbar-container {
             padding: 0.75rem 1.5rem;
+            gap: 1rem;
           }
 
           .brand-name {
             font-size: 1.25rem;
           }
 
-          .logout-btn {
-            padding: 0.625rem;
+          /* Ajustar selector en pantallas pequeñas */
+          .patient-selector-navbar {
+            padding: 0.5rem 0.75rem;
+            gap: 0.5rem;
+          }
+
+          .patient-selector-dropdown {
+            min-width: 100px;
+            max-width: 120px;
+            font-size: 0.8125rem;
+            padding: 0.125rem 0.25rem;
+          }
+
+          .patients-count-text {
+            font-size: 0.75rem;
+          }
+
+          .patient-selector-icon {
+            width: 16px;
+            height: 16px;
+          }
+
+          .patient-selector-divider {
+            height: 20px;
           }
         }
       `}</style>

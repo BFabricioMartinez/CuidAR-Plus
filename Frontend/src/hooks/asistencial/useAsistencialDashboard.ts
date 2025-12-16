@@ -19,6 +19,17 @@ export interface UpcomingDose {
   dosage: string;
   time: string;
   frequency: string;
+  patient_id?: number;
+  patient_name?: string;
+}
+
+export interface PatientAdherence {
+  patient_id: number;
+  patient_name: string;
+  adherence_percentage: number | null;
+  taken: number;
+  missed: number;
+  total: number;
 }
 
 // ============================================
@@ -41,6 +52,8 @@ export const useAsistencialDashboard = () => {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [upcomingDoses, setUpcomingDoses] = useState<UpcomingDose[]>([]);
   const [stats, setStats] = useState<MyStats | null>(null);
+  const [patientsAdherence, setPatientsAdherence] = useState<PatientAdherence[]>([]);
+  const [allUpcomingDoses, setAllUpcomingDoses] = useState<UpcomingDose[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -192,6 +205,114 @@ export const useAsistencialDashboard = () => {
       setLoading(false);
     }
   }, [getUserFromStorage, selectedPatientId]);
+
+  // Calcular adherencia y próximas dosis para todos los pacientes (Vista General)
+  const calculateAllPatientsData = useCallback(async () => {
+    try {
+      const user = getUserFromStorage();
+      if (!user || !user.id || patients.length === 0) {
+        setPatientsAdherence([]);
+        setAllUpcomingDoses([]);
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const adherenceData: PatientAdherence[] = [];
+      const allDoses: UpcomingDose[] = [];
+
+      // Procesar cada paciente
+      for (const patient of patients) {
+        try {
+          // Obtener tratamientos del paciente
+          const treatmentsData = await treatmentsApi.getByPatient(patient.id);
+
+          // Obtener intakes del paciente
+          const intakesResponse = await intakesApi.list({
+            filters: {
+              patient_id: patient.id,
+              order: 'desc'
+            },
+            limit: 100
+          });
+
+          // Filtrar intakes de hoy
+          const todayIntakes = intakesResponse.items.filter((intake: IntakeLog) => {
+            if (!intake.taken_at) return false;
+            const intakeDate = new Date(intake.taken_at);
+            intakeDate.setHours(0, 0, 0, 0);
+            return intakeDate.getTime() === today.getTime();
+          });
+
+          // Calcular estadísticas de adherencia
+          const taken = todayIntakes.filter((i: IntakeLog) => i.status === 'TAKEN').length;
+          const missed = todayIntakes.filter((i: IntakeLog) => i.status === 'MISSED').length;
+          const total = taken + missed;
+          const adherence_percentage = total > 0 ? (taken / total) * 100 : null;
+
+          adherenceData.push({
+            patient_id: patient.id,
+            patient_name: patient.name,
+            adherence_percentage,
+            taken,
+            missed,
+            total,
+          });
+
+          // Calcular próximas dosis del paciente
+          const todayIntakesSet = new Set<string>();
+          todayIntakes.forEach((intake: IntakeLog) => {
+            if (intake.taken_at) {
+              const intakeDate = new Date(intake.taken_at);
+              const time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+              const key = `${intake.treatment_id}-${time}`;
+              todayIntakesSet.add(key);
+            }
+          });
+
+          // Generar dosis pendientes
+          treatmentsData.treatments.forEach((treatment) => {
+            const times = parseTimesFromFrequency(treatment.frequency);
+            times.forEach((time) => {
+              const doseKey = `${treatment.id}-${time}`;
+              if (!todayIntakesSet.has(doseKey)) {
+                allDoses.push({
+                  treatment_id: treatment.id,
+                  med_name: treatment.medication_name,
+                  dosage: treatment.dosage || '',
+                  time,
+                  frequency: treatment.frequency,
+                  patient_id: patient.id,
+                  patient_name: patient.name,
+                });
+              }
+            });
+          });
+        } catch (err) {
+          console.error(`Error processing patient ${patient.id}:`, err);
+        }
+      }
+
+      // Ordenar adherencia por porcentaje (descendente)
+      adherenceData.sort((a, b) => {
+        if (a.adherence_percentage === null && b.adherence_percentage === null) return 0;
+        if (a.adherence_percentage === null) return 1;
+        if (b.adherence_percentage === null) return -1;
+        return b.adherence_percentage - a.adherence_percentage;
+      });
+
+      // Ordenar dosis por hora
+      allDoses.sort((a, b) => a.time.localeCompare(b.time));
+
+      setPatientsAdherence(adherenceData);
+      setAllUpcomingDoses(allDoses);
+    } catch (err) {
+      console.error('Error calculating all patients data:', err);
+      setPatientsAdherence([]);
+      setAllUpcomingDoses([]);
+    }
+  }, [getUserFromStorage, patients, parseTimesFromFrequency]);
 
   // Cargar estadísticas del cuidador o del paciente seleccionado
   const fetchMyStats = useCallback(async () => {
@@ -414,6 +535,16 @@ export const useAsistencialDashboard = () => {
     fetchMyStats();
   }, [selectedPatientId, fetchMyStats]);
 
+  // Effect: Calcular datos de todos los pacientes cuando está en Vista General
+  useEffect(() => {
+    if (selectedPatientId === null && patients.length > 0) {
+      calculateAllPatientsData();
+    } else {
+      setPatientsAdherence([]);
+      setAllUpcomingDoses([]);
+    }
+  }, [selectedPatientId, patients, calculateAllPatientsData]);
+
   return {
     // Estados
     patients,
@@ -421,6 +552,8 @@ export const useAsistencialDashboard = () => {
     treatments,
     upcomingDoses,
     stats,
+    patientsAdherence,
+    allUpcomingDoses,
     loading,
     error,
     successMessage,
