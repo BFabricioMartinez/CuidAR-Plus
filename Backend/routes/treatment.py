@@ -553,6 +553,7 @@ async def deactivate_treatment(req: Request, treatment_id: int):
     Control de acceso por rol:
     - ADMIN: puede desactivar cualquier tratamiento
     - PERSONAL: solo puede desactivar tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+    - ASISTENCIAL: solo puede desactivar tratamientos de pacientes con Assignment activa (Assignment.caregiver_id == user_id)
 
     Args:
         treatment_id: ID del tratamiento
@@ -561,8 +562,8 @@ async def deactivate_treatment(req: Request, treatment_id: int):
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token y rol (ADMIN, PERSONAL)
-        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        # Verificar token y rol (ADMIN, PERSONAL, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL", "ASISTENCIAL"])
         if isinstance(payload, JSONResponse):
             return payload
 
@@ -590,6 +591,22 @@ async def deactivate_treatment(req: Request, treatment_id: int):
                 patient_check = result_patient_check.scalar_one_or_none()
 
                 if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa para el paciente del tratamiento
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == treatment_found.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
                     return JSONResponse(
                         status_code=403,
                         content={"message": "Acceso denegado"}
