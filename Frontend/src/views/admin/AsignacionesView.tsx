@@ -401,570 +401,968 @@ export default function AsignacionesView() {
   }, {} as Record<number, { caregiver_name: string; caregiver_id: number; patients: AssignmentWithNames[] }>);
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Gestión de Asignaciones</h1>
-          <p style={styles.subtitle}>Asigna cuidadores a pacientes</p>
+    <div className="admin-assignments-container">
+      {/* Header con gradiente */}
+      <div className="admin-assignments-header">
+        <div className="header-content">
+          <div className="welcome-section">
+            <h1 className="admin-assignments-title">Gestión de Asignaciones</h1>
+            <p className="admin-assignments-subtitle">Asigna cuidadores a pacientes</p>
+          </div>
+          {!showForm && !showCreatePatientForm && (
+            <div className="header-buttons">
+              <button onClick={() => setShowCreatePatientForm(true)} className="admin-btn-add-patient">
+                <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                Crear Paciente
+              </button>
+              <button onClick={() => setShowForm(true)} className="admin-btn-add">
+                <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                Nueva Asignación
+              </button>
+            </div>
+          )}
         </div>
-        {!showForm && !showCreatePatientForm && (
-          <div style={styles.headerButtons}>
-            <button onClick={() => setShowCreatePatientForm(true)} style={styles.btnAddPatient}>
-              + Crear Paciente
-            </button>
-            <button onClick={() => setShowForm(true)} style={styles.btnAdd}>
-              + Nueva Asignación
-            </button>
+      </div>
+
+      <div className="admin-assignments-content">
+
+        {/* Formulario de Crear Paciente */}
+        {showCreatePatientForm && (
+          <div className="admin-form-card">
+            <div className="form-header">
+              <h2 className="form-title">Crear Nuevo Paciente</h2>
+              <button type="button" onClick={cancelPatientForm} className="btn-close-form">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePatient} className="admin-form">
+              <div className="form-grid">
+                <div className="form-field">
+                  <label className="field-label">
+                    <svg className="label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    Nombre completo <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={patientFormData.name}
+                    onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
+                    className="field-input"
+                    placeholder="Ej: María González"
+                    required
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">
+                    <svg className="label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    Cuidador asignado <span className="required">*</span>
+                  </label>
+                  <select
+                    value={patientFormData.caregiver_id}
+                    onChange={(e) => setPatientFormData({ ...patientFormData, caregiver_id: e.target.value })}
+                    className="field-input"
+                    required
+                  >
+                    <option value="">Seleccionar cuidador...</option>
+                    {caregivers.length === 0 ? (
+                      <option value="" disabled>
+                        No hay cuidadores disponibles
+                      </option>
+                    ) : (
+                      caregivers.map((caregiver) => (
+                        <option key={caregiver.id} value={caregiver.id}>
+                          {caregiver.name} ({caregiver.email})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {caregivers.length === 0 && (
+                    <small className="field-hint" style={{ color: '#dc2626' }}>
+                      ⚠️ No hay cuidadores (ASISTENCIAL) activos en el sistema.
+                    </small>
+                  )}
+                </div>
+
+                <div className="form-field form-field-full">
+                  <label className="field-label">
+                    <svg className="label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    Notas
+                  </label>
+                  <textarea
+                    value={patientFormData.notes}
+                    onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
+                    className="field-textarea"
+                    placeholder="Información adicional sobre el paciente..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={cancelPatientForm} className="btn-cancel">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-submit" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <svg className="spinner-small" viewBox="0 0 24 24" fill="none">
+                        <circle className="spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="spinner-path" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="btn-icon-submit" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Crear Paciente
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Formulario de Asignación */}
+        {showForm && (
+          <div className="admin-form-card">
+            <div className="form-header">
+              <h2 className="form-title">Nueva Asignación</h2>
+              <button type="button" onClick={cancelForm} className="btn-close-form">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreate} className="admin-form">
+              <div className="form-grid">
+                <div className="form-field">
+                  <label className="field-label">
+                    <svg className="label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    Cuidador <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Buscar cuidador..."
+                    value={caregiverSearch}
+                    onChange={(e) => setCaregiverSearch(e.target.value)}
+                    className="field-input"
+                  />
+                  <select
+                    value={selectedCaregiver}
+                    onChange={(e) => setSelectedCaregiver(e.target.value)}
+                    className="field-input"
+                    style={{ marginTop: '0.5rem', minHeight: '120px' }}
+                    required
+                    size={5}
+                  >
+                    <option value="">Seleccionar cuidador...</option>
+                    {filteredCaregivers.map((caregiver) => (
+                      <option key={caregiver.id} value={caregiver.id}>
+                        {caregiver.name} ({caregiver.email})
+                      </option>
+                    ))}
+                  </select>
+                  {filteredCaregivers.length === 0 && caregiverSearch && (
+                    <small className="field-hint">No se encontraron cuidadores</small>
+                  )}
+                </div>
+
+                <div className="form-field">
+                  <label className="field-label">
+                    <svg className="label-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                    Paciente o Usuario Personal <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Buscar paciente o usuario personal..."
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    className="field-input"
+                  />
+                  <select
+                    value={selectedPatient}
+                    onChange={(e) => setSelectedPatient(e.target.value)}
+                    className="field-input"
+                    style={{ marginTop: '0.5rem', minHeight: '120px' }}
+                    required
+                    size={5}
+                  >
+                    <option value="">Seleccionar paciente o usuario personal...</option>
+                    {filteredAssignableItems.map((item) => (
+                      <option key={`${item.type}-${item.id}`} value={item.id}>
+                        {item.name} {item.type === 'personal' ? ' [PERSONAL]' : ' [Paciente]'}
+                      </option>
+                    ))}
+                  </select>
+                  {filteredAssignableItems.length === 0 && patientSearch && (
+                    <small className="field-hint">No se encontraron pacientes ni usuarios personal</small>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={cancelForm} className="btn-cancel">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-submit" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <svg className="spinner-small" viewBox="0 0 24 24" fill="none">
+                        <circle className="spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="spinner-path" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Asignando...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="btn-icon-submit" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Crear Asignación
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Filtros */}
+        <div className="admin-filters-card">
+          <div className="filter-group">
+            <label className="filter-label">Buscar</label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="filter-input"
+              placeholder="Cuidador o paciente..."
+            />
+          </div>
+        </div>
+
+        {/* Lista de asignaciones */}
+        {loading && assignments.length === 0 ? (
+          <div className="admin-loading">Cargando asignaciones...</div>
+        ) : filteredAssignments.length === 0 ? (
+          <div className="admin-empty-state">
+            <div className="empty-icon">🔗</div>
+            <h3 className="empty-title">No hay asignaciones registradas</h3>
+            <p className="empty-text">
+              {searchTerm
+                ? 'Probá cambiando el filtro de búsqueda'
+                : 'Hacé clic en "Nueva Asignación" para comenzar'}
+            </p>
+          </div>
+        ) : (
+          <div className="admin-assignments-grid">
+            {Object.values(groupedAssignments).map((group) => (
+              <div key={group.caregiver_id} className="admin-caregiver-card">
+                <div className="caregiver-card-header">
+                  <div className="caregiver-icon-wrapper">
+                    <svg className="caregiver-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                  </div>
+                  <div className="caregiver-info">
+                    <h3 className="caregiver-name">{group.caregiver_name}</h3>
+                    <p className="caregiver-count">
+                      {group.patients.length} paciente{group.patients.length !== 1 ? 's' : ''} asignado{group.patients.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="patients-grid">
+                  {group.patients.map((assignment) => (
+                    <div key={assignment.id} className="admin-patient-item">
+                      <div className="patient-icon-wrapper">
+                        <svg className="patient-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="patient-info">
+                        <div className="patient-name">{assignment.patient_name}</div>
+                        <div className="patient-date">
+                          Desde: {new Date(assignment.created_at || '').toLocaleDateString('es-AR')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() =>
+                          handleDelete(
+                            assignment.id,
+                            assignment.caregiver_name,
+                            assignment.patient_name
+                          )
+                        }
+                        className="admin-btn-remove"
+                        title="Eliminar asignación"
+                      >
+                        <svg className="remove-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Formulario de Crear Paciente */}
-      {showCreatePatientForm && (
-        <div style={styles.formCard}>
-          <h2 style={styles.formTitle}>Crear Nuevo Paciente</h2>
+      <style>{`
+        .admin-assignments-container {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          padding-bottom: 4rem;
+        }
 
-          <form onSubmit={handleCreatePatient} style={styles.form}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Nombre completo *</label>
-              <input
-                type="text"
-                value={patientFormData.name}
-                onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
-                style={styles.input}
-                placeholder="Ej: María González"
-                required
-              />
-            </div>
+        .admin-assignments-header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          padding: 3rem 2rem 4rem;
+          position: relative;
+          overflow: hidden;
+        }
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Cuidador asignado *</label>
-              <select
-                value={patientFormData.caregiver_id}
-                onChange={(e) => setPatientFormData({ ...patientFormData, caregiver_id: e.target.value })}
-                style={styles.select}
-                required
-              >
-                <option value="">Seleccionar cuidador...</option>
-                {caregivers.length === 0 ? (
-                  <option value="" disabled>
-                    No hay cuidadores disponibles
-                  </option>
-                ) : (
-                  caregivers.map((caregiver) => (
-                    <option key={caregiver.id} value={caregiver.id}>
-                      {caregiver.name} ({caregiver.email})
-                    </option>
-                  ))
-                )}
-              </select>
-              {caregivers.length === 0 && (
-                <small style={{ ...styles.hint, color: '#dc2626' }}>
-                  ⚠️ No hay cuidadores (ASISTENCIAL) activos en el sistema.
-                </small>
-              )}
-            </div>
+        .admin-assignments-header::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: url('data:image/svg+xml,<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><circle cx="30" cy="30" r="1.5" fill="rgba(255,255,255,0.1)"/></svg>');
+          opacity: 0.5;
+        }
 
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Notas</label>
-              <textarea
-                value={patientFormData.notes}
-                onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
-                style={styles.textarea}
-                placeholder="Información adicional sobre el paciente..."
-                rows={3}
-              />
-            </div>
+        .header-content {
+          max-width: 1400px;
+          margin: 0 auto;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 1.5rem;
+          position: relative;
+          z-index: 1;
+        }
 
-            <div style={styles.formActions}>
-              <button type="button" onClick={cancelPatientForm} style={styles.btnCancel}>
-                Cancelar
-              </button>
-              <button type="submit" style={styles.btnSubmit} disabled={loading}>
-                {loading ? 'Guardando...' : 'Crear Paciente'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+        .welcome-section {
+          animation: slideInLeft 0.6s ease-out;
+        }
 
-      {/* Formulario de Asignación */}
-      {showForm && (
-        <div style={styles.formCard}>
-          <h2 style={styles.formTitle}>Nueva Asignación</h2>
+        @keyframes slideInLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
 
-          <form onSubmit={handleCreate} style={styles.form}>
-            <div style={styles.formRow}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Cuidador *</label>
-                <input
-                  type="text"
-                  placeholder="Buscar cuidador..."
-                  value={caregiverSearch}
-                  onChange={(e) => setCaregiverSearch(e.target.value)}
-                  style={styles.searchInput}
-                />
-                <select
-                  value={selectedCaregiver}
-                  onChange={(e) => setSelectedCaregiver(e.target.value)}
-                  style={styles.selectWithScroll}
-                  required
-                  size={5}
-                >
-                  <option value="">Seleccionar cuidador...</option>
-                  {filteredCaregivers.map((caregiver) => (
-                    <option key={caregiver.id} value={caregiver.id}>
-                      {caregiver.name} ({caregiver.email})
-                    </option>
-                  ))}
-                </select>
-                {filteredCaregivers.length === 0 && caregiverSearch && (
-                  <small style={styles.hint}>No se encontraron cuidadores</small>
-                )}
-              </div>
+        .admin-assignments-title {
+          font-size: 2.5rem;
+          font-weight: 800;
+          color: #fff;
+          margin: 0 0 0.5rem 0;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
 
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Paciente o Usuario Personal *</label>
-                <input
-                  type="text"
-                  placeholder="Buscar paciente o usuario personal..."
-                  value={patientSearch}
-                  onChange={(e) => setPatientSearch(e.target.value)}
-                  style={styles.searchInput}
-                />
-                <select
-                  value={selectedPatient}
-                  onChange={(e) => setSelectedPatient(e.target.value)}
-                  style={styles.selectWithScroll}
-                  required
-                  size={5}
-                >
-                  <option value="">Seleccionar paciente o usuario personal...</option>
-                  {filteredAssignableItems.map((item) => (
-                    <option key={`${item.type}-${item.id}`} value={item.id}>
-                      {item.name} {item.type === 'personal' ? ' [PERSONAL]' : ' [Paciente]'}
-                    </option>
-                  ))}
-                </select>
-                {filteredAssignableItems.length === 0 && patientSearch && (
-                  <small style={styles.hint}>No se encontraron pacientes ni usuarios personal</small>
-                )}
-              </div>
-            </div>
+        .admin-assignments-subtitle {
+          font-size: 1.125rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          font-weight: 500;
+        }
 
-            <div style={styles.formActions}>
-              <button type="button" onClick={cancelForm} style={styles.btnCancel}>
-                Cancelar
-              </button>
-              <button type="submit" style={styles.btnSubmit} disabled={loading}>
-                {loading ? 'Asignando...' : 'Crear Asignación'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+        .header-buttons {
+          display: flex;
+          gap: 1rem;
+        }
 
-      {/* Filtros */}
-      <div style={styles.filtersCard}>
-        <div style={styles.filterGroup}>
-          <label style={styles.filterLabel}>Buscar</label>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={styles.filterInput}
-            placeholder="Cuidador o paciente..."
-          />
-        </div>
-      </div>
+        .admin-btn-add {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 1rem 1.75rem;
+          background: rgba(255, 255, 255, 0.95);
+          color: #667eea;
+          border: none;
+          border-radius: 14px;
+          font-size: 1rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+          animation: slideInRight 0.6s ease-out;
+          font-family: inherit;
+        }
 
-      {/* Lista de asignaciones */}
-      {loading && assignments.length === 0 ? (
-        <div style={styles.loading}>Cargando asignaciones...</div>
-      ) : filteredAssignments.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p>🔗 No hay asignaciones registradas</p>
-          <p style={styles.emptyHint}>
-            {searchTerm
-              ? 'Probá cambiando el filtro de búsqueda'
-              : 'Hacé clic en "Nueva Asignación" para comenzar'}
-          </p>
-        </div>
-      ) : (
-        <div style={styles.assignmentsContainer}>
-          {Object.values(groupedAssignments).map((group) => (
-            <div key={group.caregiver_id} style={styles.caregiverCard}>
-              <div style={styles.caregiverHeader}>
-                <div style={styles.caregiverIcon}>👨‍⚕️</div>
-                <div style={styles.caregiverInfo}>
-                  <h3 style={styles.caregiverName}>{group.caregiver_name}</h3>
-                  <p style={styles.caregiverCount}>
-                    {group.patients.length} paciente{group.patients.length !== 1 ? 's' : ''} asignado{group.patients.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-              </div>
+        .admin-btn-add-patient {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 1rem 1.75rem;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%);
+          color: #fff;
+          border: none;
+          border-radius: 14px;
+          font-size: 1rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+          animation: slideInRight 0.6s ease-out;
+          font-family: inherit;
+        }
 
-              <div style={styles.patientsGrid}>
-                {group.patients.map((assignment) => (
-                  <div key={assignment.id} style={styles.patientItem}>
-                    <div style={styles.patientIcon}>🏥</div>
-                    <div style={styles.patientInfo}>
-                      <div style={styles.patientName}>{assignment.patient_name}</div>
-                      <div style={styles.patientDate}>
-                        Desde: {new Date(assignment.created_at || '').toLocaleDateString('es-AR')}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() =>
-                        handleDelete(
-                          assignment.id,
-                          assignment.caregiver_name,
-                          assignment.patient_name
-                        )
-                      }
-                      style={styles.btnRemove}
-                      title="Eliminar asignación"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        @keyframes slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        .admin-btn-add:hover {
+          background: #fff;
+          transform: translateY(-3px);
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+        }
+
+        .admin-btn-add-patient:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 28px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-icon {
+          width: 20px;
+          height: 20px;
+        }
+
+        .admin-assignments-content {
+          max-width: 1400px;
+          margin: -2rem auto 0;
+          padding: 0 2rem;
+          position: relative;
+          z-index: 5;
+        }
+
+        .admin-form-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 2rem;
+          margin-bottom: 2rem;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          animation: scaleIn 0.4s ease-out;
+        }
+
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        .form-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 2rem;
+          padding-bottom: 1.5rem;
+          border-bottom: 2px solid #f3f4f6;
+        }
+
+        .form-title {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0;
+        }
+
+        .btn-close-form {
+          width: 40px;
+          height: 40px;
+          border: none;
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          border-radius: 10px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s ease;
+        }
+
+        .btn-close-form:hover {
+          background: rgba(239, 68, 68, 0.2);
+          transform: rotate(90deg);
+        }
+
+        .btn-close-form svg {
+          width: 20px;
+          height: 20px;
+        }
+
+        .admin-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 1.5rem;
+        }
+
+        .form-field {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .form-field-full {
+          grid-column: 1 / -1;
+        }
+
+        .field-label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #374151;
+        }
+
+        .label-icon {
+          width: 18px;
+          height: 18px;
+          color: #667eea;
+        }
+
+        .required {
+          color: #ef4444;
+          font-weight: 700;
+        }
+
+        .field-input,
+        .field-textarea {
+          padding: 1rem;
+          font-size: 1rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          outline: none;
+          transition: all 0.3s ease;
+          background: #f9fafb;
+          font-family: inherit;
+        }
+
+        .field-input:focus,
+        .field-textarea:focus {
+          border-color: #667eea;
+          background: #fff;
+          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .field-textarea {
+          resize: vertical;
+        }
+
+        .field-hint {
+          font-size: 0.875rem;
+          color: #6b7280;
+          font-style: italic;
+        }
+
+        .form-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: flex-end;
+          padding-top: 1rem;
+          border-top: 2px solid #f3f4f6;
+        }
+
+        .btn-cancel {
+          padding: 1rem 2rem;
+          border: 2px solid #e5e7eb;
+          background: #fff;
+          color: #6b7280;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .btn-cancel:hover {
+          background: #f9fafb;
+          border-color: #d1d5db;
+          transform: translateY(-2px);
+        }
+
+        .btn-submit {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 1rem 2rem;
+          border: none;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #fff;
+          border-radius: 12px;
+          font-size: 1rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+          font-family: inherit;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 28px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-submit:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .btn-icon-submit {
+          width: 20px;
+          height: 20px;
+        }
+
+        .spinner-small {
+          width: 20px;
+          height: 20px;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .spinner-circle {
+          opacity: 0.25;
+        }
+
+        .spinner-path {
+          opacity: 0.75;
+        }
+
+        .admin-filters-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 1.5rem 2rem;
+          margin-bottom: 2rem;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .filter-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .filter-label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #374151;
+        }
+
+        .filter-input {
+          padding: 0.875rem 1rem;
+          font-size: 0.9375rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          outline: none;
+          transition: all 0.3s ease;
+          background: #f9fafb;
+          font-family: inherit;
+        }
+
+        .filter-input:focus {
+          border-color: #667eea;
+          background: #fff;
+          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .admin-loading {
+          text-align: center;
+          padding: 3rem;
+          color: #6b7280;
+          font-size: 1rem;
+        }
+
+        .admin-empty-state {
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 4rem 2rem;
+          text-align: center;
+          border: 2px dashed #e5e7eb;
+        }
+
+        .empty-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+          opacity: 0.5;
+        }
+
+        .empty-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #4b5563;
+          margin: 0 0 0.5rem 0;
+        }
+
+        .empty-text {
+          font-size: 1rem;
+          color: #6b7280;
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .admin-assignments-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 2rem;
+        }
+
+        .admin-caregiver-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          overflow: hidden;
+          animation: fadeInUp 0.6s ease-out both;
+        }
+
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .caregiver-card-header {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+          padding: 1.75rem 2rem;
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .caregiver-icon-wrapper {
+          width: 56px;
+          height: 56px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .caregiver-icon {
+          width: 28px;
+          height: 28px;
+          color: #fff;
+        }
+
+        .caregiver-info {
+          flex: 1;
+        }
+
+        .caregiver-name {
+          font-size: 1.375rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 0.25rem 0;
+        }
+
+        .caregiver-count {
+          font-size: 0.9375rem;
+          color: #6b7280;
+          margin: 0;
+          font-weight: 500;
+        }
+
+        .patients-grid {
+          padding: 1.75rem 2rem;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 1rem;
+        }
+
+        .admin-patient-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1.25rem;
+          background: rgba(255, 255, 255, 0.7);
+          border-radius: 16px;
+          border: 1px solid rgba(102, 126, 234, 0.1);
+          transition: all 0.3s ease;
+          position: relative;
+        }
+
+        .admin-patient-item:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+          background: rgba(255, 255, 255, 0.95);
+          border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .patient-icon-wrapper {
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .patient-icon {
+          width: 24px;
+          height: 24px;
+          color: #10b981;
+        }
+
+        .patient-info {
+          flex: 1;
+        }
+
+        .patient-name {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin-bottom: 0.25rem;
+        }
+
+        .patient-date {
+          font-size: 0.8125rem;
+          color: #6b7280;
+        }
+
+        .admin-btn-remove {
+          width: 36px;
+          height: 36px;
+          padding: 0;
+          border: none;
+          border-radius: 10px;
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .admin-btn-remove:hover {
+          background: rgba(239, 68, 68, 0.2);
+          transform: translateY(-2px) scale(1.05);
+        }
+
+        .remove-icon {
+          width: 18px;
+          height: 18px;
+        }
+
+        @media (max-width: 768px) {
+          .admin-assignments-header {
+            padding: 2rem 1.5rem 3rem;
+          }
+
+          .admin-assignments-title {
+            font-size: 2rem;
+          }
+
+          .admin-assignments-content {
+            padding: 0 1.5rem;
+          }
+
+          .header-buttons {
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .admin-btn-add,
+          .admin-btn-add-patient {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .form-actions {
+            flex-direction: column;
+          }
+
+          .btn-cancel,
+          .btn-submit {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .patients-grid {
+            grid-template-columns: 1fr;
+            padding: 1.5rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
-// ============================================
-// ESTILOS
-// ============================================
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: '1400px',
-    margin: '0 auto',
-    padding: '20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '30px',
-  },
-  title: {
-    fontSize: '32px',
-    fontWeight: 700,
-    color: '#1f2937',
-    margin: '0 0 8px 0',
-  },
-  subtitle: {
-    fontSize: '16px',
-    color: '#6b7280',
-    margin: 0,
-  },
-  headerButtons: {
-    display: 'flex',
-    gap: '12px',
-  },
-  btnAdd: {
-    backgroundColor: '#667eea',
-    color: '#fff',
-    padding: '12px 24px',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  btnAddPatient: {
-    backgroundColor: '#10b981',
-    color: '#fff',
-    padding: '12px 24px',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  loading: {
-    textAlign: 'center',
-    padding: '40px',
-    color: '#6b7280',
-  },
-  errorAlert: {
-    backgroundColor: '#fef2f2',
-    color: '#dc2626',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    border: '1px solid #fecaca',
-  },
-  successAlert: {
-    backgroundColor: '#f0fdf4',
-    color: '#16a34a',
-    padding: '12px 16px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    border: '1px solid #bbf7d0',
-  },
-  formCard: {
-    backgroundColor: '#fff',
-    padding: '30px',
-    borderRadius: '12px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    marginBottom: '30px',
-  },
-  formTitle: {
-    fontSize: '24px',
-    fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '20px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: '#374151',
-  },
-  input: {
-    padding: '12px',
-    fontSize: '15px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-  },
-  select: {
-    padding: '12px',
-    fontSize: '15px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    cursor: 'pointer',
-    backgroundColor: '#fff',
-  },
-  textarea: {
-    padding: '12px',
-    fontSize: '15px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-    fontFamily: 'inherit',
-    resize: 'vertical',
-  },
-  searchInput: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    marginBottom: '8px',
-    transition: 'border-color 0.2s',
-  },
-  selectWithScroll: {
-    padding: '8px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    cursor: 'pointer',
-    backgroundColor: '#fff',
-    overflowY: 'auto',
-    maxHeight: '150px',
-  },
-  hint: {
-    fontSize: '12px',
-    color: '#9ca3af',
-    marginTop: '4px',
-  },
-  formActions: {
-    display: 'flex',
-    gap: '12px',
-    justifyContent: 'flex-end',
-    marginTop: '10px',
-  },
-  btnCancel: {
-    padding: '12px 24px',
-    fontSize: '15px',
-    fontWeight: 600,
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-    color: '#6b7280',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  btnSubmit: {
-    padding: '12px 24px',
-    fontSize: '15px',
-    fontWeight: 600,
-    border: 'none',
-    borderRadius: '8px',
-    backgroundColor: '#667eea',
-    color: '#fff',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  filtersCard: {
-    backgroundColor: '#fff',
-    padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    marginBottom: '20px',
-  },
-  filtersGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '15px',
-  },
-  filterGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  filterLabel: {
-    fontSize: '14px',
-    fontWeight: 500,
-    color: '#374151',
-  },
-  filterInput: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-  },
-  filterSelect: {
-    padding: '10px',
-    fontSize: '14px',
-    border: '2px solid #e5e7eb',
-    borderRadius: '8px',
-    outline: 'none',
-    cursor: 'pointer',
-  },
-  emptyState: {
-    backgroundColor: '#f9fafb',
-    padding: '60px 40px',
-    borderRadius: '12px',
-    textAlign: 'center',
-    color: '#6b7280',
-  },
-  emptyHint: {
-    fontSize: '14px',
-    marginTop: '8px',
-  },
-  assignmentsContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px',
-  },
-  caregiverCard: {
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
-  },
-  caregiverHeader: {
-    backgroundColor: '#f9fafb',
-    padding: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '15px',
-    borderBottom: '2px solid #e5e7eb',
-  },
-  caregiverIcon: {
-    fontSize: '32px',
-  },
-  caregiverInfo: {
-    flex: 1,
-  },
-  caregiverName: {
-    fontSize: '20px',
-    fontWeight: 600,
-    color: '#1f2937',
-    margin: '0 0 4px 0',
-  },
-  caregiverCount: {
-    fontSize: '14px',
-    color: '#6b7280',
-    margin: 0,
-  },
-  patientsGrid: {
-    padding: '20px',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '15px',
-  },
-  patientItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '15px',
-    backgroundColor: '#f9fafb',
-    borderRadius: '10px',
-    border: '1px solid #e5e7eb',
-    transition: 'all 0.2s',
-  },
-  patientIcon: {
-    fontSize: '24px',
-  },
-  patientInfo: {
-    flex: 1,
-  },
-  patientName: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '4px',
-  },
-  patientDate: {
-    fontSize: '12px',
-    color: '#6b7280',
-  },
-  btnRemove: {
-    width: '28px',
-    height: '28px',
-    padding: 0,
-    fontSize: '14px',
-    border: 'none',
-    borderRadius: '50%',
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-};
-
-// Hover effects
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  .patient-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  }
-`;
-document.head.appendChild(styleSheet);

@@ -415,14 +415,14 @@ export default function PersonalDashboard() {
 
                   return (
                     <div className="doses-grid">
-                      {visibleDoses.map((dose, index) => {
+                      {visibleDoses.map((dose) => {
                       const doseKey = getDoseKey(dose.treatment_id, dose.time);
                       const isOverdue = isDoseOverdue(dose.time);
                       const isFading = fadingDoses.has(doseKey);
 
                       return (
                         <div
-                          key={index}
+                          key={doseKey}
                           className={`dose-card ${isOverdue ? 'dose-card-overdue' : ''} ${isFading ? 'dose-card-fading' : ''}`}
                         >
                           {/* Indicador de atrasada */}
@@ -1091,6 +1091,7 @@ export default function PersonalDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          overflow: hidden;
         }
 
         .dose-card {
@@ -1101,8 +1102,12 @@ export default function PersonalDashboard() {
           border: 1px solid rgba(255, 255, 255, 0.8);
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
-          animation: scaleIn 0.4s ease-out;
           position: relative;
+        }
+
+        .dose-card:not(.dose-card-fading) {
+          animation: scaleIn 0.4s ease-out;
+          animation-fill-mode: both;
         }
 
         @keyframes scaleIn {
@@ -1285,20 +1290,30 @@ export default function PersonalDashboard() {
 
         .dose-card-fading {
           animation: fadeOutScale 0.6s ease-out forwards;
+          pointer-events: none;
         }
 
         @keyframes fadeOutScale {
           0% {
             opacity: 1;
             transform: scale(1);
+            max-height: 500px;
+            margin-bottom: 1rem;
+          }
+          50% {
+            opacity: 0.3;
+            transform: scale(0.95);
+            max-height: 500px;
+            margin-bottom: 1rem;
           }
           100% {
             opacity: 0;
             transform: scale(0.9);
-            height: 0;
+            max-height: 0;
             padding: 0;
             margin: 0;
             border: none;
+            margin-bottom: 0;
           }
         }
 

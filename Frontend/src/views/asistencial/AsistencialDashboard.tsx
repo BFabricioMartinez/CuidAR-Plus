@@ -457,14 +457,14 @@ export default function AsistencialDashboard() {
 
                       return (
                         <div className="doses-grid">
-                          {visibleDoses.map((dose, index) => {
+                          {visibleDoses.map((dose) => {
                             const doseKey = getDoseKey(dose.treatment_id, dose.time);
                             const isOverdue = isDoseOverdue(dose.time);
                             const isFading = fadingDoses.has(doseKey);
 
                             return (
                               <div
-                                key={index}
+                                key={doseKey}
                                 className={`dose-card ${isOverdue ? 'dose-card-overdue' : ''} ${isFading ? 'dose-card-fading' : ''}`}
                               >
                                 {/* Indicador de atrasada */}
@@ -571,12 +571,12 @@ export default function AsistencialDashboard() {
                         <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                       </svg>
                     </div>
-                    <div>
+                    <div className="overview-text-wrapper">
                       <h3 className="overview-title">Total de Pacientes Asignados</h3>
                       <p className="overview-subtitle">Bajo tu cuidado</p>
                     </div>
+                    <div className="overview-value">{patients.length}</div>
                   </div>
-                  <div className="overview-value">{patients.length}</div>
                   <div className="overview-decoration"></div>
                 </div>
 
@@ -1325,6 +1325,7 @@ export default function AsistencialDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          overflow: hidden;
         }
 
         .dose-card {
@@ -1335,8 +1336,12 @@ export default function AsistencialDashboard() {
           border: 1px solid rgba(255, 255, 255, 0.8);
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
-          animation: scaleIn 0.4s ease-out;
           position: relative;
+        }
+
+        .dose-card:not(.dose-card-fading) {
+          animation: scaleIn 0.4s ease-out;
+          animation-fill-mode: both;
         }
 
         @keyframes scaleIn {
@@ -1519,20 +1524,30 @@ export default function AsistencialDashboard() {
 
         .dose-card-fading {
           animation: fadeOutScale 0.6s ease-out forwards;
+          pointer-events: none;
         }
 
         @keyframes fadeOutScale {
           0% {
             opacity: 1;
             transform: scale(1);
+            max-height: 500px;
+            margin-bottom: 1rem;
+          }
+          50% {
+            opacity: 0.3;
+            transform: scale(0.95);
+            max-height: 500px;
+            margin-bottom: 1rem;
           }
           100% {
             opacity: 0;
             transform: scale(0.9);
-            height: 0;
+            max-height: 0;
             padding: 0;
             margin: 0;
             border: none;
+            margin-bottom: 0;
           }
         }
 
@@ -1667,7 +1682,7 @@ export default function AsistencialDashboard() {
         .general-overview-card {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border-radius: 24px;
-          padding: 2rem;
+          padding: 1.5rem;
           box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
           position: relative;
           overflow: hidden;
@@ -1677,30 +1692,37 @@ export default function AsistencialDashboard() {
         .overview-header {
           display: flex;
           align-items: center;
-          gap: 1.25rem;
-          margin-bottom: 1.5rem;
+          gap: 1rem;
+          justify-content: space-between;
+          position: relative;
         }
 
         .overview-icon-wrapper {
-          width: 64px;
-          height: 64px;
+          width: 48px;
+          height: 48px;
           background: rgba(255, 255, 255, 0.2);
           backdrop-filter: blur(10px);
-          border-radius: 16px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
           border: 1px solid rgba(255, 255, 255, 0.3);
+          flex-shrink: 0;
         }
 
         .overview-icon {
-          width: 32px;
-          height: 32px;
+          width: 24px;
+          height: 24px;
           color: #fff;
         }
 
+        .overview-text-wrapper {
+          flex: 1;
+          min-width: 0;
+        }
+
         .overview-title {
-          font-size: 1.25rem;
+          font-size: 1.125rem;
           font-weight: 700;
           color: #fff;
           margin: 0 0 0.25rem 0;
@@ -1708,17 +1730,18 @@ export default function AsistencialDashboard() {
         }
 
         .overview-subtitle {
-          font-size: 0.9375rem;
+          font-size: 0.875rem;
           color: rgba(255, 255, 255, 0.9);
           margin: 0;
         }
 
         .overview-value {
-          font-size: 4rem;
+          font-size: 2.5rem;
           font-weight: 800;
           color: #fff;
-          text-align: center;
           text-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+          flex-shrink: 0;
+          line-height: 1;
         }
 
         .overview-decoration {
@@ -1950,11 +1973,13 @@ export default function AsistencialDashboard() {
           animation: fadeInUp 0.6s ease-out;
           animation-delay: 0.3s;
           animation-fill-mode: both;
+          overflow: hidden;
         }
 
         .timeline-container {
           max-height: 500px;
           overflow-y: auto;
+          overflow-x: hidden;
         }
 
         .timeline-container::-webkit-scrollbar {
@@ -1987,6 +2012,8 @@ export default function AsistencialDashboard() {
           border: 1px solid rgba(0, 0, 0, 0.05);
           transition: all 0.3s ease;
           position: relative;
+          min-width: 0;
+          overflow: hidden;
         }
 
         .timeline-item:hover {
@@ -2007,15 +2034,19 @@ export default function AsistencialDashboard() {
           color: #667eea;
           font-size: 1rem;
           min-width: 80px;
+          flex-shrink: 0;
         }
 
         .timeline-clock-icon {
           width: 20px;
           height: 20px;
+          flex-shrink: 0;
         }
 
         .timeline-details {
           flex: 1;
+          min-width: 0;
+          overflow: hidden;
         }
 
         .timeline-patient {
@@ -2023,11 +2054,15 @@ export default function AsistencialDashboard() {
           color: #1f2937;
           font-size: 0.9375rem;
           margin-bottom: 0.25rem;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
         }
 
         .timeline-medication {
           font-size: 0.875rem;
           color: #6b7280;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
         }
 
         .timeline-badge-overdue {
@@ -2038,6 +2073,8 @@ export default function AsistencialDashboard() {
           font-size: 0.75rem;
           font-weight: 700;
           animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+          flex-shrink: 0;
+          white-space: nowrap;
         }
 
         .timeline-more {
@@ -2135,7 +2172,25 @@ export default function AsistencialDashboard() {
           }
 
           .overview-value {
-            font-size: 3rem;
+            font-size: 2rem;
+          }
+
+          .overview-icon-wrapper {
+            width: 40px;
+            height: 40px;
+          }
+
+          .overview-icon {
+            width: 20px;
+            height: 20px;
+          }
+
+          .overview-title {
+            font-size: 1rem;
+          }
+
+          .overview-subtitle {
+            font-size: 0.8125rem;
           }
 
           .timeline-item {
