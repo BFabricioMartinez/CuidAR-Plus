@@ -224,6 +224,7 @@ export default function HistorialView() {
                         <thead>
                           <tr className="table-header">
                             <th className="table-th">Fecha</th>
+                            <th className="table-th">Hora Programada</th>
                             <th className="table-th">Hora Registrada</th>
                             <th className="table-th">Medicamento</th>
                             <th className="table-th">Dosis</th>
@@ -238,6 +239,11 @@ export default function HistorialView() {
                               style={{ animationDelay: `${index * 0.05}s` }}
                             >
                               <td className="table-td td-date">{formatDate(item.taken_at)}</td>
+                              <td className="table-td td-time">
+                                {item.scheduled_time && item.scheduled_time !== 'N/A' 
+                                  ? `${item.scheduled_time} hs` 
+                                  : item.scheduled_time || 'N/A'}
+                              </td>
                               <td className="table-td td-time">{formatTime(item.taken_at)}</td>
                               <td className="table-td td-med">{item.medication_name}</td>
                               <td className="table-td td-dosage">{item.dosage}</td>
@@ -299,6 +305,14 @@ export default function HistorialView() {
                             <div className="card-row">
                               <span className="card-label">Dosis:</span>
                               <span className="card-value">{item.dosage}</span>
+                            </div>
+                            <div className="card-row">
+                              <span className="card-label">Hora programada:</span>
+                              <span className="card-value">
+                                {item.scheduled_time && item.scheduled_time !== 'N/A' 
+                                  ? `${item.scheduled_time} hs` 
+                                  : item.scheduled_time || 'N/A'}
+                              </span>
                             </div>
                             <div className="card-row">
                               <span className="card-label">Hora registrada:</span>
