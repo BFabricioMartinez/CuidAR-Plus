@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from models import User, Patient, Treatment, IntakeLog, Assignment
 from config.db import AsyncSessionLocal
 from auth.roles import require_roles
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import traceback
 
 statistics = APIRouter()
@@ -370,3 +370,231 @@ async def get_personal_stats(req: Request, user_id: int):
             status_code=500,
             content={"message": "Error al obtener estadísticas del usuario PERSONAL"}
         )
+
+
+# ============================================
+# ENDPOINTS ADMIN OPTIMIZADOS
+# ============================================
+
+@statistics.get("/statistics/admin/patients-adherence")
+async def get_patients_adherence(req: Request):
+    """
+    Obtiene la adherencia de todos los pacientes en los últimos 7 días.
+    Optimiza múltiples llamadas a /intake/patient/{id}/history
+    
+    Control de acceso: SOLO ADMIN
+    """
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            today = date.today()
+            seven_days_ago = today - timedelta(days=7)
+            today_start = datetime.combine(seven_days_ago, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            # Obtener todos los pacientes
+            stmt_patients = select(Patient)
+            result_patients = await session.execute(stmt_patients)
+            patients = result_patients.scalars().all()
+
+            adherence_data = []
+
+            for patient in patients:
+                # Obtener intakes de los últimos 7 días para este paciente
+                stmt_intakes = (
+                    select(IntakeLog)
+                    .join(Treatment)
+                    .where(and_(
+                        Treatment.patient_id == patient.id,
+                        IntakeLog.taken_at >= today_start,
+                        IntakeLog.taken_at <= today_end
+                    ))
+                )
+                result_intakes = await session.execute(stmt_intakes)
+                intakes = result_intakes.scalars().all()
+
+                # Calcular estadísticas
+                taken = sum(1 for i in intakes if str(i.status).upper().strip() == 'TAKEN')
+                missed = sum(1 for i in intakes if str(i.status).upper().strip() == 'MISSED')
+                total = taken + missed
+                adherence_percentage = round((taken / total * 100), 2) if total > 0 else None
+
+                adherence_data.append({
+                    "patient_id": patient.id,
+                    "patient_name": patient.name,
+                    "adherence_percentage": adherence_percentage,
+                    "taken": taken,
+                    "missed": missed,
+                    "total": total
+                })
+
+            # Ordenar por adherencia descendente
+            adherence_data.sort(
+                key=lambda x: x["adherence_percentage"] if x["adherence_percentage"] is not None else -1,
+                reverse=True
+            )
+
+            return JSONResponse(
+                status_code=200,
+                content={"patients": adherence_data}
+            )
+
+    except Exception as error:
+        print("Error calculando adherencia de pacientes ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error calculando adherencia de pacientes"}
+        )
+
+
+@statistics.get("/statistics/admin/adherence-trend")
+async def get_adherence_trend(req: Request):
+    """
+    Obtiene la tendencia de adherencia global agrupada por día (últimos 7 días).
+    Optimiza múltiples llamadas a /intake/patient/{id}/history
+    
+    Control de acceso: SOLO ADMIN
+    """
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            today = date.today()
+            seven_days_ago = today - timedelta(days=7)
+            today_start = datetime.combine(seven_days_ago, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            # Inicializar mapa de días
+            day_map = {}
+            for i in range(7):
+                day = today - timedelta(days=6-i)
+                day_map[day.isoformat()] = {'taken': 0, 'missed': 0, 'total': 0}
+
+            # Obtener todos los intakes de los últimos 7 días
+            stmt_intakes = (
+                select(IntakeLog)
+                .where(and_(
+                    IntakeLog.taken_at >= today_start,
+                    IntakeLog.taken_at <= today_end
+                ))
+            )
+            result_intakes = await session.execute(stmt_intakes)
+            intakes = result_intakes.scalars().all()
+
+            # Agrupar por día
+            for intake in intakes:
+                intake_date = intake.taken_at.date()
+                date_key = intake_date.isoformat()
+
+                if date_key in day_map:
+                    day_map[date_key]['total'] += 1
+                    status = str(intake.status).upper().strip()
+                    if status == 'TAKEN':
+                        day_map[date_key]['taken'] += 1
+                    elif status == 'MISSED':
+                        day_map[date_key]['missed'] += 1
+
+            # Convertir a lista ordenada
+            trend_data = []
+            for i in range(7):
+                day = today - timedelta(days=6-i)
+                date_key = day.isoformat()
+                stats = day_map[date_key]
+                adherence_percentage = round((stats['taken'] / stats['total'] * 100), 2) if stats['total'] > 0 else 0.0
+
+                trend_data.append({
+                    "date": date_key,
+                    "taken": stats['taken'],
+                    "missed": stats['missed'],
+                    "total": stats['total'],
+                    "adherence_percentage": adherence_percentage
+                })
+
+            return JSONResponse(
+                status_code=200,
+                content={"trend": trend_data}
+            )
+
+    except Exception as error:
+        print("Error calculando tendencia de adherencia ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error calculando tendencia de adherencia"}
+        )
+
+
+@statistics.get("/statistics/admin/caregiver-stats")
+async def get_caregiver_stats(req: Request):
+    """
+    Obtiene estadísticas de cuidadores (cantidad de pacientes asignados).
+    Optimiza múltiples llamadas a /user/{id} y /assignment/paginated
+    
+    Control de acceso: SOLO ADMIN
+    """
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            # Obtener todas las asignaciones activas
+            stmt_assignments = select(Assignment).where(Assignment.active.is_(True))
+            result_assignments = await session.execute(stmt_assignments)
+            assignments = result_assignments.scalars().all()
+
+            # Agrupar por cuidador
+            caregiver_map = {}
+            for assignment in assignments:
+                caregiver_id = assignment.caregiver_id
+                if caregiver_id not in caregiver_map:
+                    # Obtener nombre del cuidador
+                    stmt_user = select(User).where(User.id == caregiver_id)
+                    result_user = await session.execute(stmt_user)
+                    caregiver = result_user.scalar_one_or_none()
+                    
+                    caregiver_name = 'Desconocido'
+                    if caregiver:
+                        caregiver_name = caregiver.name if caregiver.name else (
+                            caregiver.email.split('@')[0] if caregiver.email else 'Desconocido'
+                        )
+                    
+                    caregiver_map[caregiver_id] = {
+                        'name': caregiver_name,
+                        'count': 0
+                    }
+                caregiver_map[caregiver_id]['count'] += 1
+
+            # Convertir a lista ordenada
+            caregivers = [
+                {
+                    "caregiver_id": caregiver_id,
+                    "caregiver_name": data['name'],
+                    "patient_count": data['count']
+                }
+                for caregiver_id, data in sorted(caregiver_map.items(), key=lambda x: x[1]['count'], reverse=True)
+            ]
+
+            return JSONResponse(
+                status_code=200,
+                content={"caregivers": caregivers}
+            )
+
+    except Exception as error:
+        print("Error calculando estadísticas de cuidadores ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error calculando estadísticas de cuidadores"}
+        )
+
+

@@ -12,7 +12,6 @@ export default function AdminDashboard() {
     patientsAdherence,
     adherenceTrend,
     caregiverStats,
-    usersByRole,
     loading: statsLoading,
     error: statsError,
     fetchDashboard,
@@ -295,7 +294,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Card 2: Evolución de Adherencia (7 días) */}
-            <div className="admin-chart-card">
+            <div className="admin-chart-card admin-chart-card-trend">
               <div className="admin-chart-header">
                 <h3 className="admin-chart-title">
                   <svg className="admin-chart-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -306,7 +305,7 @@ export default function AdminDashboard() {
               </div>
               <div className="admin-trend-chart-container">
                 {adherenceTrend.length > 0 ? (
-                  <svg className="admin-trend-chart" viewBox="0 0 600 200">
+                  <svg className="admin-trend-chart" viewBox="0 0 600 350">
                     <defs>
                       <linearGradient id="trendGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                         <stop offset="0%" stopColor="#667eea" stopOpacity="0.3" />
@@ -317,17 +316,17 @@ export default function AdminDashboard() {
                     {[0, 25, 50, 75, 100].map((val) => (
                       <line
                         key={val}
-                        x1="40"
-                        y1={160 - (val * 1.4)}
-                        x2="560"
-                        y2={160 - (val * 1.4)}
+                        x1="50"
+                        y1={310 - (val * 2.5)}
+                        x2="550"
+                        y2={310 - (val * 2.5)}
                         stroke="rgba(102, 126, 234, 0.1)"
                         strokeWidth="1"
                       />
                     ))}
                     {/* Labels */}
                     {[0, 25, 50, 75, 100].map((val) => (
-                      <text key={val} x="35" y={165 - (val * 1.4)} textAnchor="end" className="admin-trend-label">
+                      <text key={val} x="45" y={315 - (val * 2.5)} textAnchor="end" className="admin-trend-label">
                         {val}%
                       </text>
                     ))}
@@ -335,10 +334,10 @@ export default function AdminDashboard() {
                     {adherenceTrend.length > 1 && (
                       <>
                         <polyline
-                          points={adherenceTrend.map((d, i) => `${60 + (i * 80)},${160 - (d.adherence_percentage * 1.4)}`).join(' ')}
+                          points={adherenceTrend.map((d, i) => `${70 + (i * 80)},${310 - (d.adherence_percentage * 2.5)}`).join(' ')}
                           fill="none"
                           stroke="url(#trendLineGradient)"
-                          strokeWidth="3"
+                          strokeWidth="4"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
@@ -350,23 +349,23 @@ export default function AdminDashboard() {
                         </defs>
                         {/* Area under curve */}
                         <path
-                          d={`M 60,160 L ${adherenceTrend.map((d, i) => `${60 + (i * 80)},${160 - (d.adherence_percentage * 1.4)}`).join(' L ')} L ${60 + ((adherenceTrend.length - 1) * 80)},160 Z`}
+                          d={`M 70,310 L ${adherenceTrend.map((d, i) => `${70 + (i * 80)},${310 - (d.adherence_percentage * 2.5)}`).join(' L ')} L ${70 + ((adherenceTrend.length - 1) * 80)},310 Z`}
                           fill="url(#trendGradient)"
                         />
                         {/* Data points */}
                         {adherenceTrend.map((d, i) => (
                           <g key={i}>
                             <circle
-                              cx={60 + (i * 80)}
-                              cy={160 - (d.adherence_percentage * 1.4)}
-                              r="6"
+                              cx={70 + (i * 80)}
+                              cy={310 - (d.adherence_percentage * 2.5)}
+                              r="8"
                               fill="#667eea"
                               stroke="#fff"
-                              strokeWidth="2"
+                              strokeWidth="3"
                             />
                             <text
-                              x={60 + (i * 80)}
-                              y={145 - (d.adherence_percentage * 1.4)}
+                              x={70 + (i * 80)}
+                              y={280 - (d.adherence_percentage * 2.5)}
                               textAnchor="middle"
                               className="admin-trend-value"
                             >
@@ -379,7 +378,7 @@ export default function AdminDashboard() {
                           const date = new Date(d.date);
                           const dayName = date.toLocaleDateString('es-AR', { weekday: 'short' });
                           return (
-                            <text key={i} x={60 + (i * 80)} y="185" textAnchor="middle" className="admin-trend-date">
+                            <text key={i} x={70 + (i * 80)} y="335" textAnchor="middle" className="admin-trend-date">
                               {dayName}
                             </text>
                           );
@@ -547,68 +546,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Card 6: Usuarios por Rol */}
-            <div className="admin-chart-card">
-              <div className="admin-chart-header">
-                <h3 className="admin-chart-title">
-                  <svg className="admin-chart-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                  </svg>
-                  Usuarios por Rol
-                </h3>
-              </div>
-              <div className="admin-role-chart-container">
-                {usersByRole.length > 0 ? (
-                  <>
-                    <svg className="admin-role-donut" viewBox="0 0 200 200">
-                      {(() => {
-                        const total = usersByRole.reduce((sum, r) => sum + r.count, 0);
-                        if (total === 0) return null;
-                        let currentOffset = 0;
-                        const colors = ['#667eea', '#10b981', '#3b82f6'];
-                        const circumference = 2 * Math.PI * 70;
-                        return usersByRole.map((role, i) => {
-                          const percent = (role.count / total) * 100;
-                          const result = (
-                            <circle
-                              key={role.role}
-                              cx="100"
-                              cy="100"
-                              r="70"
-                              fill="none"
-                              stroke={colors[i % colors.length]}
-                              strokeWidth="20"
-                              strokeDasharray={circumference}
-                              strokeDashoffset={currentOffset}
-                              strokeLinecap="round"
-                              transform="rotate(-90 100 100)"
-                            />
-                          );
-                          currentOffset -= (percent / 100) * circumference;
-                          return result;
-                        });
-                      })()}
-                      <text x="100" y="100" textAnchor="middle" className="admin-role-total">
-                        {usersByRole.reduce((sum, r) => sum + r.count, 0)}
-                      </text>
-                    </svg>
-                    <div className="admin-role-legend">
-                      {usersByRole.map((role, i) => {
-                        const colors = ['#667eea', '#10b981', '#3b82f6'];
-                        return (
-                          <div key={role.role} className="admin-role-legend-item">
-                            <div className="admin-role-legend-color" style={{ backgroundColor: colors[i % colors.length] }}></div>
-                            <span>{role.role}: {role.count}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="admin-chart-empty">No hay datos disponibles</div>
-                )}
-              </div>
-            </div>
           </div>
         )}
 
@@ -897,15 +834,15 @@ export default function AdminDashboard() {
         .admin-stats-simple-list {
           display: flex;
           flex-direction: column;
-          gap: 0.75rem;
-          padding-top: 0.5rem;
+          gap: 0.625rem;
+          padding-top: 0.25rem;
         }
 
         .admin-stat-simple-item {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0.875rem 1rem;
+          padding: 0.625rem 0.875rem;
           background: rgba(249, 250, 251, 0.6);
           border-radius: 12px;
           border-bottom: 1px solid rgba(229, 231, 235, 0.5);
@@ -1073,16 +1010,23 @@ export default function AdminDashboard() {
         .admin-charts-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          grid-auto-rows: minmax(350px, auto);
+          grid-auto-rows: minmax(280px, auto);
           gap: 1.5rem;
           margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+          .admin-charts-grid {
+            grid-template-columns: 1fr;
+            gap: 1.25rem;
+          }
         }
 
         .admin-chart-card {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
           border-radius: 24px;
-          padding: 1.5rem;
+          padding: 1.25rem;
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
           border: 1px solid rgba(255, 255, 255, 0.8);
           position: relative;
@@ -1093,8 +1037,8 @@ export default function AdminDashboard() {
         }
 
         .admin-chart-header {
-          margin-bottom: 1.5rem;
-          padding-bottom: 1rem;
+          margin-bottom: 1rem;
+          padding-bottom: 0.75rem;
           border-bottom: 2px solid rgba(102, 126, 234, 0.1);
         }
 
@@ -1122,36 +1066,152 @@ export default function AdminDashboard() {
         }
 
         /* Gráfico de Tendencia */
+        .admin-chart-card-trend {
+          grid-column: span 2;
+        }
+
+        .admin-chart-card-trend .admin-chart-header {
+          margin-bottom: 0;
+          padding-bottom: 0;
+        }
+
         .admin-trend-chart-container {
           flex: 1;
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: center;
-          padding: 1rem 0;
+          padding: 0;
+          margin-top: -0.5rem;
+          min-height: 350px;
         }
 
         .admin-trend-chart {
           width: 100%;
           height: 100%;
-          max-height: 250px;
+          min-height: 350px;
+          max-height: 450px;
+          margin-top: -1rem;
         }
 
         .admin-trend-label {
-          font-size: 0.75rem;
+          font-size: 0.875rem;
           fill: #6b7280;
-          font-weight: 500;
+          font-weight: 600;
         }
 
         .admin-trend-value {
-          font-size: 0.75rem;
+          font-size: 0.875rem;
           fill: #667eea;
           font-weight: 700;
         }
 
         .admin-trend-date {
-          font-size: 0.75rem;
+          font-size: 0.875rem;
           fill: #9ca3af;
           font-weight: 500;
+        }
+
+        @media (max-width: 1024px) {
+          .admin-chart-card-trend {
+            grid-column: span 1;
+          }
+
+          .admin-trend-chart-container {
+            min-height: 300px;
+          }
+
+          .admin-trend-chart {
+            min-height: 300px;
+            max-height: 380px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .admin-chart-card-trend {
+            grid-column: span 1;
+            padding: 1.25rem;
+          }
+
+          .admin-trend-chart-container {
+            min-height: 350px;
+            padding: 1rem 0.5rem;
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+          }
+
+          .admin-trend-chart {
+            min-height: 350px;
+            max-height: 400px;
+            width: 100%;
+            min-width: 100%;
+          }
+
+          .admin-trend-label {
+            font-size: 1rem;
+            fill: #6b7280;
+            font-weight: 600;
+          }
+
+          .admin-trend-value {
+            font-size: 1.125rem;
+            fill: #667eea;
+            font-weight: 700;
+          }
+
+          .admin-trend-date {
+            font-size: 1rem;
+            fill: #9ca3af;
+            font-weight: 500;
+          }
+
+          /* Hacer elementos del gráfico más grandes en mobile */
+          .admin-trend-chart circle {
+            r: 10 !important;
+            stroke-width: 4 !important;
+          }
+
+          .admin-trend-chart polyline {
+            stroke-width: 5 !important;
+          }
+
+          .admin-trend-chart line {
+            stroke-width: 1.5 !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .admin-trend-chart-container {
+            min-height: 320px;
+            padding: 1rem 0.25rem;
+          }
+
+          .admin-trend-chart {
+            min-height: 320px;
+            max-height: 380px;
+          }
+
+          .admin-trend-label {
+            font-size: 1.125rem;
+          }
+
+          .admin-trend-value {
+            font-size: 1.25rem;
+          }
+
+          .admin-trend-date {
+            font-size: 1.125rem;
+          }
+
+          /* Elementos aún más grandes en pantallas muy pequeñas */
+          .admin-trend-chart circle {
+            r: 12 !important;
+            stroke-width: 5 !important;
+          }
+
+          .admin-trend-chart polyline {
+            stroke-width: 6 !important;
+          }
         }
 
         /* Gráfico Donut */
@@ -1159,8 +1219,8 @@ export default function AdminDashboard() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 1.5rem;
-          padding: 1rem 0;
+          gap: 1rem;
+          padding: 0.75rem 0;
         }
 
         .admin-donut-chart {
@@ -1207,8 +1267,8 @@ export default function AdminDashboard() {
         .admin-adherence-bars-container {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
-          max-height: 500px;
+          gap: 0.875rem;
+          max-height: 380px;
           overflow-y: auto;
           padding-right: 0.5rem;
         }
@@ -1292,7 +1352,7 @@ export default function AdminDashboard() {
         .admin-caregiver-bars-container {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: 0.875rem;
         }
 
         .admin-caregiver-bar-item {
@@ -1330,48 +1390,6 @@ export default function AdminDashboard() {
           text-align: right;
         }
 
-        /* Gráfico de Roles */
-        .admin-role-chart-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 1.5rem;
-          padding: 1rem 0;
-        }
-
-        .admin-role-donut {
-          width: 100%;
-          max-width: 180px;
-          height: auto;
-        }
-
-        .admin-role-total {
-          font-size: 2rem;
-          font-weight: 800;
-          fill: #1f2937;
-        }
-
-        .admin-role-legend {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          width: 100%;
-        }
-
-        .admin-role-legend-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          font-size: 0.875rem;
-          color: #374151;
-        }
-
-        .admin-role-legend-color {
-          width: 16px;
-          height: 16px;
-          border-radius: 4px;
-          flex-shrink: 0;
-        }
 
         /* Estado de Tratamientos */
         .admin-treatment-status-container {
