@@ -11,6 +11,11 @@ from config.db import Base, engine
 
 cuidar = FastAPI()
 
+# Ruta raíz
+@cuidar.get("/")
+async def root():
+    return {"message": "CuidAR API", "status": "online"}
+
 # Crear todas las tablas al iniciar la aplicación
 Base.metadata.create_all(bind=engine)
 
