@@ -163,8 +163,6 @@ export const useAsistencialHistory = () => {
       setError('');
 
       try {
-        const token = localStorage.getItem('token');
-
         // Preparar filtros para el backend
         const filters: any = {
           patient_id: selectedPatientId,

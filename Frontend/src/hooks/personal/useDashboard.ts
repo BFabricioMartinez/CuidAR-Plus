@@ -167,6 +167,7 @@ export const useDashboard = () => {
             today_doses: {
               taken: 0,
               missed: 0,
+              total: 0,
               adherence_percentage: 0
             }
           });
@@ -180,6 +181,7 @@ export const useDashboard = () => {
           today_doses: {
             taken: 0,
             missed: 0,
+            total: 0,
             adherence_percentage: 0
           }
         });

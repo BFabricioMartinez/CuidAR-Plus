@@ -1,7 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
-import type { JSX } from 'react/jsx-dev-runtime';
 
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
 

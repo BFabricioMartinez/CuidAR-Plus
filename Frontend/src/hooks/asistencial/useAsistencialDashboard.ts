@@ -131,7 +131,6 @@ export const useAsistencialDashboard = () => {
 
           times.forEach((time) => {
             const doseKey = `${treatment.id}-${time}`;
-            const isRegistered = todayIntakes.has(doseKey);
 
             // Solo agregar si no está registrada hoy
             if (!todayIntakes.has(doseKey)) {

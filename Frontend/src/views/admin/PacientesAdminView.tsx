@@ -263,6 +263,7 @@ export default function PacientesAdminView() {
   );
 
   // Obtener nombre del cuidador
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getCaregiverName = async (caregiverId?: number): Promise<string> => {
     if (!caregiverId) return 'Sin asignar';
     const caregiver = caregivers.find((c) => c.id === caregiverId);

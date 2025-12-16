@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
-import type { Assignment, AssignmentWithDetails, User, Patient } from '../../api';
+import type { Assignment, User, Patient } from '../../api';
 
 // ============================================
 // TIPOS
@@ -142,7 +142,7 @@ export const useAssignmentsAdmin = () => {
       setError('');
 
       try {
-        await assignmentsApi.delete(assignmentId);
+        await assignmentsApi.deactivate(assignmentId);
         setSuccessMessage('Asignación eliminada exitosamente');
         setTimeout(() => setSuccessMessage(''), 3000);
         await fetchAssignments();

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { statisticsApi, patientsApi, ApiError } from '../../api';
 import type { OverviewStats, Patient } from '../../api';
 
@@ -27,7 +27,7 @@ export const useAdminDashboard = () => {
   const [patientsAdherence, setPatientsAdherence] = useState<PatientAdherence[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [successMessage] = useState<string>('');
 
   // Obtener estadísticas generales
   const fetchOverviewStats = useCallback(async () => {

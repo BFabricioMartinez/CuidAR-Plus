@@ -220,7 +220,7 @@ export default function MiHistorial() {
   const fetchTreatments = async (patientId: number) => {
     try {
       const treatmentsData = await treatmentsApi.getByPatient(patientId);
-      setTreatments(treatmentsData.treatments || []);
+      setTreatments((treatmentsData.treatments || []) as Treatment[]);
     } catch (err: any) {
       console.error('Error al cargar tratamientos:', err);
       setTreatments([]);

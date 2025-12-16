@@ -9,7 +9,7 @@ interface ToastWithProgressProps {
   type: 'success' | 'error' | 'warning' | 'info';
 }
 
-export function ToastWithProgress({ t, message, icon, type }: ToastWithProgressProps) {
+export function ToastWithProgress({ t, message, type }: ToastWithProgressProps) {
   const [started, setStarted] = useState(false);
   const duration = t.duration || 4000;
 
