@@ -75,6 +75,9 @@ const Login: React.FC = () => {
           navigate('/personal/dashboard');
         }
       } else {
+        // Limpiar localStorage antes de crear nueva cuenta para evitar datos de sesión anterior
+        authApi.clearAuth();
+        
         await authApi.signup({
           name: formData.name!,
           email: formData.email,

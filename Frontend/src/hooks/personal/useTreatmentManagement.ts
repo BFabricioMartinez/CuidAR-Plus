@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, intakesApi, ApiError } from '../../api';
-import type { Treatment, CreateTreatmentRequest } from '../../api';
+import { treatmentsApi, patientsApi, intakesApi, assignmentsApi, authApi, ApiError } from '../../api';
+import type { Treatment, CreateTreatmentRequest, Assignment } from '../../api';
 
 export interface TreatmentFormData {
   medication_name: string;
@@ -33,17 +33,59 @@ export const useTreatmentManagement = () => {
     setError('');
 
     try {
-      // Obtener paciente del usuario
-      const patientsResponse = await patientsApi.list({
-        limit: 1,
-        filters: { active: true },
-      });
+      // Obtener usuario actual
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('Usuario no autenticado');
+      }
 
-      if (patientsResponse.items.length > 0) {
-        const myPatient = patientsResponse.items[0];
-        const data = await treatmentsApi.getByPatient(myPatient.id);
+      // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
+      // Buscar asignaciones activas donde el patient_id corresponde a este usuario
+      let myPatientId: number | null = null;
+
+      // Primero intentar buscar asignaciones donde el patient_id podría ser el ID del usuario
+      // (cuando se asigna un usuario PERSONAL, inicialmente se usa su ID)
+      try {
+        const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
+        if (assignments.length > 0 && assignments[0].active) {
+          myPatientId = assignments[0].patient_id;
+        }
+      } catch {
+        // Si no funciona, buscar de otra manera
+      }
+
+      // Si no se encontró, buscar todas las asignaciones activas y verificar
+      // si alguna corresponde a un paciente creado para este usuario
+      if (!myPatientId) {
+        try {
+          const allAssignments = await assignmentsApi.getAll();
+          const activeAssignments = allAssignments.filter(a => a.active);
+          
+          // Para cada asignación, verificar si el paciente fue creado para este usuario
+          for (const assignment of activeAssignments) {
+            try {
+              const patient = await patientsApi.getById(assignment.patient_id);
+              // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
+              if (patient.notes && patient.notes.includes(currentUser.email)) {
+                myPatientId = patient.id;
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+        } catch {
+          // Si falla, continuar con el método anterior
+        }
+      }
+
+      // NO usar el primer paciente activo como fallback
+      // Si no tiene asignación, no debe ver datos de otros usuarios
+      if (myPatientId) {
+        const data = await treatmentsApi.getByPatient(myPatientId);
         setTreatments(data.treatments);
       } else {
+        // Si no tiene paciente asignado, no mostrar tratamientos
         setTreatments([]);
       }
     } catch (err) {
@@ -58,6 +100,53 @@ export const useTreatmentManagement = () => {
     }
   }, []);
 
+  // Obtener el patient_id del usuario actual
+  const getMyPatientId = useCallback(async (): Promise<number | null> => {
+    const currentUser = authApi.getStoredUser();
+    if (!currentUser || !currentUser.id) {
+      return null;
+    }
+
+    // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
+    let myPatientId: number | null = null;
+
+    // Buscar asignaciones activas donde el patient_id corresponde a este usuario
+    try {
+      const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
+      if (assignments.length > 0 && assignments[0].active) {
+        myPatientId = assignments[0].patient_id;
+        return myPatientId;
+      }
+    } catch {
+      // Continuar con otro método
+    }
+
+    // Si no se encontró, buscar todas las asignaciones activas y verificar
+    // si alguna corresponde a un paciente creado para este usuario
+    try {
+      const allAssignments = await assignmentsApi.getAll();
+      const activeAssignments = allAssignments.filter(a => a.active);
+
+      // Para cada asignación, verificar si el paciente fue creado para este usuario
+      for (const assignment of activeAssignments) {
+        try {
+          const patient = await patientsApi.getById(assignment.patient_id);
+          // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
+          if (patient.notes && patient.notes.includes(currentUser.email)) {
+            myPatientId = patient.id;
+            return myPatientId;
+          }
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // Si falla, retornar null
+    }
+
+    return null;
+  }, []);
+
   // Crear tratamiento
   const createTreatment = useCallback(async (data: TreatmentFormData) => {
     setLoading(true);
@@ -66,19 +155,14 @@ export const useTreatmentManagement = () => {
 
     try {
       // Obtener patient_id
-      const patientsResponse = await patientsApi.list({
-        limit: 1,
-        filters: { active: true },
-      });
+      const myPatientId = await getMyPatientId();
 
-      if (patientsResponse.items.length === 0) {
+      if (!myPatientId) {
         throw new Error('No se encontró tu perfil de paciente');
       }
 
-      const myPatient = patientsResponse.items[0];
-
       const requestData: CreateTreatmentRequest = {
-        patient_id: myPatient.id,
+        patient_id: myPatientId,
         medication_name: data.medication_name,
         dosage: data.dosage || undefined,
         frequency: data.frequency,
@@ -100,7 +184,7 @@ export const useTreatmentManagement = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getMyPatientId]);
 
   // Actualizar tratamiento
   const updateTreatment = useCallback(

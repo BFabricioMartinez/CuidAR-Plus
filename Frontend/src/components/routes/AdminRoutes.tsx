@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from '../layouts/Navbar';
 import AdminDashboard from '../../views/admin/AdminDashboard';
-import PacientesAdminView from '../../views/admin/PacientesAdminView';
 import AsignacionesView from '../../views/admin/AsignacionesView';
 
 export default function AdminRoutes() {
@@ -28,7 +27,6 @@ export default function AdminRoutes() {
       <Navbar />
       <Routes>
         <Route path="/dashboard" element={<AdminDashboard />} />
-        <Route path="/pacientes" element={<PacientesAdminView />} />
         <Route path="/asignaciones" element={<AsignacionesView />} />
         
         {/* Redirect por defecto */}

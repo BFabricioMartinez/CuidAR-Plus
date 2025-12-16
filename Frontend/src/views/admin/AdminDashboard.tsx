@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAdminDashboard } from '../../hooks/admin/useAdminDashboard';
+import { patientsApi, usersApi, assignmentsApi, ApiError } from '../../api';
+import type { Patient, User, Assignment } from '../../api';
 
 // ============================================
 // COMPONENTE
@@ -7,26 +9,200 @@ import { useAdminDashboard } from '../../hooks/admin/useAdminDashboard';
 export default function AdminDashboard() {
   const {
     stats,
-    patientsAdherence,
-    loading,
-    error,
+    loading: statsLoading,
+    error: statsError,
     fetchDashboard,
   } = useAdminDashboard();
+
+  // Estados para pacientes
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [caregivers, setCaregivers] = useState<User[]>([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [patientsError, setPatientsError] = useState('');
+  const [caregiverNames, setCaregiverNames] = useState<Record<number, string>>({});
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   // Cargar datos al montar
   useEffect(() => {
     fetchDashboard();
+    fetchAssignments();
+    // Cargar cuidadores primero para tener los nombres disponibles
+    fetchCaregivers().then(() => {
+      // Después de cargar cuidadores, cargar pacientes
+      fetchPatients();
+    });
   }, [fetchDashboard]);
 
-  // Calcular color según adherencia
-  const getAdherenceColor = (percentage: number | null) => {
-    if (percentage === null) return '#9ca3af';
-    if (percentage >= 80) return '#10b981';
-    if (percentage >= 60) return '#f59e0b';
-    return '#ef4444';
+  // Obtener asignaciones
+  const fetchAssignments = async () => {
+    try {
+      const allAssignments = await assignmentsApi.getAll();
+      setAssignments(allAssignments);
+    } catch (err: any) {
+      console.error('Error al cargar asignaciones:', err);
+    }
   };
 
-  if (loading && !stats) {
+  // Obtener pacientes
+  const fetchPatients = async (cursor?: number | null) => {
+    if (cursor === undefined) {
+      setPatientsLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+    setPatientsError('');
+
+    try {
+      const response = await patientsApi.list({
+        limit: 20, // Cargar 20 a la vez para scroll infinito
+        last_seen_id: cursor || undefined,
+        filters: {},
+      });
+
+      if (cursor) {
+        // Agregar más pacientes (scroll infinito)
+        setPatients(prev => [...prev, ...response.items]);
+        // Cargar nombres de cuidadores para los nuevos pacientes
+        loadCaregiverNamesForPatients(response.items);
+      } else {
+        // Primera carga
+        setPatients(response.items);
+        // Cargar nombres de cuidadores para los pacientes
+        loadCaregiverNamesForPatients(response.items);
+      }
+      
+      setNextCursor(response.next_cursor);
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setPatientsError(err.message);
+      } else {
+        setPatientsError('Error al cargar pacientes');
+      }
+    } finally {
+      setPatientsLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  // Cargar más pacientes (scroll infinito)
+  const loadMorePatients = () => {
+    if (nextCursor && !loadingMore) {
+      fetchPatients(nextCursor);
+    }
+  };
+
+  // Manejar scroll en el contenedor de la tabla
+  const handleTableScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    
+    // Cargar más cuando esté cerca del final (50px antes)
+    if (scrollBottom < 50 && nextCursor && !loadingMore) {
+      loadMorePatients();
+    }
+  };
+
+  // Obtener cuidadores (usuarios ASISTENCIAL activos)
+  const fetchCaregivers = async () => {
+    try {
+      const caregivers = await usersApi.getByRole('ASISTENCIAL');
+      setCaregivers(caregivers);
+    } catch (err: any) {
+      console.error('Error al cargar cuidadores:', err);
+    }
+  };
+
+  // Cargar nombres de cuidadores para una lista de pacientes
+  const loadCaregiverNamesForPatients = async (patientsList: Patient[]) => {
+    const missingIds = patientsList
+      .filter(p => p.caregiver_id && !caregivers.find(c => c.id === p.caregiver_id))
+      .map(p => p.caregiver_id!)
+      .filter((id, index, self) => self.indexOf(id) === index); // unique
+
+    if (missingIds.length === 0) return;
+
+    const names: Record<number, string> = {};
+    await Promise.all(
+      missingIds.map(async (id) => {
+        try {
+          const caregiver = await usersApi.getById(id);
+          // Si no tiene nombre, usar email o username del email
+          let displayName = caregiver.name;
+          if (!displayName && caregiver.email) {
+            displayName = caregiver.email.split('@')[0];
+          } else if (!displayName) {
+            displayName = 'Sin nombre';
+          }
+          names[id] = displayName;
+        } catch {
+          names[id] = 'Desconocido';
+        }
+      })
+    );
+    setCaregiverNames(prev => ({ ...prev, ...names }));
+  };
+
+  // Obtener el caregiver_id de un paciente desde assignments o desde patient.caregiver_id
+  const getCaregiverIdForPatient = (patientId: number): number | undefined => {
+    // Buscar primero en assignments (prioridad)
+    const assignment = assignments.find(
+      (a) => a.patient_id === patientId && a.active
+    );
+
+    if (assignment) {
+      return assignment.caregiver_id;
+    }
+
+    // Si no hay assignment, buscar en los datos del paciente
+    const patient = patients.find((p) => p.id === patientId);
+    return patient?.caregiver_id;
+  };
+
+  // Función síncrona para obtener nombre del cuidador
+  const getCaregiverNameSync = (patientId: number): string => {
+    // Obtener el caregiver_id desde assignments o desde patient
+    const caregiverId = getCaregiverIdForPatient(patientId);
+
+    if (!caregiverId) return 'Sin asignar';
+
+    // Primero buscar en el array de cuidadores
+    const caregiver = caregivers.find((c) => c.id === caregiverId);
+    if (caregiver) {
+      // Si tiene nombre, usarlo
+      if (caregiver.name) return caregiver.name;
+      // Si no tiene nombre pero tiene email, usar username del email
+      if (caregiver.email) return caregiver.email.split('@')[0];
+      return 'Sin nombre';
+    }
+
+    // Si no está en el array, buscar en caregiverNames
+    if (caregiverNames[caregiverId]) {
+      return caregiverNames[caregiverId];
+    }
+
+    // Si no está cargado aún, intentar cargarlo inmediatamente (sin esperar)
+    // pero mostrar "Cargando..." mientras tanto
+    if (caregiverId && !caregiverNames[caregiverId]) {
+      // Cargar en background
+      usersApi.getById(caregiverId).then(caregiver => {
+        let displayName = caregiver.name;
+        if (!displayName && caregiver.email) {
+          displayName = caregiver.email.split('@')[0];
+        } else if (!displayName) {
+          displayName = 'Sin nombre';
+        }
+        setCaregiverNames(prev => ({ ...prev, [caregiverId]: displayName }));
+      }).catch(() => {
+        setCaregiverNames(prev => ({ ...prev, [caregiverId]: 'Desconocido' }));
+      });
+    }
+
+    return 'Cargando...';
+  };
+
+  if (statsLoading && !stats) {
     return (
       <div style={styles.container}>
         <div style={styles.loading}>Cargando dashboard...</div>
@@ -42,7 +218,8 @@ export default function AdminDashboard() {
         <p style={styles.subtitle}>Vista general del sistema</p>
       </div>
 
-      {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
+      {statsError && <div style={styles.errorAlert}>⚠️ {statsError}</div>}
+      {patientsError && <div style={styles.errorAlert}>⚠️ {patientsError}</div>}
 
       {/* KPIs Principales */}
       {stats && (
@@ -84,114 +261,88 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-
-          {/* Dosis de Hoy */}
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>📝 Dosis de Hoy</h2>
-            <div style={styles.dosesGrid}>
-              <div style={styles.doseCard}>
-                <div style={styles.doseNumber}>{stats.today_doses.taken}</div>
-                <div style={styles.doseLabel}>✓ Tomadas</div>
-                <div
-                  style={{
-                    ...styles.doseBar,
-                    width: `${
-                      stats.today_doses.total > 0
-                        ? (stats.today_doses.taken / stats.today_doses.total) * 100
-                        : 0
-                    }%`,
-                    backgroundColor: '#10b981',
-                  }}
-                />
-              </div>
-
-              <div style={styles.doseCard}>
-                <div style={styles.doseNumber}>{stats.today_doses.missed}</div>
-                <div style={styles.doseLabel}>✗ Omitidas</div>
-                <div
-                  style={{
-                    ...styles.doseBar,
-                    width: `${
-                      stats.today_doses.total > 0
-                        ? (stats.today_doses.missed / stats.today_doses.total) * 100
-                        : 0
-                    }%`,
-                    backgroundColor: '#f59e0b',
-                  }}
-                />
-              </div>
-
-              <div style={styles.doseCard}>
-                <div style={styles.doseNumber}>{stats.today_doses.total}</div>
-                <div style={styles.doseLabel}>📋 Total</div>
-                <div
-                  style={{
-                    ...styles.doseBar,
-                    width: '100%',
-                    backgroundColor: '#667eea',
-                  }}
-                />
-              </div>
-            </div>
-          </div>
         </>
       )}
 
-      {/* Adherencia por Paciente */}
+      {/* Tabla de Pacientes */}
       <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>
-          🎯 Adherencia por Paciente (Últimos 7 días)
-        </h2>
-
-        {patientsAdherence.length === 0 ? (
+        <h2 style={styles.sectionTitle}>📋 Lista de Pacientes</h2>
+        
+        {patientsLoading && patients.length === 0 ? (
+          <div style={styles.loading}>Cargando pacientes...</div>
+        ) : patients.length === 0 ? (
           <div style={styles.emptyState}>
-            <p>No hay datos de adherencia disponibles</p>
+            <p>📋 No hay pacientes registrados</p>
           </div>
         ) : (
-          <div style={styles.adherenceTable}>
-            {patientsAdherence.map((patient) => (
-              <div key={patient.patient_id} style={styles.adherenceRow}>
-                <div style={styles.patientInfo}>
-                  <div style={styles.patientName}>{patient.patient_name}</div>
-                  <div style={styles.patientStats}>
-                    {patient.summary.taken_count} tomadas ·{' '}
-                    {patient.summary.missed_count} omitidas ·{' '}
-                    {patient.summary.total_count} total
-                  </div>
-                </div>
-                <div style={styles.adherenceValue}>
-                  <div
-                    style={{
-                      ...styles.adherenceBadge,
-                      backgroundColor: getAdherenceColor(
-                        patient.summary.adherence_percentage
-                      ),
-                    }}
-                  >
-                    {patient.summary.adherence_percentage !== null
-                      ? `${patient.summary.adherence_percentage}%`
-                      : 'N/A'}
-                  </div>
-                </div>
+          <div 
+            style={styles.tableContainer} 
+            onScroll={handleTableScroll}
+          >
+            <table style={styles.table}>
+              <thead style={styles.tableHeaderSticky}>
+                <tr style={styles.tableHeader}>
+                  <th style={styles.th}>Nombre</th>
+                  <th style={styles.th}>Cuidador Asignado</th>
+                  <th style={styles.th}>Notas</th>
+                  <th style={styles.th}>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {patients.map((patient) => (
+                  <tr key={patient.id} style={styles.tableRow}>
+                    <td style={styles.td}>
+                      <div style={styles.patientName}>{patient.name}</div>
+                    </td>
+                    <td style={styles.td}>
+                      {(() => {
+                        const caregiverName = getCaregiverNameSync(patient.id);
+                        const hasCaregiver = caregiverName !== 'Sin asignar';
+                        return (
+                          <span
+                            style={{
+                              ...badgeStyle,
+                              backgroundColor: hasCaregiver ? '#e0e7ff' : '#f3f4f6',
+                              color: hasCaregiver ? '#4338ca' : '#6b7280',
+                            }}
+                          >
+                            {caregiverName}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td style={styles.td}>
+                      <div style={styles.notes}>
+                        {patient.notes || <em style={{ color: '#9ca3af' }}>Sin notas</em>}
+                      </div>
+                    </td>
+                    <td style={styles.td}>
+                      <span
+                        style={{
+                          ...badgeStyle,
+                          backgroundColor: patient.active ? '#d1fae5' : '#fee2e2',
+                          color: patient.active ? '#065f46' : '#991b1b',
+                        }}
+                      >
+                        {patient.active ? '✓ Activo' : '✗ Inactivo'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {loadingMore && (
+              <div style={styles.loadingMore}>
+                <div>Cargando más pacientes...</div>
               </div>
-            ))}
+            )}
+            {!nextCursor && patients.length > 0 && (
+              <div style={styles.endOfList}>
+                <div>No hay más pacientes para mostrar</div>
+              </div>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Acciones Rápidas */}
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>⚡ Acciones Rápidas</h2>
-        <div style={styles.actionsGrid}>
-          <a href="/admin/pacientes" style={styles.actionCard}>
-            <div style={styles.actionIcon}>🏥</div>
-            <div style={styles.actionText}>Gestionar Pacientes</div>
-          </a>
-          <a href="/admin/asignaciones" style={styles.actionCard}>
-            <div style={styles.actionIcon}>🔗</div>
-            <div style={styles.actionText}>Asignar Cuidadores</div>
-          </a>
-        </div>
       </div>
     </div>
   );
@@ -272,35 +423,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#1f2937',
     marginBottom: '20px',
   },
-  dosesGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
-  },
-  doseCard: {
-    backgroundColor: '#fff',
-    padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  doseNumber: {
-    fontSize: '36px',
-    fontWeight: 700,
-    color: '#1f2937',
-    marginBottom: '8px',
-  },
-  doseLabel: {
-    fontSize: '14px',
-    color: '#6b7280',
-    marginBottom: '12px',
-  },
-  doseBar: {
-    height: '6px',
-    borderRadius: '3px',
-    transition: 'width 0.5s ease',
-  },
   emptyState: {
     backgroundColor: '#f9fafb',
     padding: '60px 40px',
@@ -308,79 +430,69 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     color: '#6b7280',
   },
-  adherenceTable: {
+  tableContainer: {
     backgroundColor: '#fff',
     borderRadius: '12px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
+    overflow: 'auto',
+    overflowX: 'auto',
+    maxHeight: '600px', // Altura máxima para scroll
+    position: 'relative',
   },
-  adherenceRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    minWidth: '800px',
+  },
+  tableHeader: {
+    backgroundColor: '#f9fafb',
+  },
+  th: {
+    padding: '16px',
+    textAlign: 'left',
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#374151',
+    borderBottom: '2px solid #e5e7eb',
+  },
+  tableRow: {
     borderBottom: '1px solid #e5e7eb',
+    transition: 'background-color 0.2s',
   },
-  patientInfo: {
-    flex: 1,
+  td: {
+    padding: '16px',
+    fontSize: '14px',
+    color: '#1f2937',
   },
   patientName: {
-    fontSize: '16px',
     fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '4px',
   },
-  patientStats: {
-    fontSize: '13px',
+  notes: {
+    maxWidth: '300px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  loadingMore: {
+    padding: '20px',
+    textAlign: 'center',
     color: '#6b7280',
-  },
-  adherenceValue: {
-    marginLeft: '20px',
-  },
-  adherenceBadge: {
-    padding: '8px 16px',
-    borderRadius: '20px',
     fontSize: '14px',
-    fontWeight: 700,
-    color: '#fff',
-    minWidth: '60px',
+  },
+  endOfList: {
+    padding: '20px',
     textAlign: 'center',
-  },
-  actionsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '20px',
-  },
-  actionCard: {
-    backgroundColor: '#fff',
-    padding: '30px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '15px',
-    textDecoration: 'none',
-    transition: 'transform 0.2s, box-shadow 0.2s',
-    cursor: 'pointer',
-  },
-  actionIcon: {
-    fontSize: '48px',
-  },
-  actionText: {
-    fontSize: '16px',
-    fontWeight: 600,
-    color: '#1f2937',
-    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: '14px',
+    fontStyle: 'italic',
   },
 };
 
-// Hover effect para action cards
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  a[style*="actionCard"]:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
-  }
-`;
-document.head.appendChild(styleSheet);
+// Badge style para los estados
+const badgeStyle: React.CSSProperties = {
+  padding: '4px 12px',
+  borderRadius: '12px',
+  fontSize: '12px',
+  fontWeight: 600,
+  display: 'inline-block',
+};

@@ -10,6 +10,7 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from '@tanstack/react-table';
+import { authApi, patientsApi, assignmentsApi } from '../../api';
 
 // ============================================
 // TIPOS
@@ -64,6 +65,7 @@ export default function MiHistorial() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [myPatientId, setMyPatientId] = useState<number | null>(null);
 
   // Paginación
   const [nextCursor, setNextCursor] = useState<number | null>(null);
@@ -74,6 +76,53 @@ export default function MiHistorial() {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const token = localStorage.getItem('token');
+
+  // Obtener el patient_id del usuario actual
+  const getMyPatientId = async (): Promise<number | null> => {
+    const currentUser = authApi.getStoredUser();
+    if (!currentUser || !currentUser.id) {
+      return null;
+    }
+
+    // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
+    let patientId: number | null = null;
+
+    // Buscar asignaciones activas donde el patient_id corresponde a este usuario
+    try {
+      const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
+      if (assignments.length > 0 && assignments[0].active) {
+        patientId = assignments[0].patient_id;
+        return patientId;
+      }
+    } catch {
+      // Continuar con otro método
+    }
+
+    // Si no se encontró, buscar todas las asignaciones activas y verificar
+    // si alguna corresponde a un paciente creado para este usuario
+    try {
+      const allAssignments = await assignmentsApi.getAll();
+      const activeAssignments = allAssignments.filter(a => a.active);
+
+      // Para cada asignación, verificar si el paciente fue creado para este usuario
+      for (const assignment of activeAssignments) {
+        try {
+          const patient = await patientsApi.getById(assignment.patient_id);
+          // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
+          if (patient.notes && patient.notes.includes(currentUser.email)) {
+            patientId = patient.id;
+            return patientId;
+          }
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // Si falla, retornar null
+    }
+
+    return null;
+  };
 
   // Definición de columnas para TanStack Table
   const columns = useMemo<ColumnDef<HistoryItem>[]>(
@@ -163,22 +212,29 @@ export default function MiHistorial() {
 
   // Cargar datos al montar
   useEffect(() => {
-    fetchTreatments();
-    fetchHistory();
+    const initializeData = async () => {
+      const patientId = await getMyPatientId();
+      setMyPatientId(patientId);
+      if (patientId) {
+        fetchTreatments(patientId);
+        fetchHistory(null, patientId);
+      }
+    };
+    initializeData();
   }, []);
 
   // Recargar cuando cambien los filtros (resetear lista)
   useEffect(() => {
-    if (treatments.length > 0) {
+    if (treatments.length > 0 && myPatientId) {
       setData([]);
       setNextCursor(null);
       setHasMore(true);
-      fetchHistory(null);
+      fetchHistory(null, myPatientId);
     }
   }, [columnFilters]);
 
-  // Obtener tratamientos (para el filtro)
-  const fetchTreatments = async () => {
+  // Obtener tratamientos (para el filtro) - FILTRADO POR PACIENTE
+  const fetchTreatments = async (patientId: number) => {
     try {
       const response = await fetch('http://localhost:8000/treatment/paginated', {
         method: 'POST',
@@ -188,7 +244,7 @@ export default function MiHistorial() {
         },
         body: JSON.stringify({
           limit: 100,
-          filters: { active: true }
+          filters: { active: true, patient_id: patientId }
         }),
       });
 
@@ -201,9 +257,13 @@ export default function MiHistorial() {
     }
   };
 
-  // Obtener historial de tomas con paginación
-  const fetchHistory = async (cursor: number | null = null) => {
+  // Obtener historial de tomas con paginación - FILTRADO POR PACIENTE
+  const fetchHistory = async (cursor: number | null = null, patientId: number | null = null) => {
     if (!hasMore && cursor !== null) return;
+    if (!patientId) {
+      setError('No se encontró el perfil del paciente');
+      return;
+    }
 
     const isInitialLoad = cursor === null;
 
@@ -218,6 +278,9 @@ export default function MiHistorial() {
     try {
       // Preparar filtros para el backend
       const filters: any = {};
+
+      // IMPORTANTE: Filtrar solo por el paciente actual
+      filters.patient_id = patientId;
 
       // Extraer filtros de TanStack Table
       const statusFilter = columnFilters.find(f => f.id === 'status');
@@ -330,8 +393,8 @@ export default function MiHistorial() {
       const scrollTop = target.scrollTop;
       const clientHeight = target.clientHeight;
 
-      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore) {
-        fetchHistory(nextCursor);
+      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore && myPatientId) {
+        fetchHistory(nextCursor, myPatientId);
       }
     };
 
@@ -340,7 +403,7 @@ export default function MiHistorial() {
       scrollContainer.addEventListener('scroll', handleScroll);
       return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }
-  }, [nextCursor, loadingMore, hasMore]);
+  }, [nextCursor, loadingMore, hasMore, myPatientId]);
 
   // Obtener filas filtradas
   const filteredRows = table.getRowModel().rows;

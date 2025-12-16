@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
-import type { Assignment, AssignmentWithDetails, User, Patient } from '../../api';
+import type { Assignment, User, Patient } from '../../api';
 
 // ============================================
 // TIPOS
@@ -35,10 +35,18 @@ export default function AsignacionesView() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showCreatePatientForm, setShowCreatePatientForm] = useState(false);
 
-  // Form
+  // Form de asignación
   const [selectedCaregiver, setSelectedCaregiver] = useState<string>('');
   const [selectedPatient, setSelectedPatient] = useState<string>('');
+
+  // Form de crear paciente
+  const [patientFormData, setPatientFormData] = useState({
+    name: '',
+    caregiver_id: '',
+    notes: '',
+  });
 
   // Búsqueda en selects
   const [caregiverSearch, setCaregiverSearch] = useState<string>('');
@@ -94,9 +102,17 @@ export default function AsignacionesView() {
       const enrichedData = await Promise.all(
         assignments.map(async (assignment: Assignment) => {
           try {
+            // Obtener cuidador
             const caregiver = await usersApi.getById(assignment.caregiver_id);
+            let caregiverName = caregiver.name;
+            if (!caregiverName && caregiver.email) {
+              caregiverName = caregiver.email.split('@')[0];
+            } else if (!caregiverName) {
+              caregiverName = 'Desconocido';
+            }
+
             let patientName = 'Desconocido';
-            
+
             // Intentar obtener como paciente primero
             try {
               const patient = await patientsApi.getById(assignment.patient_id);
@@ -109,14 +125,6 @@ export default function AsignacionesView() {
               } catch {
                 patientName = 'Desconocido';
               }
-            }
-
-            // Obtener nombre del cuidador (nombre o parte antes del @ del email)
-            let caregiverName = caregiver.name;
-            if (!caregiverName && caregiver.email) {
-              caregiverName = caregiver.email.split('@')[0];
-            } else if (!caregiverName) {
-              caregiverName = 'Desconocido';
             }
 
             return {
@@ -223,7 +231,10 @@ export default function AsignacionesView() {
       setPatientSearch('');
       setShowForm(false);
 
-      fetchAssignments();
+      // Esperar un momento para que el backend procese la asignación
+      setTimeout(() => {
+        fetchAssignments();
+      }, 100);
     } catch (err: any) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -274,6 +285,89 @@ export default function AsignacionesView() {
     setSelectedPatient('');
     setCaregiverSearch('');
     setPatientSearch('');
+  };
+
+  // Crear paciente
+  const handleCreatePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    // Validar que se haya seleccionado un cuidador
+    if (!patientFormData.caregiver_id) {
+      setError('Debes seleccionar un cuidador para crear el paciente');
+      setTimeout(() => setError(''), 5000);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const caregiverId = Number(patientFormData.caregiver_id);
+      
+      // Crear el paciente
+      const createResponse: any = await patientsApi.create({
+        name: patientFormData.name,
+        caregiver_id: caregiverId,
+        notes: patientFormData.notes || undefined,
+      });
+
+      const createdPatient = createResponse.patient || createResponse.data;
+      
+      if (!createdPatient || !createdPatient.id) {
+        setError('Error: No se pudo obtener el ID del paciente creado');
+        setTimeout(() => setError(''), 5000);
+        setLoading(false);
+        return;
+      }
+      
+      // Crear también la asignación en la tabla assignments
+      try {
+        await assignmentsApi.create({
+          caregiver_id: caregiverId,
+          patient_id: createdPatient.id,
+        });
+      } catch (assignError: any) {
+        if (assignError instanceof ApiError) {
+          if (assignError.status !== 409) {
+            setError(`⚠️ Paciente creado pero error al asignar: ${assignError.message}`);
+            setTimeout(() => setError(''), 7000);
+          }
+        }
+      }
+
+      setSuccessMessage('Paciente creado y asignado exitosamente ✓');
+      setTimeout(() => setSuccessMessage(''), 3000);
+
+      setPatientFormData({
+        name: '',
+        caregiver_id: '',
+        notes: '',
+      });
+      setShowCreatePatientForm(false);
+
+      // Recargar pacientes y asignaciones
+      fetchPatients();
+      fetchAssignments();
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Error al crear paciente');
+      }
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancelar formulario de crear paciente
+  const cancelPatientForm = () => {
+    setShowCreatePatientForm(false);
+    setPatientFormData({
+      name: '',
+      caregiver_id: '',
+      notes: '',
+    });
   };
 
   // Filtrar cuidadores por búsqueda
@@ -333,10 +427,15 @@ export default function AsignacionesView() {
           <h1 style={styles.title}>Gestión de Asignaciones</h1>
           <p style={styles.subtitle}>Asigna cuidadores a pacientes</p>
         </div>
-        {!showForm && (
-          <button onClick={() => setShowForm(true)} style={styles.btnAdd}>
-            + Nueva Asignación
-          </button>
+        {!showForm && !showCreatePatientForm && (
+          <div style={styles.headerButtons}>
+            <button onClick={() => setShowCreatePatientForm(true)} style={styles.btnAddPatient}>
+              + Crear Paciente
+            </button>
+            <button onClick={() => setShowForm(true)} style={styles.btnAdd}>
+              + Nueva Asignación
+            </button>
+          </div>
         )}
       </div>
 
@@ -344,7 +443,76 @@ export default function AsignacionesView() {
       {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
       {successMessage && <div style={styles.successAlert}>✓ {successMessage}</div>}
 
-      {/* Formulario */}
+      {/* Formulario de Crear Paciente */}
+      {showCreatePatientForm && (
+        <div style={styles.formCard}>
+          <h2 style={styles.formTitle}>Crear Nuevo Paciente</h2>
+
+          <form onSubmit={handleCreatePatient} style={styles.form}>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Nombre completo *</label>
+              <input
+                type="text"
+                value={patientFormData.name}
+                onChange={(e) => setPatientFormData({ ...patientFormData, name: e.target.value })}
+                style={styles.input}
+                placeholder="Ej: María González"
+                required
+              />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Cuidador asignado *</label>
+              <select
+                value={patientFormData.caregiver_id}
+                onChange={(e) => setPatientFormData({ ...patientFormData, caregiver_id: e.target.value })}
+                style={styles.select}
+                required
+              >
+                <option value="">Seleccionar cuidador...</option>
+                {caregivers.length === 0 ? (
+                  <option value="" disabled>
+                    No hay cuidadores disponibles
+                  </option>
+                ) : (
+                  caregivers.map((caregiver) => (
+                    <option key={caregiver.id} value={caregiver.id}>
+                      {caregiver.name} ({caregiver.email})
+                    </option>
+                  ))
+                )}
+              </select>
+              {caregivers.length === 0 && (
+                <small style={{ ...styles.hint, color: '#dc2626' }}>
+                  ⚠️ No hay cuidadores (ASISTENCIAL) activos en el sistema.
+                </small>
+              )}
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Notas</label>
+              <textarea
+                value={patientFormData.notes}
+                onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
+                style={styles.textarea}
+                placeholder="Información adicional sobre el paciente..."
+                rows={3}
+              />
+            </div>
+
+            <div style={styles.formActions}>
+              <button type="button" onClick={cancelPatientForm} style={styles.btnCancel}>
+                Cancelar
+              </button>
+              <button type="submit" style={styles.btnSubmit} disabled={loading}>
+                {loading ? 'Guardando...' : 'Crear Paciente'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Formulario de Asignación */}
       {showForm && (
         <div style={styles.formCard}>
           <h2 style={styles.formTitle}>Nueva Asignación</h2>
@@ -521,8 +689,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#6b7280',
     margin: 0,
   },
+  headerButtons: {
+    display: 'flex',
+    gap: '12px',
+  },
   btnAdd: {
     backgroundColor: '#667eea',
+    color: '#fff',
+    padding: '12px 24px',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  btnAddPatient: {
+    backgroundColor: '#10b981',
     color: '#fff',
     padding: '12px 24px',
     border: 'none',
@@ -586,6 +769,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     color: '#374151',
   },
+  input: {
+    padding: '12px',
+    fontSize: '15px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+  },
   select: {
     padding: '12px',
     fontSize: '15px',
@@ -594,6 +785,16 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     cursor: 'pointer',
     backgroundColor: '#fff',
+  },
+  textarea: {
+    padding: '12px',
+    fontSize: '15px',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+    fontFamily: 'inherit',
+    resize: 'vertical',
   },
   searchInput: {
     padding: '10px',
