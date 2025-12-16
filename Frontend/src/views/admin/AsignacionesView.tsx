@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
 import type { Assignment, User, Patient } from '../../api';
+import { toastSuccess, toastError, toastWarning } from '../../utils/toast';
 
 // ============================================
 // TIPOS
@@ -32,8 +33,6 @@ export default function AsignacionesView() {
   const [personalUsers, setPersonalUsers] = useState<User[]>([]);
   const [assignableItems, setAssignableItems] = useState<AssignableItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showCreatePatientForm, setShowCreatePatientForm] = useState(false);
 
@@ -65,27 +64,38 @@ export default function AsignacionesView() {
 
   // Combinar pacientes y usuarios PERSONAL en una lista unificada
   useEffect(() => {
+    // Crear un Set con los caregiver_ids de todos los pacientes
+    // Esto nos permite identificar qué usuarios PERSONAL ya tienen un paciente asociado
+    const caregiverIdsWithPatient = new Set(
+      patients.map(p => p.caregiver_id).filter(id => id !== undefined && id !== null)
+    );
+
     const items: AssignableItem[] = [
+      // Siempre incluir todos los pacientes
       ...patients.map(p => ({
         id: p.id,
         name: p.name,
         type: 'patient' as const,
       })),
-      ...personalUsers.map(u => {
-        // Si no tiene nombre, usar la parte antes del @ del email
-        let displayName = u.name;
-        if (!displayName && u.email) {
-          displayName = u.email.split('@')[0];
-        } else if (!displayName) {
-          displayName = 'Sin nombre';
-        }
-        return {
-          id: u.id,
-          name: displayName,
-          type: 'personal' as const,
-          email: u.email,
-        };
-      }),
+      // Solo incluir usuarios PERSONAL que NO tienen un paciente asociado
+      // (es decir, cuyo user.id NO está en la lista de caregiver_ids)
+      ...personalUsers
+        .filter(u => !caregiverIdsWithPatient.has(u.id))
+        .map(u => {
+          // Si no tiene nombre, usar la parte antes del @ del email
+          let displayName = u.name;
+          if (!displayName && u.email) {
+            displayName = u.email.split('@')[0];
+          } else if (!displayName) {
+            displayName = 'Sin nombre';
+          }
+          return {
+            id: u.id,
+            name: displayName,
+            type: 'personal' as const,
+            email: u.email,
+          };
+        }),
     ];
     setAssignableItems(items);
   }, [patients, personalUsers]);
@@ -93,7 +103,6 @@ export default function AsignacionesView() {
   // Obtener asignaciones
   const fetchAssignments = async () => {
     setLoading(true);
-    setError('');
 
     try {
       const assignments = await assignmentsApi.getAll();
@@ -144,11 +153,8 @@ export default function AsignacionesView() {
 
       setAssignments(enrichedData);
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al cargar asignaciones');
-      }
+      const message = err instanceof ApiError ? err.message : 'Error al cargar asignaciones';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -194,8 +200,7 @@ export default function AsignacionesView() {
     e.preventDefault();
 
     if (!selectedCaregiver || !selectedPatient) {
-      setError('Debes seleccionar un cuidador y un paciente');
-      setTimeout(() => setError(''), 3000);
+      toastWarning('Seleccioná un cuidador y un paciente');
       return;
     }
 
@@ -208,13 +213,11 @@ export default function AsignacionesView() {
     );
 
     if (exists) {
-      setError('Esta asignación ya existe');
-      setTimeout(() => setError(''), 3000);
+      toastWarning('Esta asignación ya existe');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       await assignmentsApi.create({
@@ -222,8 +225,7 @@ export default function AsignacionesView() {
         patient_id: Number(selectedPatient),
       });
 
-      setSuccessMessage('Asignación creada exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Asignación creada correctamente');
 
       setSelectedCaregiver('');
       setSelectedPatient('');
@@ -236,12 +238,8 @@ export default function AsignacionesView() {
         fetchAssignments();
       }, 100);
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al crear asignación');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al crear asignación';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -249,30 +247,24 @@ export default function AsignacionesView() {
 
   // Eliminar asignación
   const handleDelete = async (id: number, caregiverName: string, patientName: string) => {
-    if (
-      !confirm(
-        `¿Estás seguro de eliminar la asignación de ${caregiverName} con ${patientName}?`
-      )
-    )
-      return;
+    // Confirmación nativa para operaciones críticas
+    const confirmed = window.confirm(
+      `¿Confirmar eliminación?\n\nCuidador: ${caregiverName}\nPaciente: ${patientName}\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
 
     setLoading(true);
-    setError('');
 
     try {
       await assignmentsApi.deactivate(id);
 
-      setSuccessMessage('Asignación eliminada exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Asignación eliminada correctamente');
 
       fetchAssignments();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al eliminar asignación');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al eliminar asignación';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -291,19 +283,17 @@ export default function AsignacionesView() {
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
 
     // Validar que se haya seleccionado un cuidador
     if (!patientFormData.caregiver_id) {
-      setError('Debes seleccionar un cuidador para crear el paciente');
-      setTimeout(() => setError(''), 5000);
+      toastWarning('Seleccioná un cuidador para el paciente');
       setLoading(false);
       return;
     }
 
     try {
       const caregiverId = Number(patientFormData.caregiver_id);
-      
+
       // Crear el paciente
       const createResponse: any = await patientsApi.create({
         name: patientFormData.name,
@@ -312,14 +302,13 @@ export default function AsignacionesView() {
       });
 
       const createdPatient = createResponse.patient || createResponse.data;
-      
+
       if (!createdPatient || !createdPatient.id) {
-        setError('Error: No se pudo obtener el ID del paciente creado');
-        setTimeout(() => setError(''), 5000);
+        toastError('No se pudo obtener el ID del paciente creado');
         setLoading(false);
         return;
       }
-      
+
       // Crear también la asignación en la tabla assignments
       try {
         await assignmentsApi.create({
@@ -327,16 +316,12 @@ export default function AsignacionesView() {
           patient_id: createdPatient.id,
         });
       } catch (assignError: any) {
-        if (assignError instanceof ApiError) {
-          if (assignError.status !== 409) {
-            setError(`⚠️ Paciente creado pero error al asignar: ${assignError.message}`);
-            setTimeout(() => setError(''), 7000);
-          }
+        if (assignError instanceof ApiError && assignError.status !== 409) {
+          toastWarning(`Paciente creado, pero error al asignar: ${assignError.message}`);
         }
       }
 
-      setSuccessMessage('Paciente creado y asignado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Paciente creado y asignado correctamente');
 
       setPatientFormData({
         name: '',
@@ -349,12 +334,8 @@ export default function AsignacionesView() {
       fetchPatients();
       fetchAssignments();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al crear paciente');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al crear paciente';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -438,10 +419,6 @@ export default function AsignacionesView() {
           </div>
         )}
       </div>
-
-      {/* Mensajes */}
-      {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
-      {successMessage && <div style={styles.successAlert}>✓ {successMessage}</div>}
 
       {/* Formulario de Crear Paciente */}
       {showCreatePatientForm && (

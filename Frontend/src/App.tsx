@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import Dashboard from './views/Dashboard';
 import Login from './views/Login';
 import AdminRoutes from './components/routes/AdminRoutes';
 import AsistencialRoutes from './components/routes/AsistencialRoutes';
@@ -19,7 +20,7 @@ function App() {
         }}
         toastOptions={{
           // Duración por defecto
-          duration: 4000,
+          duration: 3000,
           // Los estilos específicos se manejan en utils/toast.ts
           style: {
             fontSize: '14px',
@@ -29,8 +30,11 @@ function App() {
       />
 
       <Routes>
+        {/* Ruta pública - Dashboard (Landing Page) */}
+        <Route path="/" element={<Dashboard />} />
+
         {/* Ruta pública - Login */}
-        <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
 
         {/* Rutas protegidas por rol */}
         <Route path="/admin/*" element={<AdminRoutes />} />

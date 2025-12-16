@@ -120,6 +120,22 @@ const Login: React.FC = () => {
 
       {/* Main Card */}
       <div className="login-card">
+        {/* Back Arrow - Dinámico según el modo */}
+        {isLogin ? (
+          // En modo login: volver al Dashboard
+          <button type="button" onClick={() => navigate('/')} className="back-to-login" title="Volver al inicio">
+            <svg className="back-arrow" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        ) : (
+          // En modo registro: volver al login
+          <button type="button" onClick={switchMode} className="back-to-login" title="Volver al inicio de sesión">
+            <svg className="back-arrow" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        )}
         {/* Logo Section with Animation */}
         <div className="logo-section">
           <div className="logo-wrapper">
@@ -293,18 +309,20 @@ const Login: React.FC = () => {
           </button>
         </form>
 
-        {/* Switch Mode */}
-        <div className="switch-section">
-          <div className="divider">
-            <span className="divider-text">o</span>
+        {/* Switch Mode - Solo mostrar en modo Login */}
+        {isLogin && (
+          <div className="switch-section">
+            <div className="divider">
+              <span className="divider-text">o</span>
+            </div>
+            <p className="switch-text">
+              ¿No tienes una cuenta?
+            </p>
+            <button type="button" onClick={switchMode} className="switch-button">
+              Crear cuenta nueva
+            </button>
           </div>
-          <p className="switch-text">
-            {isLogin ? '¿No tienes una cuenta?' : '¿Ya tienes una cuenta?'}
-          </p>
-          <button type="button" onClick={switchMode} className="switch-button">
-            {isLogin ? 'Crear cuenta nueva' : 'Iniciar sesión'}
-          </button>
-        </div>
+        )}
       </div>
 
       {/* Floating Pills */}
@@ -384,7 +402,7 @@ const Login: React.FC = () => {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(20px);
           border-radius: 32px;
-          padding: 3rem 2.5rem;
+          padding: 3rem 2.5rem 2.5rem 2.5rem;
           width: 100%;
           max-width: 480px;
           box-shadow: 0 40px 80px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.1);
@@ -392,6 +410,42 @@ const Login: React.FC = () => {
           z-index: 10;
           border: 1px solid rgba(255, 255, 255, 0.3);
           animation: cardSlideUp 0.6s ease-out;
+        }
+
+        .back-to-login {
+          position: absolute;
+          top: 1.5rem;
+          left: 1.5rem;
+          background: rgba(102, 126, 234, 0.1);
+          border: 2px solid #667eea;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          z-index: 20;
+          padding: 0;
+        }
+
+        .back-to-login:hover {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-color: transparent;
+          transform: translateX(-3px);
+          box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .back-arrow {
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+          transition: color 0.3s ease;
+        }
+
+        .back-to-login:hover .back-arrow {
+          color: #ffffff;
         }
 
         @keyframes cardSlideUp {
@@ -407,14 +461,14 @@ const Login: React.FC = () => {
 
         .logo-section {
           text-align: center;
-          margin-bottom: 2.5rem;
+          margin-bottom: 2rem;
         }
 
         .logo-wrapper {
           position: relative;
           width: 90px;
           height: 90px;
-          margin: 0 auto 1.5rem;
+          margin: 0 auto 1.25rem;
         }
 
         .logo-icon {
@@ -475,10 +529,10 @@ const Login: React.FC = () => {
         .error-alert {
           background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
           color: #dc2626;
-          padding: 1rem 1.25rem;
-          border-radius: 16px;
+          padding: 0.875rem 1rem;
+          border-radius: 12px;
           font-size: 0.875rem;
-          margin-bottom: 1.5rem;
+          margin-bottom: 1.25rem;
           display: flex;
           align-items: center;
           gap: 0.75rem;
@@ -510,7 +564,7 @@ const Login: React.FC = () => {
         .auth-form {
           display: flex;
           flex-direction: column;
-          gap: 1.25rem;
+          gap: 1rem;
         }
 
         .form-group {
@@ -809,6 +863,18 @@ const Login: React.FC = () => {
           .logo-icon {
             width: 70px;
             height: 70px;
+          }
+
+          .back-to-login {
+            top: 1rem;
+            left: 1rem;
+            width: 40px;
+            height: 40px;
+          }
+
+          .back-arrow {
+            width: 20px;
+            height: 20px;
           }
         }
       `}</style>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { patientsApi, usersApi, assignmentsApi, ApiError } from '../../api';
 import type { Patient, User } from '../../api';
+import { toastSuccess, toastError, toastWarning } from '../../utils/toast';
 
 // ============================================
 // TIPOS
@@ -19,8 +20,6 @@ export default function PacientesAdminView() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [caregivers, setCaregivers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [caregiverNames, setCaregiverNames] = useState<Record<number, string>>({});
@@ -45,7 +44,6 @@ export default function PacientesAdminView() {
   // Obtener pacientes
   const fetchPatients = async () => {
     setLoading(true);
-    setError('');
 
     try {
       const response = await patientsApi.list({
@@ -57,11 +55,8 @@ export default function PacientesAdminView() {
 
       setPatients(response.items);
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al cargar pacientes');
-      }
+      const message = err instanceof ApiError ? err.message : 'Error al cargar pacientes';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -73,13 +68,12 @@ export default function PacientesAdminView() {
       const caregivers = await usersApi.getByRole('ASISTENCIAL');
       setCaregivers(caregivers);
       if (caregivers.length === 0) {
-        console.warn('No hay cuidadores (ASISTENCIAL) disponibles en el sistema');
+        toastWarning('No hay cuidadores disponibles en el sistema');
       }
     } catch (err: any) {
       console.error('Error al cargar cuidadores:', err);
-      if (err instanceof ApiError) {
-        setError(`Error al cargar cuidadores: ${err.message}`);
-      }
+      const message = err instanceof ApiError ? err.message : 'Error al cargar cuidadores';
+      toastError(message);
     }
   };
 
@@ -98,19 +92,17 @@ export default function PacientesAdminView() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
 
     // Validar que se haya seleccionado un cuidador
     if (!formData.caregiver_id) {
-      setError('Debes seleccionar un cuidador para crear el paciente');
-      setTimeout(() => setError(''), 5000);
+      toastWarning('Seleccioná un cuidador para el paciente');
       setLoading(false);
       return;
     }
 
     try {
       const caregiverId = Number(formData.caregiver_id);
-      
+
       // Crear el paciente
       const createResponse: any = await patientsApi.create({
         name: formData.name,
@@ -118,48 +110,27 @@ export default function PacientesAdminView() {
         notes: formData.notes || undefined,
       });
 
-      // El backend devuelve { message: "...", patient: {...} }
-      console.log('📦 Respuesta completa del backend:', createResponse);
       const createdPatient = createResponse.patient || createResponse.data;
-      
+
       if (!createdPatient || !createdPatient.id) {
-        console.error('❌ No se pudo obtener el ID del paciente creado. Respuesta:', createResponse);
-        setError('Error: No se pudo obtener el ID del paciente creado');
-        setTimeout(() => setError(''), 5000);
+        toastError('No se pudo obtener el ID del paciente creado');
         setLoading(false);
         return;
       }
-      
-      console.log('📋 Paciente creado con ID:', createdPatient.id);
-      
+
       // Crear también la asignación en la tabla assignments
       try {
-        console.log('🔗 Creando asignación para paciente ID:', createdPatient.id, 'cuidador ID:', caregiverId);
-        const assignmentResult = await assignmentsApi.create({
+        await assignmentsApi.create({
           caregiver_id: caregiverId,
           patient_id: createdPatient.id,
         });
-        console.log('✅ Asignación creada exitosamente:', assignmentResult);
       } catch (assignError: any) {
-        console.error('❌ Error completo al crear asignación:', assignError);
-        // Si la asignación ya existe, no es un error crítico
-        if (assignError instanceof ApiError) {
-          if (assignError.status === 409) {
-            console.log('ℹ️ Asignación ya existe (409), continuando...');
-          } else {
-            console.error('❌ Error de API al crear asignación:', assignError.status, assignError.message);
-            setError(`⚠️ Paciente creado pero error al asignar: ${assignError.message}`);
-            setTimeout(() => setError(''), 7000);
-          }
-        } else {
-          console.error('❌ Error desconocido al crear asignación:', assignError);
-          setError(`⚠️ Paciente creado pero error al asignar. Ver consola para más detalles.`);
-          setTimeout(() => setError(''), 7000);
+        if (assignError instanceof ApiError && assignError.status !== 409) {
+          toastWarning(`Paciente creado, pero error al asignar: ${assignError.message}`);
         }
       }
 
-      setSuccessMessage('Paciente creado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Paciente creado correctamente');
 
       setFormData({
         name: '',
@@ -170,12 +141,8 @@ export default function PacientesAdminView() {
 
       fetchPatients();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al crear paciente');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al crear paciente';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -187,7 +154,6 @@ export default function PacientesAdminView() {
     if (!editingPatient) return;
 
     setLoading(true);
-    setError('');
 
     try {
       await patientsApi.update({
@@ -197,8 +163,7 @@ export default function PacientesAdminView() {
         notes: formData.notes || undefined,
       });
 
-      setSuccessMessage('Paciente actualizado exitosamente ✓');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Paciente actualizado correctamente');
 
       setFormData({
         name: '',
@@ -210,12 +175,8 @@ export default function PacientesAdminView() {
 
       fetchPatients();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al actualizar paciente');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al actualizar paciente';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -223,15 +184,14 @@ export default function PacientesAdminView() {
 
   // Activar/Desactivar paciente
   const handleToggleActive = async (patient: Patient) => {
-    if (
-      !confirm(
-        `¿Estás seguro de ${patient.active ? 'desactivar' : 'activar'} a ${patient.name}?`
-      )
-    )
-      return;
+    const action = patient.active ? 'desactivar' : 'activar';
+    const confirmed = window.confirm(
+      `¿Confirmar cambio de estado?\n\nPaciente: ${patient.name}\nAcción: ${action.toUpperCase()}`
+    );
+
+    if (!confirmed) return;
 
     setLoading(true);
-    setError('');
 
     try {
       await patientsApi.update({
@@ -239,19 +199,13 @@ export default function PacientesAdminView() {
         active: !patient.active,
       });
 
-      setSuccessMessage(
-        `Paciente ${patient.active ? 'desactivado' : 'activado'} exitosamente`
-      );
-      setTimeout(() => setSuccessMessage(''), 3000);
+      const message = `Paciente ${patient.active ? 'desactivado' : 'activado'} correctamente`;
+      toastSuccess(message);
 
       fetchPatients();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al cambiar estado del paciente');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al cambiar estado del paciente';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -259,25 +213,23 @@ export default function PacientesAdminView() {
 
   // Eliminar paciente
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar este paciente?')) return;
+    const confirmed = window.confirm(
+      '¿Confirmar eliminación?\n\nEsta acción no se puede deshacer.'
+    );
+
+    if (!confirmed) return;
 
     setLoading(true);
-    setError('');
 
     try {
       await patientsApi.deactivate(id);
 
-      setSuccessMessage('Paciente eliminado exitosamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      toastSuccess('Paciente eliminado correctamente');
 
       fetchPatients();
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Error al eliminar paciente');
-      }
-      setTimeout(() => setError(''), 5000);
+      const message = err instanceof ApiError ? err.message : 'Error al eliminar paciente';
+      toastError(message);
     } finally {
       setLoading(false);
     }
@@ -376,10 +328,6 @@ export default function PacientesAdminView() {
           </button>
         )}
       </div>
-
-      {/* Mensajes */}
-      {error && <div style={styles.errorAlert}>⚠️ {error}</div>}
-      {successMessage && <div style={styles.successAlert}>✓ {successMessage}</div>}
 
       {/* Formulario */}
       {showForm && (
