@@ -18,7 +18,7 @@ export const useIntakeLogs = () => {
       const token = localStorage.getItem('token');
 
       const response = await fetch(
-        `http://localhost:8000/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${userId}`,
+        `http://localhost:8000/intake/mark-taken?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${userId}`,
         {
           method: 'POST',
           headers: {
@@ -55,7 +55,7 @@ export const useIntakeLogs = () => {
       const token = localStorage.getItem('token');
 
       const response = await fetch(
-        `http://localhost:8000/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${userId}`,
+        `http://localhost:8000/intake/mark-missed?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${userId}`,
         {
           method: 'POST',
           headers: {

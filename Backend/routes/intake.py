@@ -496,8 +496,8 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
         )
 
 
-@intake.post("/tomas/marcar-tomada")
-async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
+@intake.post("/intake/mark-taken")
+async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
     """
     Marca una dosis como TOMADA creando un registro en IntakeLog.
 
@@ -614,8 +614,8 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
         )
 
 
-@intake.post("/tomas/marcar-omitida")
-async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
+@intake.post("/intake/mark-missed")
+async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_user_id: int, taken_at_full: str = None):
     """
     Marca una dosis como OMITIDA creando un registro en IntakeLog.
 

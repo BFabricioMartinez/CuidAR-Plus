@@ -77,7 +77,7 @@ export const intakesApi = {
   },
 
   /**
-   * POST /tomas/marcar-tomada
+   * POST /intake/mark-taken
    * Marca una dosis como TOMADA
    * @param treatmentId - ID del tratamiento
    * @param time - Hora de la dosis en formato HH:MM
@@ -105,12 +105,12 @@ export const intakesApi = {
     const taken_at_full = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 
     return apiClient.post<{ message: string }>(
-      `/tomas/marcar-tomada?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
+      `/intake/mark-taken?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
     );
   },
 
   /**
-   * POST /tomas/marcar-omitida
+   * POST /intake/mark-missed
    * Marca una dosis como OMITIDA
    * @param treatmentId - ID del tratamiento
    * @param time - Hora de la dosis en formato HH:MM
@@ -138,7 +138,7 @@ export const intakesApi = {
     const taken_at_full = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 
     return apiClient.post<{ message: string }>(
-      `/tomas/marcar-omitida?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
+      `/intake/mark-missed?treatment_id=${treatmentId}&time=${time}&recorded_by_user_id=${recordedByUserId}&taken_at_full=${encodeURIComponent(taken_at_full)}`
     );
   },
 };
