@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { OverviewStats, MyStats } from '../types/api';
+import type { OverviewStats, MyStats, PersonalStats } from '../types/api';
 
 export const statisticsApi = {
   /**
@@ -17,5 +17,14 @@ export const statisticsApi = {
    */
   myStats: async (userId: number): Promise<MyStats> => {
     return apiClient.get<MyStats>(`/statistics/my-stats?user_id=${userId}`);
+  },
+
+  /**
+   * GET /statistics/personal-stats?user_id={userId}
+   * Obtiene estadísticas específicas de un usuario (rol PERSONAL)
+   * Incluye: dosis tomadas/omitidas hoy, adherencia del paciente del usuario
+   */
+  personalStats: async (userId: number): Promise<PersonalStats> => {
+    return apiClient.get<PersonalStats>(`/statistics/personal-stats?user_id=${userId}`);
   },
 };

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { treatmentsApi, patientsApi, statisticsApi, intakesApi, authApi, ApiError } from '../../api';
-import type { Treatment, OverviewStats } from '../../api';
+import type { Treatment, PersonalStats } from '../../api';
 
 export interface UpcomingDose {
   treatment_id: number;
@@ -13,7 +13,7 @@ export interface UpcomingDose {
 export const useDashboard = () => {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [upcomingDoses, setUpcomingDoses] = useState<UpcomingDose[]>([]);
-  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [stats, setStats] = useState<PersonalStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -147,7 +147,7 @@ export const useDashboard = () => {
 
           // Cargar estadísticas específicas del usuario PERSONAL
           // Esto mostrará solo las estadísticas de este paciente específico
-          const statsData = await statisticsApi.myStats(currentUser.id);
+          const statsData = await statisticsApi.personalStats(currentUser.id);
           setStats(statsData);
         } else {
           setTreatments([]);

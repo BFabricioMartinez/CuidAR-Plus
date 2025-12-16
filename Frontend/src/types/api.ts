@@ -221,6 +221,15 @@ export interface MyStats {
   };
 }
 
+export interface PersonalStats {
+  today_doses: {
+    taken: number;
+    missed: number;
+    total: number;
+    adherence_percentage: number | null;
+  };
+}
+
 // ============================================
 // RESPUESTAS GENÉRICAS
 // ============================================
