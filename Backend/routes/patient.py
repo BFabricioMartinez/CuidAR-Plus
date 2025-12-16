@@ -2,9 +2,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, or_, cast, String
 from sqlalchemy.orm import joinedload
-from models import Patient, User, InputPatient, InputPatientUpdate, InputPaginatedRequestFilter
+from models import Patient, User, InputPatient, InputPatientUpdate, InputPaginatedRequestFilter, Assignment
 from config.db import AsyncSessionLocal
-from auth.security import Security
+from auth.roles import require_roles
 from utils.update import is_valid_change
 import traceback
 
@@ -23,14 +23,22 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
     - caregiver_id: Filtro por ID del cuidador
     - order: "desc" para descendente, "asc" para ascendente
 
+    Control de acceso por rol:
+    - ADMIN: acceso total a todos los pacientes
+    - PERSONAL: solo pacientes donde Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo pacientes con Assignment activa donde Assignment.caregiver_id == user_id
+
     Returns:
         JSONResponse con lista de pacientes y cursor para siguiente página
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         # Extraer parámetros
         limit = body.limit or 20
@@ -50,6 +58,19 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
                 .options(joinedload(Patient.treatments))
             )
 
+            # ============================================================================
+            # FILTROS POR ROL - Control de acceso basado en ownership
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: solo pacientes propios
+                stmt = stmt.where(Patient.caregiver_id == user_id)
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: solo pacientes con Assignment activa
+                stmt = stmt.join(Assignment, Assignment.patient_id == Patient.id)
+                stmt = stmt.where(Assignment.caregiver_id == user_id)
+                stmt = stmt.where(Assignment.active == True)
+            # ADMIN: sin filtros adicionales (acceso total)
+
             # Filtrar por active
             if hasattr(Patient, "active"):
                 active_filter = filters.get("active")
@@ -68,9 +89,9 @@ async def get_patients_paginated(req: Request, body: InputPaginatedRequestFilter
             if name_filter:
                 stmt = stmt.where(Patient.name.ilike(f"%{name_filter}%"))
 
-            # Filtro por caregiver_id
+            # Filtro por caregiver_id (solo para ADMIN)
             caregiver_id_filter = filters.get("caregiver_id")
-            if caregiver_id_filter:
+            if caregiver_id_filter and user_role == "ADMIN":
                 stmt = stmt.where(Patient.caregiver_id == caregiver_id_filter)
 
             # Aplicar orden
@@ -144,6 +165,11 @@ async def get_patient_by_id(req: Request, patient_id: int):
     """
     Obtiene un paciente por su ID.
 
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - PERSONAL: solo si Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
+
     Args:
         patient_id: ID del paciente
 
@@ -151,10 +177,13 @@ async def get_patient_by_id(req: Request, patient_id: int):
         JSONResponse con los datos del paciente
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -172,6 +201,34 @@ async def get_patient_by_id(req: Request, patient_id: int):
                     status_code=404,
                     content={"message": f"Paciente con ID {patient_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership
+                if patient_found.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             caregiver = patient_found.caregiver
 
@@ -213,10 +270,10 @@ async def create_patient(req: Request, data: InputPatient):
         JSONResponse con el paciente creado
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             # Verificar que el cuidador existe
@@ -276,10 +333,10 @@ async def update_patient(req: Request, data: InputPatientUpdate):
         JSONResponse con mensaje de actualización
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             # Buscar paciente
@@ -362,10 +419,10 @@ async def deactivate_patient(req: Request, patient_id: int):
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = select(Patient).where(Patient.id == patient_id)

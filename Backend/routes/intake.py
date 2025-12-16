@@ -2,9 +2,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from models import IntakeLog, Treatment, Patient, InputIntakeLog, InputIntakeLogUpdate, InputPaginatedRequestFilter
+from models import IntakeLog, Treatment, Patient, Assignment, InputIntakeLog, InputIntakeLogUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
-from auth.security import Security
+from auth.roles import require_roles
 from utils.update import is_valid_change
 import traceback
 
@@ -22,14 +22,22 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
     - status: Filtro por estado (tomada, omitida, etc.)
     - order: "desc" para descendente, "asc" para ascendente
 
+    Control de acceso por rol:
+    - ADMIN: acceso total a todos los registros de toma
+    - PERSONAL: solo registros de toma de tratamientos de pacientes donde Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo registros de toma de tratamientos de pacientes con Assignment activa donde Assignment.caregiver_id == user_id
+
     Returns:
         JSONResponse con lista de registros de toma y cursor para siguiente página
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         # Extraer parámetros
         limit = body.limit or 20
@@ -42,20 +50,36 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
 
         async with AsyncSessionLocal() as session:
             # Construir query base
-            stmt = (
-                select(IntakeLog)
-                .options(joinedload(IntakeLog.treatment).joinedload(Treatment.patient))
-            )
+            stmt = select(IntakeLog)
+
+            # ============================================================================
+            # FILTROS POR ROL - Control de acceso basado en ownership
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: solo intakes de tratamientos de pacientes propios
+                stmt = stmt.join(Treatment, Treatment.id == IntakeLog.treatment_id)
+                stmt = stmt.join(Patient, Patient.id == Treatment.patient_id)
+                stmt = stmt.where(Patient.caregiver_id == user_id)
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: solo intakes de tratamientos de pacientes con Assignment activa
+                stmt = stmt.join(Treatment, Treatment.id == IntakeLog.treatment_id)
+                stmt = stmt.join(Patient, Patient.id == Treatment.patient_id)
+                stmt = stmt.join(Assignment, Assignment.patient_id == Patient.id)
+                stmt = stmt.where(Assignment.caregiver_id == user_id)
+                stmt = stmt.where(Assignment.active == True)
+            # ADMIN: sin filtros adicionales (acceso total)
 
             # Filtro por treatment_id
             treatment_id_filter = filters.get("treatment_id")
             if treatment_id_filter:
                 stmt = stmt.where(IntakeLog.treatment_id == treatment_id_filter)
 
-            # Filtro por patient_id (requiere join)
+            # Filtro por patient_id (requiere join si no se hizo antes)
             patient_id_filter = filters.get("patient_id")
             if patient_id_filter:
-                stmt = stmt.join(Treatment, IntakeLog.treatment_id == Treatment.id)
+                # Solo hacer JOIN si no es PERSONAL o ASISTENCIAL (que ya tienen el JOIN)
+                if user_role == "ADMIN":
+                    stmt = stmt.join(Treatment, IntakeLog.treatment_id == Treatment.id)
                 stmt = stmt.where(Treatment.patient_id == patient_id_filter)
 
             # Filtro por status
@@ -79,9 +103,12 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
             # Aplicar límite
             stmt = stmt.limit(limit)
 
+            # Agregar joinedload para cargar relaciones (después de todos los filtros)
+            stmt = stmt.options(joinedload(IntakeLog.treatment).joinedload(Treatment.patient))
+
             # Ejecutar query
             result = await session.execute(stmt)
-            intakes = result.scalars().all()
+            intakes = result.unique().scalars().all()
 
             # Serializar
             data = []
@@ -130,6 +157,11 @@ async def get_intake_by_id(req: Request, intake_id: int):
     """
     Obtiene un registro de toma por su ID.
 
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - PERSONAL: solo si el paciente del tratamiento del intake tiene Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
+
     Args:
         intake_id: ID del registro de toma
 
@@ -137,10 +169,13 @@ async def get_intake_by_id(req: Request, intake_id: int):
         JSONResponse con los datos del registro de toma
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -158,8 +193,33 @@ async def get_intake_by_id(req: Request, intake_id: int):
                     content={"message": f"Registro de toma con ID {intake_id} no encontrado"}
                 )
 
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
             treatment = intake_found.treatment
             patient = treatment.patient if treatment else None
+
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if not patient or patient.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                if not patient:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient.id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            # ADMIN: sin validaciones adicionales
 
             intake_data = {
                 "id": intake_found.id,
@@ -198,6 +258,10 @@ async def create_intake(req: Request, data: InputIntakeLog):
     """
     Crea un nuevo registro de toma de medicamento.
 
+    Control de acceso por rol:
+    - ADMIN: puede crear registros para cualquier tratamiento
+    - PERSONAL: solo puede crear registros para tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+
     Args:
         data: Datos del registro de toma (InputIntakeLog)
 
@@ -205,10 +269,13 @@ async def create_intake(req: Request, data: InputIntakeLog):
         JSONResponse con el registro de toma creado
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el tratamiento existe
@@ -221,6 +288,19 @@ async def create_intake(req: Request, data: InputIntakeLog):
                     status_code=404,
                     content={"message": f"Tratamiento con ID {data.treatment_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            # ADMIN: sin validaciones adicionales
 
             # ============================================================================
             # FIX: Parsear taken_at de string a datetime naive para PostgreSQL
@@ -280,6 +360,10 @@ async def update_intake(req: Request, data: InputIntakeLogUpdate):
     """
     Actualiza un registro de toma existente.
 
+    Control de acceso por rol:
+    - ADMIN: puede actualizar cualquier registro de toma
+    - PERSONAL: solo puede actualizar registros de tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+
     Args:
         data: Datos a actualizar (InputIntakeLogUpdate)
 
@@ -287,10 +371,13 @@ async def update_intake(req: Request, data: InputIntakeLogUpdate):
         JSONResponse con mensaje de actualización
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Buscar registro de toma
@@ -303,6 +390,26 @@ async def update_intake(req: Request, data: InputIntakeLogUpdate):
                     status_code=404,
                     content={"message": f"Registro de toma con ID {data.id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento del intake
+                stmt_treatment_check = select(Treatment).where(Treatment.id == intake_found.treatment_id)
+                result_treatment_check = await session.execute(stmt_treatment_check)
+                treatment_check = result_treatment_check.scalar_one_or_none()
+
+                if treatment_check:
+                    stmt_patient_check = select(Patient).where(Patient.id == treatment_check.patient_id)
+                    result_patient_check = await session.execute(stmt_patient_check)
+                    patient_check = result_patient_check.scalar_one_or_none()
+
+                    if not patient_check or patient_check.caregiver_id != user_id:
+                        return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+                else:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            # ADMIN: sin validaciones adicionales
 
             updated = False
 
@@ -363,6 +470,11 @@ async def get_intakes_by_treatment(req: Request, treatment_id: int):
     """
     Obtiene todos los registros de toma de un tratamiento específico.
 
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - PERSONAL: solo si el paciente del tratamiento tiene Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
+
     Args:
         treatment_id: ID del tratamiento
 
@@ -370,10 +482,13 @@ async def get_intakes_by_treatment(req: Request, treatment_id: int):
         JSONResponse con lista de registros de toma del tratamiento
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el tratamiento existe
@@ -386,6 +501,32 @@ async def get_intakes_by_treatment(req: Request, treatment_id: int):
                     status_code=404,
                     content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == treatment.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            # ADMIN: sin validaciones adicionales
 
             # Obtener registros de toma del tratamiento
             stmt = (
@@ -427,6 +568,11 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
     """
     Obtiene el historial completo de tomas de un paciente.
 
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - PERSONAL: solo si Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
+
     Args:
         patient_id: ID del paciente
 
@@ -434,10 +580,13 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
         JSONResponse con historial de tomas del paciente
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el paciente existe
@@ -450,6 +599,28 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
                     status_code=404,
                     content={"message": f"Paciente con ID {patient_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if patient.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            # ADMIN: sin validaciones adicionales
 
             # Obtener registros de toma del paciente a través de treatments
             stmt = (
@@ -502,8 +673,12 @@ async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_use
     Marca una dosis como TOMADA creando un registro en IntakeLog.
 
     Puede ser usado por:
-    - Usuario PERSONAL: para marcar sus propias dosis
+    - Usuario PERSONAL: para marcar dosis de sus propios pacientes
     - Usuario ASISTENCIAL: para marcar dosis de pacientes asignados (ej: hogar de ancianos)
+
+    Control de acceso por rol:
+    - PERSONAL: solo si el paciente del tratamiento tiene Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
 
     Args:
         treatment_id: ID del tratamiento
@@ -515,10 +690,13 @@ async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_use
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el tratamiento existe
@@ -533,8 +711,33 @@ async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_use
                 )
 
             # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == treatment.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+
+            # ============================================================================
             # FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
-            # 
+            #
             # PROBLEMA ANTERIOR:
             # - taken_at se guardaba con la hora programada (parámetro 'time')
             # - No había forma de distinguir entre hora programada y hora registrada
@@ -576,6 +779,39 @@ async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_use
             else:
                 # Fallback: usar hora actual del servidor si no se provee taken_at_full
                 taken_at_dt = datetime.now()
+
+            # ============================================================================
+            # VALIDACIÓN DE DUPLICADOS: Prevenir marcar la misma dosis múltiples veces
+            # ============================================================================
+            # Verificar si ya existe un registro para esta dosis hoy
+            # Criterio: mismo treatment_id + mismo scheduled_time + mismo día
+            today = taken_at_dt.date()
+            today_start = datetime.combine(today, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            stmt_existing = (
+                select(IntakeLog)
+                .where(IntakeLog.treatment_id == treatment_id)
+                .where(IntakeLog.scheduled_time == time)
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+            )
+            result_existing = await session.execute(stmt_existing)
+            existing_intake = result_existing.scalar_one_or_none()
+
+            if existing_intake:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "message": f"Esta dosis de las {time} ya fue registrada anteriormente",
+                        "existing_intake": {
+                            "id": existing_intake.id,
+                            "status": existing_intake.status,
+                            "taken_at": existing_intake.taken_at.isoformat() if existing_intake.taken_at else None,
+                            "scheduled_time": existing_intake.scheduled_time
+                        }
+                    }
+                )
 
             # Crear registro de toma
             # scheduled_time: hora programada (parámetro 'time', ej: "08:00")
@@ -620,8 +856,12 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
     Marca una dosis como OMITIDA creando un registro en IntakeLog.
 
     Puede ser usado por:
-    - Usuario PERSONAL: para marcar sus propias dosis omitidas
+    - Usuario PERSONAL: para marcar dosis omitidas de sus propios pacientes
     - Usuario ASISTENCIAL: para marcar dosis omitidas de pacientes asignados (ej: hogar de ancianos)
+
+    Control de acceso por rol:
+    - PERSONAL: solo si el paciente del tratamiento tiene Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
 
     Args:
         treatment_id: ID del tratamiento
@@ -633,10 +873,13 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el tratamiento existe
@@ -651,8 +894,33 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
                 )
 
             # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == treatment.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+
+            # ============================================================================
             # FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
-            # 
+            #
             # PROBLEMA ANTERIOR:
             # - taken_at se guardaba con la hora programada (parámetro 'time')
             # - No había forma de distinguir entre hora programada y hora registrada
@@ -694,6 +962,39 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
             else:
                 # Fallback: usar hora actual del servidor si no se provee taken_at_full
                 taken_at_dt = datetime.now()
+
+            # ============================================================================
+            # VALIDACIÓN DE DUPLICADOS: Prevenir marcar la misma dosis múltiples veces
+            # ============================================================================
+            # Verificar si ya existe un registro para esta dosis hoy
+            # Criterio: mismo treatment_id + mismo scheduled_time + mismo día
+            today = taken_at_dt.date()
+            today_start = datetime.combine(today, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            stmt_existing = (
+                select(IntakeLog)
+                .where(IntakeLog.treatment_id == treatment_id)
+                .where(IntakeLog.scheduled_time == time)
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+            )
+            result_existing = await session.execute(stmt_existing)
+            existing_intake = result_existing.scalar_one_or_none()
+
+            if existing_intake:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "message": f"Esta dosis de las {time} ya fue registrada anteriormente",
+                        "existing_intake": {
+                            "id": existing_intake.id,
+                            "status": existing_intake.status,
+                            "taken_at": existing_intake.taken_at.isoformat() if existing_intake.taken_at else None,
+                            "scheduled_time": existing_intake.scheduled_time
+                        }
+                    }
+                )
 
             # Crear registro de toma
             # scheduled_time: hora programada (parámetro 'time', ej: "08:00")

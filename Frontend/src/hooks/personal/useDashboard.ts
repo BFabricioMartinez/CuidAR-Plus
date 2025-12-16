@@ -53,14 +53,24 @@ export const useDashboard = () => {
           return intakeDate >= startOfDay && intakeDate <= endOfDay;
         });
 
-        // Crear un Set con las claves de dosis ya registradas (treatment_id + hora)
+        // Crear un Set con las claves de dosis ya registradas (treatment_id + hora programada)
+        // Usar scheduled_time (hora programada) en lugar de extraer hora de taken_at
         const registeredDoses = new Set<string>();
         todayIntakes.forEach(intake => {
-          if (intake.taken_at) {
-            const intakeDate = new Date(intake.taken_at);
-            const hour = String(intakeDate.getHours()).padStart(2, '0');
-            const minute = String(intakeDate.getMinutes()).padStart(2, '0');
-            const time = `${hour}:${minute}`;
+          if (intake.treatment_id) {
+            // Usar scheduled_time si existe (hora programada), sino fallback a hora de taken_at
+            let time: string;
+            if (intake.scheduled_time) {
+              time = intake.scheduled_time; // Hora programada (ej: "08:00")
+            } else if (intake.taken_at) {
+              // Fallback para registros antiguos sin scheduled_time
+              const intakeDate = new Date(intake.taken_at);
+              const hour = String(intakeDate.getHours()).padStart(2, '0');
+              const minute = String(intakeDate.getMinutes()).padStart(2, '0');
+              time = `${hour}:${minute}`;
+            } else {
+              return; // Skip si no hay ni scheduled_time ni taken_at
+            }
             const key = `${intake.treatment_id}-${time}`;
             registeredDoses.add(key);
           }

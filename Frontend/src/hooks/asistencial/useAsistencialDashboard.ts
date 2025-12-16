@@ -102,14 +102,23 @@ export const useAsistencialDashboard = () => {
           limit: 100  // Máximo permitido por el backend
         });
 
-        // Crear un Set de dosis ya registradas hoy (treatment_id + time)
+        // Crear un Set de dosis ya registradas hoy (treatment_id + hora programada)
+        // Usar scheduled_time (hora programada) en lugar de extraer hora de taken_at
         const todayIntakes = new Set<string>();
         intakesResponse.items.forEach((intake: IntakeLog) => {
-          if (intake.taken_at) {
-            const intakeDate = new Date(intake.taken_at);
+          if (intake.treatment_id) {
+            const intakeDate = intake.taken_at ? new Date(intake.taken_at) : null;
 
-            if (intakeDate.toDateString() === today.toDateString()) {
-              const time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+            // Solo procesar si es de hoy
+            if (intakeDate && intakeDate.toDateString() === today.toDateString()) {
+              // Usar scheduled_time si existe (hora programada), sino fallback a hora de taken_at
+              let time: string;
+              if (intake.scheduled_time) {
+                time = intake.scheduled_time; // Hora programada (ej: "08:00")
+              } else {
+                // Fallback para registros antiguos sin scheduled_time
+                time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+              }
               const key = `${intake.treatment_id}-${time}`;
               todayIntakes.add(key);
             }
@@ -261,11 +270,21 @@ export const useAsistencialDashboard = () => {
           });
 
           // Calcular próximas dosis del paciente
+          // Usar scheduled_time (hora programada) en lugar de extraer hora de taken_at
           const todayIntakesSet = new Set<string>();
           todayIntakes.forEach((intake: IntakeLog) => {
-            if (intake.taken_at) {
-              const intakeDate = new Date(intake.taken_at);
-              const time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+            if (intake.treatment_id) {
+              // Usar scheduled_time si existe (hora programada), sino fallback a hora de taken_at
+              let time: string;
+              if (intake.scheduled_time) {
+                time = intake.scheduled_time; // Hora programada (ej: "08:00")
+              } else if (intake.taken_at) {
+                // Fallback para registros antiguos sin scheduled_time
+                const intakeDate = new Date(intake.taken_at);
+                time = intakeDate.toTimeString().slice(0, 5); // HH:MM
+              } else {
+                return; // Skip si no hay ni scheduled_time ni taken_at
+              }
               const key = `${intake.treatment_id}-${time}`;
               todayIntakesSet.add(key);
             }

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from models import Assignment, User, Patient, InputAssignment, InputAssignmentUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
-from auth.security import Security
+from auth.roles import require_roles
 from utils.update import is_valid_change
 import traceback
 
@@ -21,11 +21,20 @@ async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFil
     - patient_id: Filtro por ID del paciente
     - active: Filtro por estado activo
     - order: "desc" para descendente, "asc" para ascendente
+
+    Control de acceso por rol:
+    - ADMIN: acceso total a todas las asignaciones
+    - ASISTENCIAL: solo asignaciones donde Assignment.caregiver_id == user_id
+    - PERSONAL: acceso denegado
     """
     try:
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         limit = body.limit or 20
         last_seen_id = body.last_seen_id
@@ -40,6 +49,14 @@ async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFil
                 .options(joinedload(Assignment.caregiver))
                 .options(joinedload(Assignment.patient))
             )
+
+            # ============================================================================
+            # FILTRO POR ROL - Control de acceso basado en ownership
+            # ============================================================================
+            if user_role == "ASISTENCIAL":
+                # ASISTENCIAL: solo asignaciones propias
+                stmt = stmt.where(Assignment.caregiver_id == user_id)
+            # ADMIN: sin filtros adicionales (acceso total)
 
             if hasattr(Assignment, "active"):
                 active_filter = filters.get("active")
@@ -111,11 +128,22 @@ async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFil
 
 @assignment.get("/assignment/{assignment_id}")
 async def get_assignment_by_id(req: Request, assignment_id: int):
-    """Obtiene una asignación por su ID."""
+    """
+    Obtiene una asignación por su ID.
+
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - ASISTENCIAL: solo si Assignment.caregiver_id == user_id
+    - PERSONAL: acceso denegado
+    """
     try:
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -133,6 +161,18 @@ async def get_assignment_by_id(req: Request, assignment_id: int):
                     status_code=404,
                     content={"message": f"Asignación con ID {assignment_id} no encontrada"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar ownership
+                if assignment_found.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             caregiver = assignment_found.caregiver
             patient = assignment_found.patient
@@ -171,9 +211,10 @@ async def get_assignment_by_id(req: Request, assignment_id: int):
 async def create_assignment(req: Request, data: InputAssignment):
     """Crea una nueva asignación de cuidador a paciente."""
     try:
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             # Verificar que el cuidador existe y tiene rol ASISTENCIAL
@@ -279,9 +320,10 @@ async def create_assignment(req: Request, data: InputAssignment):
 async def update_assignment(req: Request, data: InputAssignmentUpdate):
     """Actualiza una asignación existente."""
     try:
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = select(Assignment).where(Assignment.id == data.id)
@@ -353,9 +395,10 @@ async def update_assignment(req: Request, data: InputAssignmentUpdate):
 async def deactivate_assignment(req: Request, assignment_id: int):
     """Desactiva una asignación (soft delete)."""
     try:
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = select(Assignment).where(Assignment.id == assignment_id)
