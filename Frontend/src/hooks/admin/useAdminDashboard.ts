@@ -9,12 +9,10 @@ import type { OverviewStats, Patient, Treatment, IntakeLog, Assignment, User } f
 export interface PatientAdherence {
   patient_id: number;
   patient_name: string;
-  summary: {
-    taken_count: number;
-    missed_count: number;
-    total_count: number;
-    adherence_percentage: number | null;
-  };
+  adherence_percentage: number | null;
+  taken: number;
+  missed: number;
+  total: number;
 }
 
 export interface AdherenceTrend {
@@ -75,66 +73,95 @@ export const useAdminDashboard = () => {
     }
   }, []);
 
-  // Calcular adherencia por paciente (últimos 7 días)
+  // Calcular adherencia por paciente (últimos 7 días) - Todos los pacientes
   const calculatePatientsAdherence = useCallback(async () => {
     try {
+      // Obtener todos los pacientes (sin filtrar por active para mostrar todos)
       const patientsResponse = await patientsApi.list({
         limit: 100,
-        filters: { active: true },
       });
 
-      const patients = patientsResponse.items;
+      const patients = patientsResponse.items || [];
+      console.log('Pacientes encontrados:', patients.length);
+      
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const sevenDaysAgo = new Date(today);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      sevenDaysAgo.setHours(0, 0, 0, 0);
 
       const adherenceData: PatientAdherence[] = [];
 
       for (const patient of patients) {
         try {
-          // Obtener todos los intakes del paciente de los últimos 7 días
-          const intakesResponse = await intakesApi.list({
-            limit: 500,
-            filters: {
-              patient_id: patient.id,
-              order: 'desc',
-            },
-          });
+          // Obtener todos los intakes del paciente usando getPatientHistory
+          const intakesResponse = await intakesApi.getPatientHistory(patient.id);
+          const intakes = intakesResponse.intakes || [];
 
-          const recentIntakes = intakesResponse.items.filter((intake: IntakeLog) => {
+          // Filtrar intakes de los últimos 7 días (incluyendo hoy)
+          const recentIntakes = intakes.filter((intake: IntakeLog) => {
             if (!intake.taken_at) return false;
-            const intakeDate = new Date(intake.taken_at);
-            return intakeDate >= sevenDaysAgo;
+            try {
+              const intakeDate = new Date(intake.taken_at);
+              intakeDate.setHours(0, 0, 0, 0);
+              // Incluir desde sevenDaysAgo hasta hoy (inclusive)
+              return intakeDate.getTime() >= sevenDaysAgo.getTime() && intakeDate.getTime() <= today.getTime();
+            } catch (e) {
+              console.error(`Error parseando fecha ${intake.taken_at}:`, e);
+              return false;
+            }
           });
 
-          const taken = recentIntakes.filter((i: IntakeLog) => i.status === 'taken').length;
-          const missed = recentIntakes.filter((i: IntakeLog) => i.status === 'missed').length;
+          // Verificar el formato del status - normalizar a mayúsculas
+          const taken = recentIntakes.filter((i: IntakeLog) => {
+            const status = String(i.status || '').toUpperCase().trim();
+            return status === 'TAKEN';
+          }).length;
+          
+          const missed = recentIntakes.filter((i: IntakeLog) => {
+            const status = String(i.status || '').toUpperCase().trim();
+            return status === 'MISSED';
+          }).length;
+          
           const total = taken + missed;
           const adherence_percentage = total > 0 ? (taken / total) * 100 : null;
 
+          if (intakes.length > 0 || recentIntakes.length > 0) {
+            console.log(`Paciente ${patient.name} (${patient.id}): ${intakes.length} intakes totales, ${recentIntakes.length} en últimos 7 días`);
+            console.log(`  - Tomadas: ${taken}, Omitidas: ${missed}, Total: ${total}, Adherencia: ${adherence_percentage !== null ? adherence_percentage.toFixed(1) : 'N/A'}%`);
+          }
+
+          // Siempre agregar el paciente, incluso si no tiene intakes
           adherenceData.push({
             patient_id: patient.id,
             patient_name: patient.name,
-            summary: {
-              taken_count: taken,
-              missed_count: missed,
-              total_count: total,
-              adherence_percentage,
-            },
+            adherence_percentage,
+            taken,
+            missed,
+            total,
           });
         } catch (err) {
           console.error(`Error calculando adherencia para paciente ${patient.id}:`, err);
+          // Agregar el paciente con valores por defecto si hay error
+          adherenceData.push({
+            patient_id: patient.id,
+            patient_name: patient.name,
+            adherence_percentage: null,
+            taken: 0,
+            missed: 0,
+            total: 0,
+          });
         }
       }
 
-      // Ordenar por adherencia
+      // Ordenar por adherencia (descendente)
       adherenceData.sort((a, b) => {
-        const adhA = a.summary.adherence_percentage || 0;
-        const adhB = b.summary.adherence_percentage || 0;
-        return adhB - adhA; // Descendente
+        if (a.adherence_percentage === null && b.adherence_percentage === null) return 0;
+        if (a.adherence_percentage === null) return 1;
+        if (b.adherence_percentage === null) return -1;
+        return b.adherence_percentage - a.adherence_percentage;
       });
 
+      console.log('Datos de adherencia calculados:', adherenceData.length);
       setPatientsAdherence(adherenceData);
 
       // Top 5 mejores y peores
@@ -159,13 +186,21 @@ export const useAdminDashboard = () => {
         const nextDay = new Date(date);
         nextDay.setDate(nextDay.getDate() + 1);
 
-        // Obtener intakes de ese día
-        const intakesResponse = await intakesApi.list({
-          limit: 1000,
-          filters: { order: 'desc' },
-        });
+        // Obtener todos los intakes y filtrar por fecha en el cliente
+        // Nota: Esto puede ser ineficiente, pero evita el error 422
+        const allIntakes: IntakeLog[] = [];
+        try {
+          // Intentar obtener todos los intakes sin filtros
+          const intakesResponse = await intakesApi.list({
+            limit: 1000,
+          });
+          allIntakes.push(...intakesResponse.items);
+        } catch (err) {
+          // Si falla, continuar con array vacío
+          console.warn('No se pudieron obtener intakes para calcular tendencia:', err);
+        }
 
-        const dayIntakes = intakesResponse.items.filter((intake: IntakeLog) => {
+        const dayIntakes = allIntakes.filter((intake: IntakeLog) => {
           if (!intake.taken_at) return false;
           const intakeDate = new Date(intake.taken_at);
           return intakeDate >= date && intakeDate < nextDay;
@@ -199,12 +234,18 @@ export const useAdminDashboard = () => {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      const intakesResponse = await intakesApi.list({
-        limit: 1000,
-        filters: { order: 'desc' },
-      });
+      // Obtener todos los intakes sin filtros para evitar error 422
+      const allIntakes: IntakeLog[] = [];
+      try {
+        const intakesResponse = await intakesApi.list({
+          limit: 1000,
+        });
+        allIntakes.push(...intakesResponse.items);
+      } catch (err) {
+        console.warn('No se pudieron obtener intakes para calcular dosis por hora:', err);
+      }
 
-      const todayIntakes = intakesResponse.items.filter((intake: IntakeLog) => {
+      const todayIntakes = allIntakes.filter((intake: IntakeLog) => {
         if (!intake.taken_at) return false;
         const intakeDate = new Date(intake.taken_at);
         return intakeDate >= today && intakeDate < tomorrow;

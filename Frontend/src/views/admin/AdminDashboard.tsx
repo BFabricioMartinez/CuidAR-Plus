@@ -11,12 +11,8 @@ export default function AdminDashboard() {
     stats,
     patientsAdherence,
     adherenceTrend,
-    dosesByHour,
-    topMedications,
     caregiverStats,
     usersByRole,
-    treatmentsStatus,
-    topPatients,
     loading: statsLoading,
     error: statsError,
     fetchDashboard,
@@ -479,38 +475,41 @@ export default function AdminDashboard() {
                 </h3>
               </div>
               <div className="admin-adherence-bars-container">
-                {patientsAdherence.length > 0 ? (
-                  patientsAdherence.slice(0, 10).map((pa) => {
-                    const percentage = pa.summary.adherence_percentage ?? 0;
-                    let barColor = '#10b981';
-                    if (percentage < 50) barColor = '#ef4444';
-                    else if (percentage < 80) barColor = '#f59e0b';
+                {!patientsAdherence || patientsAdherence.length === 0 ? (
+                  <div className="admin-chart-empty">No hay datos de adherencia disponibles</div>
+                ) : (
+                  patientsAdherence.map((pa) => {
+                    const percentage = pa.adherence_percentage ?? 0;
+                    let barColor = '#10b981'; // Verde por defecto
+                    if (percentage < 50) barColor = '#ef4444'; // Rojo
+                    else if (percentage < 80) barColor = '#f59e0b'; // Amarillo
+
                     return (
                       <div key={pa.patient_id} className="admin-adherence-bar-item">
                         <div className="admin-adherence-bar-label">
                           <span className="admin-adherence-patient-name">{pa.patient_name}</span>
                           <span className="admin-adherence-percentage">
-                            {pa.summary.adherence_percentage !== null ? `${Math.round(pa.summary.adherence_percentage)}%` : 'N/A'}
+                            {pa.adherence_percentage !== null
+                              ? `${Math.round(pa.adherence_percentage)}%`
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="admin-adherence-bar-bg">
                           <div
                             className="admin-adherence-bar-fill"
                             style={{
-                              width: `${Math.min(100, percentage)}%`,
+                              width: `${percentage}%`,
                               backgroundColor: barColor
                             }}
                           ></div>
                         </div>
                         <div className="admin-adherence-bar-stats">
-                          <span className="admin-adherence-stat-item admin-adherence-stat-taken">✓ {pa.summary.taken_count}</span>
-                          <span className="admin-adherence-stat-item admin-adherence-stat-missed">✗ {pa.summary.missed_count}</span>
+                          <span className="admin-adherence-stat-item admin-adherence-stat-taken">✓ {pa.taken}</span>
+                          <span className="admin-adherence-stat-item admin-adherence-stat-missed">✗ {pa.missed}</span>
                         </div>
                       </div>
                     );
                   })
-                ) : (
-                  <div className="admin-chart-empty">No hay datos de adherencia disponibles</div>
                 )}
               </div>
             </div>
@@ -1209,13 +1208,13 @@ export default function AdminDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1rem;
-          max-height: 400px;
+          max-height: 500px;
           overflow-y: auto;
           padding-right: 0.5rem;
         }
 
         .admin-adherence-bars-container::-webkit-scrollbar {
-          width: 6px;
+          width: 8px;
         }
 
         .admin-adherence-bars-container::-webkit-scrollbar-track {
@@ -1238,29 +1237,32 @@ export default function AdminDashboard() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          font-size: 0.875rem;
         }
 
         .admin-adherence-patient-name {
           font-weight: 600;
           color: #1f2937;
+          font-size: 0.9375rem;
         }
 
         .admin-adherence-percentage {
           font-weight: 700;
           color: #667eea;
+          font-size: 1rem;
         }
 
         .admin-adherence-bar-bg {
-          height: 8px;
-          background: rgba(229, 231, 235, 0.5);
-          border-radius: 4px;
+          width: 100%;
+          height: 12px;
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 50px;
           overflow: hidden;
+          position: relative;
         }
 
         .admin-adherence-bar-fill {
           height: 100%;
-          border-radius: 4px;
+          border-radius: 50px;
           transition: width 1s ease-out;
           animation: expandBar 1s ease-out;
         }
@@ -1268,14 +1270,14 @@ export default function AdminDashboard() {
         .admin-adherence-bar-stats {
           display: flex;
           gap: 1rem;
-          font-size: 0.75rem;
-          color: #6b7280;
+          font-size: 0.875rem;
         }
 
         .admin-adherence-stat-item {
           display: flex;
           align-items: center;
           gap: 0.25rem;
+          font-weight: 600;
         }
 
         .admin-adherence-stat-taken {
