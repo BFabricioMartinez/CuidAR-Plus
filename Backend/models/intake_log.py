@@ -13,6 +13,18 @@ class IntakeLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     treatment_id = Column(Integer, ForeignKey('treatments.id'), nullable=False)
     taken_at = Column(DateTime, nullable=False)
+    # ============================================================================
+    # FIX: Agregado scheduled_time para guardar la hora programada de la dosis
+    # 
+    # PROBLEMA ANTERIOR:
+    # - taken_at se guardaba con la hora programada (parámetro 'time')
+    # - No había forma de distinguir entre hora programada y hora registrada
+    #
+    # SOLUCIÓN:
+    # - scheduled_time: hora programada de la dosis (ej: "08:00")
+    # - taken_at: hora exacta cuando el usuario marca la dosis (ej: "2025-01-15 08:15:30")
+    # ============================================================================
+    scheduled_time = Column(String, nullable=True)  # Hora programada en formato "HH:MM"
     status = Column(String, nullable=False)
 
     treatment = relationship('Treatment', back_populates='intake_logs')
@@ -30,6 +42,7 @@ class IntakeLogResponse(BaseModel):
     id: int
     treatment_id: int
     taken_at: datetime
+    scheduled_time: Optional[str] = None  # Hora programada en formato "HH:MM"
     status: str
 
     class Config:

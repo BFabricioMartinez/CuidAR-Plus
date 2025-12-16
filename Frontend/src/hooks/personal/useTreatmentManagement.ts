@@ -197,20 +197,11 @@ export const useTreatmentManagement = () => {
 
     try {
       // ============================================================================
-      // FIX: Formato de datetime sin timezone para compatibilidad con PostgreSQL
-      //
-      // PROBLEMA:
-      // - toISOString() genera "2025-12-06T11:00:00.000Z" (timezone-aware UTC)
-      // - PostgreSQL TIMESTAMP WITHOUT TIME ZONE espera datetime sin timezone
-      // - Backend lanzaba error: "can't subtract offset-naive and offset-aware datetimes"
-      //
-      // SOLUCIÓN:
-      // - Crear datetime local y formatearlo como "YYYY-MM-DD HH:mm:ss"
-      // - Esto envía un datetime sin información de timezone al backend
+      // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+      // time = hora programada (scheduled_time)
+      // taken_at = hora actual (cuando el usuario marca la dosis)
       // ============================================================================
-      const now = new Date();
-      const [hours, minutes] = time.split(':');
-      now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      const now = new Date(); // Hora actual, NO modificar con la hora programada
 
       // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
       const year = now.getFullYear();
@@ -248,10 +239,12 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
-      // Formatear datetime sin timezone (igual que en markAsTaken)
-      const now = new Date();
-      const [hours, minutes] = time.split(':');
-      now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      // ============================================================================
+      // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+      // time = hora programada (scheduled_time)
+      // taken_at = hora actual (cuando el usuario marca la dosis)
+      // ============================================================================
+      const now = new Date(); // Hora actual, NO modificar con la hora programada
 
       // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
       const year = now.getFullYear();

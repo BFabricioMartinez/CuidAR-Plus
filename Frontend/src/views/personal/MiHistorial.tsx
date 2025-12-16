@@ -87,6 +87,7 @@ export default function MiHistorial() {
       },
       {
         accessorKey: 'scheduled_time',
+        id: 'scheduled_time',
         header: 'Hora Programada',
         enableSorting: false,
       },
@@ -266,16 +267,23 @@ export default function MiHistorial() {
       let intakes = response.items || [];
 
       // Enriquecer con datos del tratamiento
-      const enrichedData = intakes.map((intake: any) => ({
-        id: intake.id,
-        treatment_id: intake.treatment_id,
-        taken_at: intake.taken_at,
-        scheduled_time: intake.treatment?.frequency?.split(',')[0]?.trim() || 'N/A',
-        status: intake.status,
-        acknowledged: false,
-        medication_name: intake.treatment?.medication_name || 'Desconocido',
-        dosage: intake.treatment?.dosage || '',
-      }));
+      const enrichedData = intakes.map((intake: any) => {
+        // scheduled_time: hora programada de la dosis (debe venir del backend como scheduled_time)
+        // El backend debería guardar este valor cuando se marca la dosis (parámetro 'time')
+        // taken_at: hora en que el usuario registró la toma (puede ser diferente a scheduled_time)
+        const scheduledTime = intake.scheduled_time || 'N/A';
+
+        return {
+          id: intake.id,
+          treatment_id: intake.treatment_id,
+          taken_at: intake.taken_at, // Hora registrada (cuando el usuario marcó la dosis)
+          scheduled_time: scheduledTime, // Hora programada (cuando debería tomarse la dosis)
+          status: intake.status,
+          acknowledged: false,
+          medication_name: intake.treatment?.medication_name || 'Desconocido',
+          dosage: intake.treatment?.dosage || '',
+        };
+      });
 
       // Actualizar datos
       if (isInitialLoad) {

@@ -154,6 +154,7 @@ export interface IntakeLog {
   id: number;
   treatment_id: number;
   taken_at: string;
+  scheduled_time?: string; // Hora programada de la dosis (HH:MM)
   status: string;
   treatment?: {
     id: number;
