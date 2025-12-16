@@ -125,8 +125,6 @@ async def get_my_stats(req: Request, user_id: int):
         async with AsyncSessionLocal() as session:
             # Determinar el rol del usuario consultado (para ADMIN que puede ver otros usuarios)
             # Si es ADMIN consultando otro usuario, necesitamos determinar su rol
-            # Por simplicidad, asumimos que si user_id != token_user_id, es ADMIN consultando
-            # En ese caso, intentamos determinar el rol consultando la base de datos
             consulted_user_role = user_role
             if user_role == "ADMIN" and user_id != token_user_id:
                 # ADMIN consultando otro usuario: determinar su rol
@@ -140,6 +138,21 @@ async def get_my_stats(req: Request, user_id: int):
                         status_code=404,
                         content={"message": "Usuario no encontrado"}
                     )
+            elif user_role == "ADMIN" and user_id == token_user_id:
+                # ADMIN consultando sus propias estadísticas: retornar datos vacíos
+                # (ADMIN no tiene pacientes asignados ni dosis personales)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "assigned_patients": 0,
+                        "today_doses": {
+                            "taken": 0,
+                            "missed": 0,
+                            "total": 0,
+                            "adherence_percentage": None
+                        }
+                    }
+                )
 
             # ============================================================================
             # LÓGICA SEGÚN ROL DEL USUARIO CONSULTADO
@@ -175,10 +188,18 @@ async def get_my_stats(req: Request, user_id: int):
                 patient_ids = [row[0] for row in result_patient_ids.fetchall()]
 
             else:
-                # ADMIN u otro rol: retornar error
+                # ADMIN u otro rol consultado por ADMIN: retornar datos vacíos
                 return JSONResponse(
-                    status_code=400,
-                    content={"message": "Este endpoint solo está disponible para usuarios ASISTENCIAL o PERSONAL"}
+                    status_code=200,
+                    content={
+                        "assigned_patients": 0,
+                        "today_doses": {
+                            "taken": 0,
+                            "missed": 0,
+                            "total": 0,
+                            "adherence_percentage": None
+                        }
+                    }
                 )
 
             # Dosis de HOY de los pacientes

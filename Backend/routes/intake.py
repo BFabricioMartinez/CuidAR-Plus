@@ -780,6 +780,39 @@ async def mark_taken(req: Request, treatment_id: int, time: str, recorded_by_use
                 # Fallback: usar hora actual del servidor si no se provee taken_at_full
                 taken_at_dt = datetime.now()
 
+            # ============================================================================
+            # VALIDACIÓN DE DUPLICADOS: Prevenir marcar la misma dosis múltiples veces
+            # ============================================================================
+            # Verificar si ya existe un registro para esta dosis hoy
+            # Criterio: mismo treatment_id + mismo scheduled_time + mismo día
+            today = taken_at_dt.date()
+            today_start = datetime.combine(today, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            stmt_existing = (
+                select(IntakeLog)
+                .where(IntakeLog.treatment_id == treatment_id)
+                .where(IntakeLog.scheduled_time == time)
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+            )
+            result_existing = await session.execute(stmt_existing)
+            existing_intake = result_existing.scalar_one_or_none()
+
+            if existing_intake:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "message": f"Esta dosis de las {time} ya fue registrada anteriormente",
+                        "existing_intake": {
+                            "id": existing_intake.id,
+                            "status": existing_intake.status,
+                            "taken_at": existing_intake.taken_at.isoformat() if existing_intake.taken_at else None,
+                            "scheduled_time": existing_intake.scheduled_time
+                        }
+                    }
+                )
+
             # Crear registro de toma
             # scheduled_time: hora programada (parámetro 'time', ej: "08:00")
             # taken_at: hora exacta cuando se marca la dosis (taken_at_full)
@@ -929,6 +962,39 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
             else:
                 # Fallback: usar hora actual del servidor si no se provee taken_at_full
                 taken_at_dt = datetime.now()
+
+            # ============================================================================
+            # VALIDACIÓN DE DUPLICADOS: Prevenir marcar la misma dosis múltiples veces
+            # ============================================================================
+            # Verificar si ya existe un registro para esta dosis hoy
+            # Criterio: mismo treatment_id + mismo scheduled_time + mismo día
+            today = taken_at_dt.date()
+            today_start = datetime.combine(today, datetime.min.time())
+            today_end = datetime.combine(today, datetime.max.time())
+
+            stmt_existing = (
+                select(IntakeLog)
+                .where(IntakeLog.treatment_id == treatment_id)
+                .where(IntakeLog.scheduled_time == time)
+                .where(IntakeLog.taken_at >= today_start)
+                .where(IntakeLog.taken_at <= today_end)
+            )
+            result_existing = await session.execute(stmt_existing)
+            existing_intake = result_existing.scalar_one_or_none()
+
+            if existing_intake:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "message": f"Esta dosis de las {time} ya fue registrada anteriormente",
+                        "existing_intake": {
+                            "id": existing_intake.id,
+                            "status": existing_intake.status,
+                            "taken_at": existing_intake.taken_at.isoformat() if existing_intake.taken_at else None,
+                            "scheduled_time": existing_intake.scheduled_time
+                        }
+                    }
+                )
 
             # Crear registro de toma
             # scheduled_time: hora programada (parámetro 'time', ej: "08:00")

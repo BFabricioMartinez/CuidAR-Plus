@@ -270,6 +270,7 @@ async def create_treatment(req: Request, data: InputTreatment):
     Control de acceso por rol:
     - ADMIN: puede crear tratamientos para cualquier paciente
     - PERSONAL: solo puede crear tratamientos para sus propios pacientes (Patient.caregiver_id == user_id)
+    - ASISTENCIAL: solo puede crear tratamientos para pacientes con Assignment activa (Assignment.caregiver_id == user_id)
 
     Args:
         data: Datos del tratamiento (InputTreatment)
@@ -278,8 +279,8 @@ async def create_treatment(req: Request, data: InputTreatment):
         JSONResponse con el tratamiento creado
     """
     try:
-        # Verificar token y rol (ADMIN, PERSONAL)
-        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        # Verificar token y rol (ADMIN, PERSONAL, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL", "ASISTENCIAL"])
         if isinstance(payload, JSONResponse):
             return payload
 
@@ -304,6 +305,22 @@ async def create_treatment(req: Request, data: InputTreatment):
             if user_role == "PERSONAL":
                 # PERSONAL: verificar ownership del paciente
                 if patient.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == data.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
                     return JSONResponse(
                         status_code=403,
                         content={"message": "Acceso denegado"}
@@ -362,6 +379,7 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
     Control de acceso por rol:
     - ADMIN: puede actualizar cualquier tratamiento
     - PERSONAL: solo puede actualizar tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+    - ASISTENCIAL: solo puede actualizar tratamientos de pacientes con Assignment activa (Assignment.caregiver_id == user_id)
 
     Args:
         data: Datos a actualizar (InputTreatmentUpdate)
@@ -370,8 +388,8 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
         JSONResponse con mensaje de actualización
     """
     try:
-        # Verificar token y rol (ADMIN, PERSONAL)
-        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        # Verificar token y rol (ADMIN, PERSONAL, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL", "ASISTENCIAL"])
         if isinstance(payload, JSONResponse):
             return payload
 
@@ -404,6 +422,22 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
                         status_code=403,
                         content={"message": "Acceso denegado"}
                     )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa para el paciente del tratamiento
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == treatment_found.patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
             # ADMIN: sin validaciones adicionales
 
             updated = False
@@ -420,6 +454,34 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
                         status_code=404,
                         content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
                     )
+
+                # ============================================================================
+                # VALIDACIÓN ADICIONAL: Si se cambia el paciente, verificar acceso al nuevo paciente
+                # ============================================================================
+                if user_role == "PERSONAL":
+                    # PERSONAL: verificar ownership del nuevo paciente
+                    if patient.caregiver_id != user_id:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"message": "No tienes acceso al paciente seleccionado"}
+                        )
+                elif user_role == "ASISTENCIAL":
+                    # ASISTENCIAL: verificar Assignment activa para el nuevo paciente
+                    stmt_new_assignment = (
+                        select(Assignment)
+                        .where(Assignment.patient_id == data.patient_id)
+                        .where(Assignment.caregiver_id == user_id)
+                        .where(Assignment.active == True)
+                    )
+                    result_new_assignment = await session.execute(stmt_new_assignment)
+                    new_assignment = result_new_assignment.scalar_one_or_none()
+
+                    if not new_assignment:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"message": "No tienes acceso al paciente seleccionado"}
+                        )
+                # ADMIN: sin validaciones adicionales
 
                 treatment_found.patient_id = data.patient_id
                 updated = True
