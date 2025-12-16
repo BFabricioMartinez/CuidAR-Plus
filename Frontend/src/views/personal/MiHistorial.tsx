@@ -10,6 +10,7 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from '@tanstack/react-table';
+import { authApi, patientsApi, treatmentsApi, intakesApi } from '../../api';
 
 // ============================================
 // TIPOS
@@ -61,6 +62,7 @@ const dateFilterFn: FilterFn<HistoryItem> = (row, columnId, filterValue) => {
 export default function MiHistorial() {
   const [data, setData] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [patientId, setPatientId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
@@ -72,8 +74,6 @@ export default function MiHistorial() {
   // TanStack Table States
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-
-  const token = localStorage.getItem('token');
 
   // Definición de columnas para TanStack Table
   const columns = useMemo<ColumnDef<HistoryItem>[]>(
@@ -163,46 +163,68 @@ export default function MiHistorial() {
 
   // Cargar datos al montar
   useEffect(() => {
-    fetchTreatments();
-    fetchHistory();
+    loadPatientAndData();
   }, []);
 
-  // Recargar cuando cambien los filtros (resetear lista)
-  useEffect(() => {
-    if (treatments.length > 0) {
-      setData([]);
-      setNextCursor(null);
-      setHasMore(true);
-      fetchHistory(null);
-    }
-  }, [columnFilters]);
-
-  // Obtener tratamientos (para el filtro)
-  const fetchTreatments = async () => {
+  // Cargar paciente del usuario y luego los datos
+  const loadPatientAndData = async () => {
     try {
-      const response = await fetch('http://localhost:8000/treatment/paginated', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        setError('No se encontró información del usuario');
+        return;
+      }
+
+      // Obtener el paciente donde caregiver_id coincide con el usuario actual
+      const patientsResponse = await patientsApi.list({
+        limit: 1,
+        filters: {
+          caregiver_id: currentUser.id,
+          active: true
         },
-        body: JSON.stringify({
-          limit: 100,
-          filters: { active: true }
-        }),
       });
 
-      if (!response.ok) throw new Error('Error al cargar tratamientos');
-
-      const responseData = await response.json();
-      setTreatments(responseData.treatments || []);
+      if (patientsResponse.items.length > 0) {
+        const myPatient = patientsResponse.items[0];
+        setPatientId(myPatient.id);
+        await fetchTreatments(myPatient.id);
+        await fetchHistory(null, myPatient.id);
+      } else {
+        setError('No se encontró un paciente asociado a tu cuenta');
+        setTreatments([]);
+        setData([]);
+      }
     } catch (err: any) {
-      console.error('Error al cargar tratamientos:', err);
+      console.error('Error al cargar datos del paciente:', err);
+      setError(err.message || 'Error al cargar datos del paciente');
     }
   };
 
-  // Obtener historial de tomas con paginación
-  const fetchHistory = async (cursor: number | null = null) => {
+  // Recargar cuando cambien los filtros (resetear lista)
+  useEffect(() => {
+    if (treatments.length > 0 && patientId !== null) {
+      setData([]);
+      setNextCursor(null);
+      setHasMore(true);
+      fetchHistory(null, patientId);
+    }
+  }, [columnFilters, patientId]);
+
+  // Obtener tratamientos (para el filtro) - solo del paciente del usuario
+  const fetchTreatments = async (patientId: number) => {
+    try {
+      const treatmentsData = await treatmentsApi.getByPatient(patientId);
+      setTreatments(treatmentsData.treatments || []);
+    } catch (err: any) {
+      console.error('Error al cargar tratamientos:', err);
+      setTreatments([]);
+    }
+  };
+
+  // Obtener historial de tomas con paginación - solo del paciente del usuario
+  const fetchHistory = async (cursor: number | null = null, patientIdParam?: number) => {
+    const targetPatientId = patientIdParam || patientId;
+    if (!targetPatientId) return;
     if (!hasMore && cursor !== null) return;
 
     const isInitialLoad = cursor === null;
@@ -217,7 +239,9 @@ export default function MiHistorial() {
 
     try {
       // Preparar filtros para el backend
-      const filters: any = {};
+      const filters: any = {
+        patient_id: targetPatientId, // Filtrar por el paciente del usuario
+      };
 
       // Extraer filtros de TanStack Table
       const statusFilter = columnFilters.find(f => f.id === 'status');
@@ -233,23 +257,13 @@ export default function MiHistorial() {
 
       filters.order = 'desc';
 
-      const response = await fetch('http://localhost:8000/intake/paginated', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          limit: 20,
-          last_seen_id: cursor,
-          filters,
-        }),
+      const response = await intakesApi.list({
+        limit: 20,
+        last_seen_id: cursor,
+        filters,
       });
 
-      if (!response.ok) throw new Error('Error al cargar historial');
-
-      const responseData = await response.json();
-      let intakes = responseData.intakes || [];
+      let intakes = response.items || [];
 
       // Enriquecer con datos del tratamiento
       const enrichedData = intakes.map((intake: any) => ({
@@ -271,10 +285,10 @@ export default function MiHistorial() {
       }
 
       // Actualizar cursor y estado de hasMore
-      setNextCursor(responseData.next_cursor);
-      setHasMore(responseData.next_cursor !== null);
+      setNextCursor(response.next_cursor);
+      setHasMore(response.next_cursor !== null);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Error al cargar historial');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -330,8 +344,8 @@ export default function MiHistorial() {
       const scrollTop = target.scrollTop;
       const clientHeight = target.clientHeight;
 
-      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore) {
-        fetchHistory(nextCursor);
+      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore && patientId !== null) {
+        fetchHistory(nextCursor, patientId);
       }
     };
 
