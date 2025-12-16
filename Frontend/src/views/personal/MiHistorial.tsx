@@ -89,6 +89,10 @@ export default function MiHistorial() {
         accessorKey: 'scheduled_time',
         id: 'scheduled_time',
         header: 'Hora Programada',
+        cell: ({ getValue }) => {
+          const value = getValue() as string;
+          return value && value !== 'N/A' ? `${value} hs` : value;
+        },
         enableSorting: false,
       },
       {
@@ -589,7 +593,11 @@ export default function MiHistorial() {
                           </div>
                           <div className="card-row">
                             <span className="card-label">Hora programada:</span>
-                            <span className="card-value">{item.scheduled_time}</span>
+                            <span className="card-value">
+                              {item.scheduled_time && item.scheduled_time !== 'N/A' 
+                                ? `${item.scheduled_time} hs` 
+                                : item.scheduled_time}
+                            </span>
                           </div>
                           <div className="card-row">
                             <span className="card-label">Hora registrada:</span>

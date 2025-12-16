@@ -197,26 +197,18 @@ export const useTreatmentManagement = () => {
 
     try {
       // ============================================================================
-      // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
-      // time = hora programada (scheduled_time)
-      // taken_at = hora actual (cuando el usuario marca la dosis)
+      // FIX: Usar intakesApi.markAsTaken() en lugar de intakesApi.create()
+      // porque markAsTaken() envía el parámetro 'time' que se guarda como scheduled_time
+      // 
+      // time = hora programada de la dosis (ej: "08:00") - se guarda en scheduled_time
+      // taken_at = hora actual cuando el usuario marca la dosis - se calcula en el backend
       // ============================================================================
-      const now = new Date(); // Hora actual, NO modificar con la hora programada
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hour = String(now.getHours()).padStart(2, '0');
-      const minute = String(now.getMinutes()).padStart(2, '0');
-      const second = String(now.getSeconds()).padStart(2, '0');
-      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-
-      await intakesApi.create({
-        treatment_id: treatmentId,
-        taken_at,
-        status: 'TAKEN',
-      });
+      await intakesApi.markAsTaken(treatmentId, time, currentUser.id);
 
       setSuccessMessage(`Dosis de las ${time} marcada como tomada`);
       return true;
@@ -240,26 +232,18 @@ export const useTreatmentManagement = () => {
 
     try {
       // ============================================================================
-      // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
-      // time = hora programada (scheduled_time)
-      // taken_at = hora actual (cuando el usuario marca la dosis)
+      // FIX: Usar intakesApi.markAsMissed() en lugar de intakesApi.create()
+      // porque markAsMissed() envía el parámetro 'time' que se guarda como scheduled_time
+      // 
+      // time = hora programada de la dosis (ej: "08:00") - se guarda en scheduled_time
+      // taken_at = hora actual cuando el usuario marca la dosis - se calcula en el backend
       // ============================================================================
-      const now = new Date(); // Hora actual, NO modificar con la hora programada
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hour = String(now.getHours()).padStart(2, '0');
-      const minute = String(now.getMinutes()).padStart(2, '0');
-      const second = String(now.getSeconds()).padStart(2, '0');
-      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-
-      await intakesApi.create({
-        treatment_id: treatmentId,
-        taken_at,
-        status: 'MISSED',
-      });
+      await intakesApi.markAsMissed(treatmentId, time, currentUser.id);
 
       setSuccessMessage(`Dosis de las ${time} marcada como omitida`);
       return true;
