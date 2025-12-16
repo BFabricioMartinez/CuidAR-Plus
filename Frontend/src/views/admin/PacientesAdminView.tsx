@@ -262,21 +262,6 @@ export default function PacientesAdminView() {
     patient.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Obtener nombre del cuidador
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getCaregiverName = async (caregiverId?: number): Promise<string> => {
-    if (!caregiverId) return 'Sin asignar';
-    const caregiver = caregivers.find((c) => c.id === caregiverId);
-    if (caregiver) return caregiver.name || 'Sin nombre';
-    
-    // Si no está en el array, intentar cargarlo desde la API
-    try {
-      const caregiverData = await usersApi.getById(caregiverId);
-      return caregiverData.name || 'Sin nombre';
-    } catch {
-      return 'Desconocido';
-    }
-  };
 
   // Cargar nombres de cuidadores que no están en el array
   useEffect(() => {
