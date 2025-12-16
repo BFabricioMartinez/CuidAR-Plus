@@ -93,6 +93,7 @@ async def get_intakes_paginated(req: Request, body: InputPaginatedRequestFilter)
                     "id": i.id,
                     "treatment_id": i.treatment_id,
                     "taken_at": i.taken_at.isoformat() if i.taken_at else None,
+                    "scheduled_time": i.scheduled_time,  # Hora programada
                     "status": i.status,
                     "treatment": {
                         "id": treatment.id if treatment else None,
@@ -164,6 +165,7 @@ async def get_intake_by_id(req: Request, intake_id: int):
                 "id": intake_found.id,
                 "treatment_id": intake_found.treatment_id,
                 "taken_at": intake_found.taken_at.isoformat() if intake_found.taken_at else None,
+                "scheduled_time": intake_found.scheduled_time,  # Hora programada
                 "status": intake_found.status,
                 "treatment": {
                     "id": treatment.id if treatment else None,
@@ -402,6 +404,7 @@ async def get_intakes_by_treatment(req: Request, treatment_id: int):
                     "id": i.id,
                     "treatment_id": i.treatment_id,
                     "taken_at": i.taken_at.isoformat() if i.taken_at else None,
+                    "scheduled_time": i.scheduled_time,  # Hora programada
                     "status": i.status
                 })
 
@@ -469,6 +472,7 @@ async def get_intakes_by_patient(req: Request, patient_id: int):
                     "id": i.id,
                     "treatment_id": i.treatment_id,
                     "taken_at": i.taken_at.isoformat() if i.taken_at else None,
+                    "scheduled_time": i.scheduled_time,  # Hora programada
                     "status": i.status,
                     "treatment": {
                         "id": treatment.id if treatment else None,
@@ -529,27 +533,57 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
                 )
 
             # ============================================================================
-            # FIX: Usar fecha completa del cliente si se provee, sino usar fecha del servidor
+            # FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+            # 
+            # PROBLEMA ANTERIOR:
+            # - taken_at se guardaba con la hora programada (parámetro 'time')
+            # - No había forma de distinguir entre hora programada y hora registrada
+            #
+            # SOLUCIÓN:
+            # - scheduled_time: hora programada de la dosis (parámetro 'time', ej: "08:00")
+            # - taken_at: hora exacta cuando el usuario marca la dosis (taken_at_full del cliente)
             # ============================================================================
             from datetime import datetime, date
 
+            # # CÓDIGO ANTERIOR (COMENTADO):
+            # # if taken_at_full:
+            # #     # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+            # #     try:
+            # #         taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
+            # #     except ValueError:
+            # #         # Intentar con formato ISO si falla
+            # #         taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
+            # # else:
+            # #     # Fallback: usar fecha del servidor (comportamiento original)
+            # #     today = date.today()
+            # #     hour, minute = map(int, time.split(':'))
+            # #     taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+            # # new_intake = IntakeLog(
+            # #     treatment_id=treatment_id,
+            # #     taken_at=taken_at_dt,
+            # #     status="TAKEN"
+            # # )
+
+            # NUEVO CÓDIGO:
+            # taken_at debe ser la hora ACTUAL cuando se marca la dosis
             if taken_at_full:
-                # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+                # Parsear fecha completa enviada por el cliente (hora actual del cliente)
                 try:
                     taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
                 except ValueError:
                     # Intentar con formato ISO si falla
                     taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
             else:
-                # Fallback: usar fecha del servidor (comportamiento original)
-                today = date.today()
-                hour, minute = map(int, time.split(':'))
-                taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+                # Fallback: usar hora actual del servidor si no se provee taken_at_full
+                taken_at_dt = datetime.now()
 
             # Crear registro de toma
+            # scheduled_time: hora programada (parámetro 'time', ej: "08:00")
+            # taken_at: hora exacta cuando se marca la dosis (taken_at_full)
             new_intake = IntakeLog(
                 treatment_id=treatment_id,
-                taken_at=taken_at_dt,
+                taken_at=taken_at_dt,  # Hora actual cuando se marca la dosis
+                scheduled_time=time,  # Hora programada de la dosis
                 status="TAKEN"
             )
 
@@ -565,6 +599,7 @@ async def marcar_tomada(req: Request, treatment_id: int, time: str, recorded_by_
                         "id": new_intake.id,
                         "treatment_id": new_intake.treatment_id,
                         "taken_at": new_intake.taken_at.isoformat() if new_intake.taken_at else None,
+                        "scheduled_time": new_intake.scheduled_time,  # Hora programada
                         "status": new_intake.status
                     }
                 }
@@ -616,27 +651,57 @@ async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by
                 )
 
             # ============================================================================
-            # FIX: Usar fecha completa del cliente si se provee, sino usar fecha del servidor
+            # FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+            # 
+            # PROBLEMA ANTERIOR:
+            # - taken_at se guardaba con la hora programada (parámetro 'time')
+            # - No había forma de distinguir entre hora programada y hora registrada
+            #
+            # SOLUCIÓN:
+            # - scheduled_time: hora programada de la dosis (parámetro 'time', ej: "08:00")
+            # - taken_at: hora exacta cuando el usuario marca la dosis (taken_at_full del cliente)
             # ============================================================================
             from datetime import datetime, date
 
+            # # CÓDIGO ANTERIOR (COMENTADO):
+            # # if taken_at_full:
+            # #     # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+            # #     try:
+            # #         taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
+            # #     except ValueError:
+            # #         # Intentar con formato ISO si falla
+            # #         taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
+            # # else:
+            # #     # Fallback: usar fecha del servidor (comportamiento original)
+            # #     today = date.today()
+            # #     hour, minute = map(int, time.split(':'))
+            # #     taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+            # # new_intake = IntakeLog(
+            # #     treatment_id=treatment_id,
+            # #     taken_at=taken_at_dt,
+            # #     status="MISSED"
+            # # )
+
+            # NUEVO CÓDIGO:
+            # taken_at debe ser la hora ACTUAL cuando se marca la dosis
             if taken_at_full:
-                # Parsear fecha completa enviada por el cliente (zona horaria del cliente)
+                # Parsear fecha completa enviada por el cliente (hora actual del cliente)
                 try:
                     taken_at_dt = datetime.strptime(taken_at_full, "%Y-%m-%d %H:%M:%S")
                 except ValueError:
                     # Intentar con formato ISO si falla
                     taken_at_dt = datetime.fromisoformat(taken_at_full.replace('Z', '+00:00')).replace(tzinfo=None)
             else:
-                # Fallback: usar fecha del servidor (comportamiento original)
-                today = date.today()
-                hour, minute = map(int, time.split(':'))
-                taken_at_dt = datetime(today.year, today.month, today.day, hour, minute, 0)
+                # Fallback: usar hora actual del servidor si no se provee taken_at_full
+                taken_at_dt = datetime.now()
 
             # Crear registro de toma
+            # scheduled_time: hora programada (parámetro 'time', ej: "08:00")
+            # taken_at: hora exacta cuando se marca la dosis (taken_at_full)
             new_intake = IntakeLog(
                 treatment_id=treatment_id,
-                taken_at=taken_at_dt,
+                taken_at=taken_at_dt,  # Hora actual cuando se marca la dosis
+                scheduled_time=time,  # Hora programada de la dosis
                 status="MISSED"
             )
 
@@ -652,6 +717,7 @@ async def marcar_omitida(req: Request, treatment_id: int, time: str, recorded_by
                         "id": new_intake.id,
                         "treatment_id": new_intake.treatment_id,
                         "taken_at": new_intake.taken_at.isoformat() if new_intake.taken_at else None,
+                        "scheduled_time": new_intake.scheduled_time,  # Hora programada
                         "status": new_intake.status
                     }
                 }

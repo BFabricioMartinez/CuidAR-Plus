@@ -154,6 +154,7 @@ export interface IntakeLog {
   id: number;
   treatment_id: number;
   taken_at: string;
+  scheduled_time?: string; // Hora programada de la dosis (HH:MM)
   status: string;
   treatment?: {
     id: number;
@@ -213,6 +214,15 @@ export interface OverviewStats {
 
 export interface MyStats {
   assigned_patients?: number;
+  today_doses: {
+    taken: number;
+    missed: number;
+    total: number;
+    adherence_percentage: number | null;
+  };
+}
+
+export interface PersonalStats {
   today_doses: {
     taken: number;
     missed: number;

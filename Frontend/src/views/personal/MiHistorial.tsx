@@ -10,7 +10,7 @@ import {
   type SortingState,
   type ColumnFiltersState,
 } from '@tanstack/react-table';
-import { authApi, patientsApi, assignmentsApi } from '../../api';
+import { authApi, patientsApi, treatmentsApi, intakesApi } from '../../api';
 
 // ============================================
 // TIPOS
@@ -62,10 +62,10 @@ const dateFilterFn: FilterFn<HistoryItem> = (row, columnId, filterValue) => {
 export default function MiHistorial() {
   const [data, setData] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [patientId, setPatientId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [myPatientId, setMyPatientId] = useState<number | null>(null);
 
   // Paginación
   const [nextCursor, setNextCursor] = useState<number | null>(null);
@@ -75,54 +75,6 @@ export default function MiHistorial() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
-  const token = localStorage.getItem('token');
-
-  // Obtener el patient_id del usuario actual
-  const getMyPatientId = async (): Promise<number | null> => {
-    const currentUser = authApi.getStoredUser();
-    if (!currentUser || !currentUser.id) {
-      return null;
-    }
-
-    // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
-    let patientId: number | null = null;
-
-    // Buscar asignaciones activas donde el patient_id corresponde a este usuario
-    try {
-      const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
-      if (assignments.length > 0 && assignments[0].active) {
-        patientId = assignments[0].patient_id;
-        return patientId;
-      }
-    } catch {
-      // Continuar con otro método
-    }
-
-    // Si no se encontró, buscar todas las asignaciones activas y verificar
-    // si alguna corresponde a un paciente creado para este usuario
-    try {
-      const allAssignments = await assignmentsApi.getAll();
-      const activeAssignments = allAssignments.filter(a => a.active);
-
-      // Para cada asignación, verificar si el paciente fue creado para este usuario
-      for (const assignment of activeAssignments) {
-        try {
-          const patient = await patientsApi.getById(assignment.patient_id);
-          // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
-          if (patient.notes && patient.notes.includes(currentUser.email)) {
-            patientId = patient.id;
-            return patientId;
-          }
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      // Si falla, retornar null
-    }
-
-    return null;
-  };
 
   // Definición de columnas para TanStack Table
   const columns = useMemo<ColumnDef<HistoryItem>[]>(
@@ -136,7 +88,12 @@ export default function MiHistorial() {
       },
       {
         accessorKey: 'scheduled_time',
+        id: 'scheduled_time',
         header: 'Hora Programada',
+        cell: ({ getValue }) => {
+          const value = getValue() as string;
+          return value && value !== 'N/A' ? `${value} hs` : value;
+        },
         enableSorting: false,
       },
       {
@@ -212,58 +169,69 @@ export default function MiHistorial() {
 
   // Cargar datos al montar
   useEffect(() => {
-    const initializeData = async () => {
-      const patientId = await getMyPatientId();
-      setMyPatientId(patientId);
-      if (patientId) {
-        fetchTreatments(patientId);
-        fetchHistory(null, patientId);
-      }
-    };
-    initializeData();
+    loadPatientAndData();
   }, []);
 
-  // Recargar cuando cambien los filtros (resetear lista)
-  useEffect(() => {
-    if (treatments.length > 0 && myPatientId) {
-      setData([]);
-      setNextCursor(null);
-      setHasMore(true);
-      fetchHistory(null, myPatientId);
-    }
-  }, [columnFilters]);
-
-  // Obtener tratamientos (para el filtro) - FILTRADO POR PACIENTE
-  const fetchTreatments = async (patientId: number) => {
+  // Cargar paciente del usuario y luego los datos
+  const loadPatientAndData = async () => {
     try {
-      const response = await fetch('http://localhost:8000/treatment/paginated', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        setError('No se encontró información del usuario');
+        return;
+      }
+
+      // Obtener el paciente donde caregiver_id coincide con el usuario actual
+      const patientsResponse = await patientsApi.list({
+        limit: 1,
+        filters: {
+          caregiver_id: currentUser.id,
+          active: true
         },
-        body: JSON.stringify({
-          limit: 100,
-          filters: { active: true, patient_id: patientId }
-        }),
       });
 
-      if (!response.ok) throw new Error('Error al cargar tratamientos');
-
-      const responseData = await response.json();
-      setTreatments(responseData.treatments || []);
+      if (patientsResponse.items.length > 0) {
+        const myPatient = patientsResponse.items[0];
+        setPatientId(myPatient.id);
+        await fetchTreatments(myPatient.id);
+        await fetchHistory(null, myPatient.id);
+      } else {
+        setError('No se encontró un paciente asociado a tu cuenta');
+        setTreatments([]);
+        setData([]);
+      }
     } catch (err: any) {
-      console.error('Error al cargar tratamientos:', err);
+      console.error('Error al cargar datos del paciente:', err);
+      setError(err.message || 'Error al cargar datos del paciente');
     }
   };
 
-  // Obtener historial de tomas con paginación - FILTRADO POR PACIENTE
-  const fetchHistory = async (cursor: number | null = null, patientId: number | null = null) => {
-    if (!hasMore && cursor !== null) return;
-    if (!patientId) {
-      setError('No se encontró el perfil del paciente');
-      return;
+  // Recargar cuando cambien los filtros (resetear lista)
+  useEffect(() => {
+    if (treatments.length > 0 && patientId !== null) {
+      setData([]);
+      setNextCursor(null);
+      setHasMore(true);
+      fetchHistory(null, patientId);
     }
+  }, [columnFilters, patientId]);
+
+  // Obtener tratamientos (para el filtro) - solo del paciente del usuario
+  const fetchTreatments = async (patientId: number) => {
+    try {
+      const treatmentsData = await treatmentsApi.getByPatient(patientId);
+      setTreatments(treatmentsData.treatments || []);
+    } catch (err: any) {
+      console.error('Error al cargar tratamientos:', err);
+      setTreatments([]);
+    }
+  };
+
+  // Obtener historial de tomas con paginación - solo del paciente del usuario
+  const fetchHistory = async (cursor: number | null = null, patientIdParam?: number) => {
+    const targetPatientId = patientIdParam || patientId;
+    if (!targetPatientId) return;
+    if (!hasMore && cursor !== null) return;
 
     const isInitialLoad = cursor === null;
 
@@ -277,10 +245,9 @@ export default function MiHistorial() {
 
     try {
       // Preparar filtros para el backend
-      const filters: any = {};
-
-      // IMPORTANTE: Filtrar solo por el paciente actual
-      filters.patient_id = patientId;
+      const filters: any = {
+        patient_id: targetPatientId, // Filtrar por el paciente del usuario
+      };
 
       // Extraer filtros de TanStack Table
       const statusFilter = columnFilters.find(f => f.id === 'status');
@@ -296,35 +263,32 @@ export default function MiHistorial() {
 
       filters.order = 'desc';
 
-      const response = await fetch('http://localhost:8000/intake/paginated', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          limit: 20,
-          last_seen_id: cursor,
-          filters,
-        }),
+      const response = await intakesApi.list({
+        limit: 20,
+        last_seen_id: cursor,
+        filters,
       });
 
-      if (!response.ok) throw new Error('Error al cargar historial');
-
-      const responseData = await response.json();
-      let intakes = responseData.intakes || [];
+      let intakes = response.items || [];
 
       // Enriquecer con datos del tratamiento
-      const enrichedData = intakes.map((intake: any) => ({
-        id: intake.id,
-        treatment_id: intake.treatment_id,
-        taken_at: intake.taken_at,
-        scheduled_time: intake.treatment?.frequency?.split(',')[0]?.trim() || 'N/A',
-        status: intake.status,
-        acknowledged: false,
-        medication_name: intake.treatment?.medication_name || 'Desconocido',
-        dosage: intake.treatment?.dosage || '',
-      }));
+      const enrichedData = intakes.map((intake: any) => {
+        // scheduled_time: hora programada de la dosis (debe venir del backend como scheduled_time)
+        // El backend debería guardar este valor cuando se marca la dosis (parámetro 'time')
+        // taken_at: hora en que el usuario registró la toma (puede ser diferente a scheduled_time)
+        const scheduledTime = intake.scheduled_time || 'N/A';
+
+        return {
+          id: intake.id,
+          treatment_id: intake.treatment_id,
+          taken_at: intake.taken_at, // Hora registrada (cuando el usuario marcó la dosis)
+          scheduled_time: scheduledTime, // Hora programada (cuando debería tomarse la dosis)
+          status: intake.status,
+          acknowledged: false,
+          medication_name: intake.treatment?.medication_name || 'Desconocido',
+          dosage: intake.treatment?.dosage || '',
+        };
+      });
 
       // Actualizar datos
       if (isInitialLoad) {
@@ -334,10 +298,10 @@ export default function MiHistorial() {
       }
 
       // Actualizar cursor y estado de hasMore
-      setNextCursor(responseData.next_cursor);
-      setHasMore(responseData.next_cursor !== null);
+      setNextCursor(response.next_cursor);
+      setHasMore(response.next_cursor !== null);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Error al cargar historial');
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -393,8 +357,8 @@ export default function MiHistorial() {
       const scrollTop = target.scrollTop;
       const clientHeight = target.clientHeight;
 
-      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore && myPatientId) {
-        fetchHistory(nextCursor, myPatientId);
+      if (scrollHeight - scrollTop - clientHeight < 300 && nextCursor && !loadingMore && hasMore && patientId !== null) {
+        fetchHistory(nextCursor, patientId);
       }
     };
 
@@ -403,7 +367,7 @@ export default function MiHistorial() {
       scrollContainer.addEventListener('scroll', handleScroll);
       return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }
-  }, [nextCursor, loadingMore, hasMore, myPatientId]);
+  }, [nextCursor, loadingMore, hasMore, patientId]);
 
   // Obtener filas filtradas
   const filteredRows = table.getRowModel().rows;
@@ -630,7 +594,11 @@ export default function MiHistorial() {
                           </div>
                           <div className="card-row">
                             <span className="card-label">Hora programada:</span>
-                            <span className="card-value">{item.scheduled_time}</span>
+                            <span className="card-value">
+                              {item.scheduled_time && item.scheduled_time !== 'N/A' 
+                                ? `${item.scheduled_time} hs` 
+                                : item.scheduled_time}
+                            </span>
                           </div>
                           <div className="card-row">
                             <span className="card-label">Hora registrada:</span>

@@ -9,6 +9,8 @@ export default function AsistencialDashboard() {
     treatments,
     upcomingDoses,
     stats,
+    patientsAdherence,
+    allUpcomingDoses,
     loading,
     error,
     fetchDashboard,
@@ -190,24 +192,49 @@ export default function AsistencialDashboard() {
 
         {/* Quick Navigation Menu (Mobile Only) */}
         <div className="quick-nav-mobile">
-          <button
-            onClick={() => document.getElementById('doses-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="quick-nav-btn"
-          >
-            <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-            </svg>
-            <span>Dosis</span>
-          </button>
-          <button
-            onClick={() => document.getElementById('treatments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="quick-nav-btn"
-          >
-            <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-            </svg>
-            <span>Tratamientos</span>
-          </button>
+          {selectedPatientId ? (
+            <>
+              <button
+                onClick={() => document.getElementById('doses-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="quick-nav-btn"
+              >
+                <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span>Dosis</span>
+              </button>
+              <button
+                onClick={() => document.getElementById('treatments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="quick-nav-btn"
+              >
+                <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                </svg>
+                <span>Tratamientos</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => document.getElementById('adherence-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="quick-nav-btn"
+              >
+                <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <span>Adherencia</span>
+              </button>
+              <button
+                onClick={() => document.getElementById('timeline-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="quick-nav-btn"
+              >
+                <svg className="quick-nav-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span>Próximas Dosis</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -390,7 +417,7 @@ export default function AsistencialDashboard() {
                     <h2 className="doses-box-title">
                       <span className="section-icon">⏰</span>
                       Dosis Programadas para Hoy - {selectedPatientName}
-          </h2>
+                    </h2>
                   </div>
 
                   <div className="doses-box-content">
@@ -533,24 +560,185 @@ export default function AsistencialDashboard() {
                 </div>
               </>
             ) : (
-              <div className="doses-box">
-                <div className="doses-box-header">
-                  <h2 className="doses-box-title">
-                    <span className="section-icon">👤</span>
-                    Selecciona un Paciente
-                  </h2>
-                </div>
-                <div className="doses-box-content">
-                  <div className="empty-state">
-                    <div className="empty-icon">👥</div>
-                    <h3 className="empty-title">Selecciona un paciente</h3>
-                    <p className="empty-text">
-                      Por favor, selecciona un paciente de la lista para ver sus dosis y tratamientos
-                    </p>
+              <>
+                {/* Vista General - Todos los Pacientes */}
+
+                {/* Card de Total de Pacientes Asignados */}
+                <div className="general-overview-card">
+                  <div className="overview-header">
+                    <div className="overview-icon-wrapper">
+                      <svg className="overview-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="overview-title">Total de Pacientes Asignados</h3>
+                      <p className="overview-subtitle">Bajo tu cuidado</p>
+                    </div>
                   </div>
-          </div>
-        </div>
-      )}
+                  <div className="overview-value">{patients.length}</div>
+                  <div className="overview-decoration"></div>
+                </div>
+
+                {/* Gráfico de Distribución de Adherencia por Paciente */}
+                <div id="adherence-section" className="adherence-chart-card">
+                  <div className="chart-card-header">
+                    <h3 className="chart-card-title">
+                      <svg className="chart-card-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Distribución de Adherencia por Paciente
+                    </h3>
+                  </div>
+                  <div className="adherence-bars-container">
+                    {patientsAdherence.length === 0 ? (
+                      <div className="empty-state-mini">
+                        <p>No hay datos de adherencia disponibles</p>
+                      </div>
+                    ) : (
+                      patientsAdherence.map((pa) => {
+                        const percentage = pa.adherence_percentage ?? 0;
+                        let barColor = '#10b981'; // Verde por defecto
+                        if (percentage < 50) barColor = '#ef4444'; // Rojo
+                        else if (percentage < 80) barColor = '#f59e0b'; // Amarillo
+
+                        return (
+                          <div key={pa.patient_id} className="adherence-bar-item">
+                            <div className="adherence-bar-label">
+                              <span className="patient-name-label">{pa.patient_name}</span>
+                              <span className="adherence-percentage-label">
+                                {pa.adherence_percentage !== null
+                                  ? `${Math.round(pa.adherence_percentage)}%`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="adherence-bar-bg">
+                              <div
+                                className="adherence-bar-fill"
+                                style={{
+                                  width: `${percentage}%`,
+                                  backgroundColor: barColor
+                                }}
+                              ></div>
+                            </div>
+                            <div className="adherence-bar-stats">
+                              <span className="stat-item stat-taken">✓ {pa.taken}</span>
+                              <span className="stat-item stat-missed">✗ {pa.missed}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Pacientes */}
+                <div className="top-patients-section">
+                  <h3 className="section-title-small">
+                    <svg className="section-icon-small" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    Destacados
+                  </h3>
+                  <div className="top-patients-grid">
+                    {/* Top 3 Mejores */}
+                    <div className="top-patients-card top-patients-success">
+                      <h4 className="top-patients-title">🏆 Mejor Adherencia</h4>
+                      <div className="top-patients-list">
+                        {patientsAdherence.slice(0, 3).map((pa, idx) => (
+                          <div key={pa.patient_id} className="top-patient-item">
+                            <span className="top-rank">#{idx + 1}</span>
+                            <span className="top-patient-name">{pa.patient_name}</span>
+                            <span className="top-patient-percentage">
+                              {pa.adherence_percentage !== null
+                                ? `${Math.round(pa.adherence_percentage)}%`
+                                : 'N/A'}
+                            </span>
+                          </div>
+                        ))}
+                        {patientsAdherence.length === 0 && (
+                          <p className="empty-text-small">Sin datos disponibles</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top 3 que Necesitan Atención */}
+                    <div className="top-patients-card top-patients-warning">
+                      <h4 className="top-patients-title">⚠️ Necesitan Atención</h4>
+                      <div className="top-patients-list">
+                        {patientsAdherence.slice().reverse().slice(0, 3).map((pa, idx) => (
+                          <div key={pa.patient_id} className="top-patient-item">
+                            <span className="top-rank">#{patientsAdherence.length - idx}</span>
+                            <span className="top-patient-name">{pa.patient_name}</span>
+                            <span className="top-patient-percentage">
+                              {pa.adherence_percentage !== null
+                                ? `${Math.round(pa.adherence_percentage)}%`
+                                : 'N/A'}
+                            </span>
+                          </div>
+                        ))}
+                        {patientsAdherence.length === 0 && (
+                          <p className="empty-text-small">Sin datos disponibles</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline de Próximas Dosis */}
+                <div id="timeline-section" className="upcoming-doses-timeline-card">
+                  <div className="chart-card-header">
+                    <h3 className="chart-card-title">
+                      <svg className="chart-card-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                      </svg>
+                      Próximas Dosis del Día (Todos los Pacientes)
+                    </h3>
+                  </div>
+                  <div className="timeline-container">
+                    {allUpcomingDoses.length === 0 ? (
+                      <div className="empty-state-mini">
+                        <div className="empty-icon-mini">✅</div>
+                        <p>No hay dosis pendientes para hoy</p>
+                      </div>
+                    ) : (
+                      <div className="timeline-list">
+                        {allUpcomingDoses.slice(0, 10).map((dose, idx) => {
+                          const now = new Date();
+                          const [hours, minutes] = dose.time.split(':').map(Number);
+                          const doseTime = new Date();
+                          doseTime.setHours(hours, minutes, 0, 0);
+                          const isOverdue = now > doseTime;
+
+                          return (
+                            <div key={idx} className={`timeline-item ${isOverdue ? 'timeline-item-overdue' : ''}`}>
+                              <div className="timeline-time">
+                                <svg className="timeline-clock-icon" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                </svg>
+                                {dose.time}
+                              </div>
+                              <div className="timeline-details">
+                                <div className="timeline-patient">{dose.patient_name}</div>
+                                <div className="timeline-medication">{dose.med_name} - {dose.dosage}</div>
+                              </div>
+                              {isOverdue && (
+                                <div className="timeline-badge-overdue">Atrasada</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {allUpcomingDoses.length > 10 && (
+                          <div className="timeline-more">
+                            +{allUpcomingDoses.length - 10} dosis más
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
     </div>
         </div>
       </div>
@@ -1471,6 +1659,407 @@ export default function AsistencialDashboard() {
           }
         }
 
+        /* ============================================
+           ESTILOS PARA VISTA GENERAL
+           ============================================ */
+
+        /* Card de Total de Pacientes */
+        .general-overview-card {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 24px;
+          padding: 2rem;
+          box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+          position: relative;
+          overflow: hidden;
+          animation: fadeInUp 0.6s ease-out;
+        }
+
+        .overview-header {
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .overview-icon-wrapper {
+          width: 64px;
+          height: 64px;
+          background: rgba(255, 255, 255, 0.2);
+          backdrop-filter: blur(10px);
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .overview-icon {
+          width: 32px;
+          height: 32px;
+          color: #fff;
+        }
+
+        .overview-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #fff;
+          margin: 0 0 0.25rem 0;
+          text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .overview-subtitle {
+          font-size: 0.9375rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+        }
+
+        .overview-value {
+          font-size: 4rem;
+          font-weight: 800;
+          color: #fff;
+          text-align: center;
+          text-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .overview-decoration {
+          position: absolute;
+          width: 200px;
+          height: 200px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.1);
+          filter: blur(60px);
+          bottom: -50px;
+          right: -50px;
+        }
+
+        /* Gráfico de Adherencia por Paciente */
+        .adherence-chart-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 2rem;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          animation: fadeInUp 0.6s ease-out;
+          animation-delay: 0.1s;
+          animation-fill-mode: both;
+        }
+
+        .chart-card-header {
+          margin-bottom: 1.5rem;
+        }
+
+        .chart-card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #1f2937;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 0;
+        }
+
+        .chart-card-icon {
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+        }
+
+        .adherence-bars-container {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
+
+        .adherence-bar-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .adherence-bar-label {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .patient-name-label {
+          font-weight: 600;
+          color: #1f2937;
+          font-size: 0.9375rem;
+        }
+
+        .adherence-percentage-label {
+          font-weight: 700;
+          color: #667eea;
+          font-size: 1rem;
+        }
+
+        .adherence-bar-bg {
+          width: 100%;
+          height: 12px;
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 50px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .adherence-bar-fill {
+          height: 100%;
+          border-radius: 50px;
+          transition: width 1s ease-out;
+          animation: expandBar 1s ease-out;
+        }
+
+        .adherence-bar-stats {
+          display: flex;
+          gap: 1rem;
+          font-size: 0.875rem;
+        }
+
+        .stat-item {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-weight: 600;
+        }
+
+        .stat-taken {
+          color: #10b981;
+        }
+
+        .stat-missed {
+          color: #f59e0b;
+        }
+
+        /* Top Pacientes */
+        .top-patients-section {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 2rem;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          animation: fadeInUp 0.6s ease-out;
+          animation-delay: 0.2s;
+          animation-fill-mode: both;
+        }
+
+        .section-title-small {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #1f2937;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin: 0 0 1.5rem 0;
+        }
+
+        .section-icon-small {
+          width: 24px;
+          height: 24px;
+          color: #667eea;
+        }
+
+        .top-patients-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1.5rem;
+        }
+
+        .top-patients-card {
+          background: rgba(255, 255, 255, 0.7);
+          border-radius: 16px;
+          padding: 1.5rem;
+          border: 2px solid;
+        }
+
+        .top-patients-success {
+          border-color: #10b981;
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.1) 100%);
+        }
+
+        .top-patients-warning {
+          border-color: #f59e0b;
+          background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.1) 100%);
+        }
+
+        .top-patients-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 1rem 0;
+        }
+
+        .top-patients-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .top-patient-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          background: rgba(255, 255, 255, 0.8);
+          border-radius: 12px;
+          transition: all 0.3s ease;
+        }
+
+        .top-patient-item:hover {
+          transform: translateX(4px);
+          background: rgba(255, 255, 255, 1);
+        }
+
+        .top-rank {
+          font-weight: 800;
+          color: #667eea;
+          font-size: 0.875rem;
+          min-width: 28px;
+        }
+
+        .top-patient-name {
+          flex: 1;
+          font-weight: 600;
+          color: #1f2937;
+          font-size: 0.9375rem;
+        }
+
+        .top-patient-percentage {
+          font-weight: 700;
+          color: #667eea;
+          font-size: 0.9375rem;
+        }
+
+        .empty-text-small {
+          font-size: 0.875rem;
+          color: #6b7280;
+          text-align: center;
+          margin: 1rem 0;
+        }
+
+        /* Timeline de Próximas Dosis */
+        .upcoming-doses-timeline-card {
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 24px;
+          padding: 2rem;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          animation: fadeInUp 0.6s ease-out;
+          animation-delay: 0.3s;
+          animation-fill-mode: both;
+        }
+
+        .timeline-container {
+          max-height: 500px;
+          overflow-y: auto;
+        }
+
+        .timeline-container::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .timeline-container::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+        }
+
+        .timeline-container::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .timeline-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .timeline-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1rem;
+          background: rgba(255, 255, 255, 0.7);
+          border-radius: 12px;
+          border: 1px solid rgba(0, 0, 0, 0.05);
+          transition: all 0.3s ease;
+          position: relative;
+        }
+
+        .timeline-item:hover {
+          transform: translateX(4px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .timeline-item-overdue {
+          border-color: rgba(239, 68, 68, 0.3);
+          background: linear-gradient(135deg, rgba(254, 242, 242, 0.7) 0%, rgba(255, 255, 255, 0.7) 100%);
+        }
+
+        .timeline-time {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-weight: 700;
+          color: #667eea;
+          font-size: 1rem;
+          min-width: 80px;
+        }
+
+        .timeline-clock-icon {
+          width: 20px;
+          height: 20px;
+        }
+
+        .timeline-details {
+          flex: 1;
+        }
+
+        .timeline-patient {
+          font-weight: 700;
+          color: #1f2937;
+          font-size: 0.9375rem;
+          margin-bottom: 0.25rem;
+        }
+
+        .timeline-medication {
+          font-size: 0.875rem;
+          color: #6b7280;
+        }
+
+        .timeline-badge-overdue {
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+          color: #fff;
+          padding: 0.375rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .timeline-more {
+          text-align: center;
+          padding: 1rem;
+          font-size: 0.875rem;
+          color: #6b7280;
+          font-weight: 600;
+        }
+
+        .empty-state-mini {
+          text-align: center;
+          padding: 2rem;
+          color: #6b7280;
+        }
+
+        .empty-icon-mini {
+          font-size: 2rem;
+          margin-bottom: 0.5rem;
+          opacity: 0.5;
+        }
+
         @media (max-width: 768px) {
           .dashboard-header {
             padding: 2rem 1.5rem 3rem;
@@ -1538,6 +2127,24 @@ export default function AsistencialDashboard() {
           /* Show Quick Navigation Menu on Mobile */
           .quick-nav-mobile {
             display: flex;
+          }
+
+          /* Vista General - Mobile Adjustments */
+          .top-patients-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .overview-value {
+            font-size: 3rem;
+          }
+
+          .timeline-item {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .timeline-time {
+            min-width: auto;
           }
         }
       `}</style>

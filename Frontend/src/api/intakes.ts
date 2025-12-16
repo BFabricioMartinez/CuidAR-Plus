@@ -89,11 +89,11 @@ export const intakesApi = {
     recordedByUserId: number
   ): Promise<{ message: string }> => {
     // ============================================================================
-    // FIX: Enviar fecha completa del cliente para evitar problemas de zona horaria
+    // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+    // time = hora programada (scheduled_time)
+    // taken_at_full = hora actual (cuando el usuario marca la dosis)
     // ============================================================================
-    const now = new Date();
-    const [hours, minutes] = time.split(':');
-    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    const now = new Date(); // Hora actual, NO modificar con la hora programada
 
     // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
     const year = now.getFullYear();
@@ -122,11 +122,11 @@ export const intakesApi = {
     recordedByUserId: number
   ): Promise<{ message: string }> => {
     // ============================================================================
-    // FIX: Enviar fecha completa del cliente para evitar problemas de zona horaria
+    // FIX: taken_at debe ser la hora ACTUAL cuando se marca la dosis, no la hora programada
+    // time = hora programada (scheduled_time)
+    // taken_at_full = hora actual (cuando el usuario marca la dosis)
     // ============================================================================
-    const now = new Date();
-    const [hours, minutes] = time.split(':');
-    now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    const now = new Date(); // Hora actual, NO modificar con la hora programada
 
     // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
     const year = now.getFullYear();

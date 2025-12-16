@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, intakesApi, assignmentsApi, authApi, ApiError } from '../../api';
-import type { Treatment, CreateTreatmentRequest, Assignment } from '../../api';
+import { treatmentsApi, patientsApi, intakesApi, authApi, ApiError } from '../../api';
+import type { Treatment, CreateTreatmentRequest } from '../../api';
 
 export interface TreatmentFormData {
   medication_name: string;
@@ -33,59 +33,35 @@ export const useTreatmentManagement = () => {
     setError('');
 
     try {
-      // Obtener usuario actual
+      // ============================================================================
+      // FIX: Para rol PERSONAL, el usuario es su propio cuidador
+      // User.id === Patient.caregiver_id (NO Patient.id, porque los pacientes
+      // pueden existir sin usuario y los IDs van desincronizados)
+      // ============================================================================
       const currentUser = authApi.getStoredUser();
-      if (!currentUser || !currentUser.id) {
-        throw new Error('Usuario no autenticado');
+      if (!currentUser) {
+        throw new Error('No se encontró información del usuario');
       }
 
-      // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
-      // Buscar asignaciones activas donde el patient_id corresponde a este usuario
-      let myPatientId: number | null = null;
-
-      // Primero intentar buscar asignaciones donde el patient_id podría ser el ID del usuario
-      // (cuando se asigna un usuario PERSONAL, inicialmente se usa su ID)
       try {
-        const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
-        if (assignments.length > 0 && assignments[0].active) {
-          myPatientId = assignments[0].patient_id;
-        }
-      } catch {
-        // Si no funciona, buscar de otra manera
-      }
+        // Obtener el paciente donde caregiver_id coincide con el usuario actual
+        const patientsResponse = await patientsApi.list({
+          limit: 1,
+          filters: {
+            caregiver_id: currentUser.id,
+            active: true
+          },
+        });
 
-      // Si no se encontró, buscar todas las asignaciones activas y verificar
-      // si alguna corresponde a un paciente creado para este usuario
-      if (!myPatientId) {
-        try {
-          const allAssignments = await assignmentsApi.getAll();
-          const activeAssignments = allAssignments.filter(a => a.active);
-          
-          // Para cada asignación, verificar si el paciente fue creado para este usuario
-          for (const assignment of activeAssignments) {
-            try {
-              const patient = await patientsApi.getById(assignment.patient_id);
-              // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
-              if (patient.notes && patient.notes.includes(currentUser.email)) {
-                myPatientId = patient.id;
-                break;
-              }
-            } catch {
-              continue;
-            }
-          }
-        } catch {
-          // Si falla, continuar con el método anterior
+        if (patientsResponse.items.length > 0) {
+          const myPatient = patientsResponse.items[0];
+          const data = await treatmentsApi.getByPatient(myPatient.id);
+          setTreatments(data.treatments);
+        } else {
+          setTreatments([]);
         }
-      }
-
-      // NO usar el primer paciente activo como fallback
-      // Si no tiene asignación, no debe ver datos de otros usuarios
-      if (myPatientId) {
-        const data = await treatmentsApi.getByPatient(myPatientId);
-        setTreatments(data.treatments);
-      } else {
-        // Si no tiene paciente asignado, no mostrar tratamientos
+      } catch (patientErr) {
+        console.error('Error al obtener datos del paciente:', patientErr);
         setTreatments([]);
       }
     } catch (err) {
@@ -100,53 +76,6 @@ export const useTreatmentManagement = () => {
     }
   }, []);
 
-  // Obtener el patient_id del usuario actual
-  const getMyPatientId = useCallback(async (): Promise<number | null> => {
-    const currentUser = authApi.getStoredUser();
-    if (!currentUser || !currentUser.id) {
-      return null;
-    }
-
-    // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
-    let myPatientId: number | null = null;
-
-    // Buscar asignaciones activas donde el patient_id corresponde a este usuario
-    try {
-      const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
-      if (assignments.length > 0 && assignments[0].active) {
-        myPatientId = assignments[0].patient_id;
-        return myPatientId;
-      }
-    } catch {
-      // Continuar con otro método
-    }
-
-    // Si no se encontró, buscar todas las asignaciones activas y verificar
-    // si alguna corresponde a un paciente creado para este usuario
-    try {
-      const allAssignments = await assignmentsApi.getAll();
-      const activeAssignments = allAssignments.filter(a => a.active);
-
-      // Para cada asignación, verificar si el paciente fue creado para este usuario
-      for (const assignment of activeAssignments) {
-        try {
-          const patient = await patientsApi.getById(assignment.patient_id);
-          // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
-          if (patient.notes && patient.notes.includes(currentUser.email)) {
-            myPatientId = patient.id;
-            return myPatientId;
-          }
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      // Si falla, retornar null
-    }
-
-    return null;
-  }, []);
-
   // Crear tratamiento
   const createTreatment = useCallback(async (data: TreatmentFormData) => {
     setLoading(true);
@@ -154,15 +83,33 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
-      // Obtener patient_id
-      const myPatientId = await getMyPatientId();
+      // ============================================================================
+      // FIX: Para rol PERSONAL, el usuario es su propio cuidador
+      // User.id === Patient.caregiver_id (NO Patient.id, porque los pacientes
+      // pueden existir sin usuario y los IDs van desincronizados)
+      // ============================================================================
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      if (!myPatientId) {
+      // Obtener el paciente donde caregiver_id coincide con el usuario actual
+      const patientsResponse = await patientsApi.list({
+        limit: 1,
+        filters: {
+          caregiver_id: currentUser.id,
+          active: true
+        },
+      });
+
+      if (patientsResponse.items.length === 0) {
         throw new Error('No se encontró tu perfil de paciente');
       }
 
+      const myPatient = patientsResponse.items[0];
+
       const requestData: CreateTreatmentRequest = {
-        patient_id: myPatientId,
+        patient_id: myPatient.id,
         medication_name: data.medication_name,
         dosage: data.dosage || undefined,
         frequency: data.frequency,
@@ -184,7 +131,7 @@ export const useTreatmentManagement = () => {
     } finally {
       setLoading(false);
     }
-  }, [getMyPatientId]);
+  }, []);
 
   // Actualizar tratamiento
   const updateTreatment = useCallback(
@@ -250,35 +197,18 @@ export const useTreatmentManagement = () => {
 
     try {
       // ============================================================================
-      // FIX: Formato de datetime sin timezone para compatibilidad con PostgreSQL
-      //
-      // PROBLEMA:
-      // - toISOString() genera "2025-12-06T11:00:00.000Z" (timezone-aware UTC)
-      // - PostgreSQL TIMESTAMP WITHOUT TIME ZONE espera datetime sin timezone
-      // - Backend lanzaba error: "can't subtract offset-naive and offset-aware datetimes"
-      //
-      // SOLUCIÓN:
-      // - Crear datetime local y formatearlo como "YYYY-MM-DD HH:mm:ss"
-      // - Esto envía un datetime sin información de timezone al backend
+      // FIX: Usar intakesApi.markAsTaken() en lugar de intakesApi.create()
+      // porque markAsTaken() envía el parámetro 'time' que se guarda como scheduled_time
+      // 
+      // time = hora programada de la dosis (ej: "08:00") - se guarda en scheduled_time
+      // taken_at = hora actual cuando el usuario marca la dosis - se calcula en el backend
       // ============================================================================
-      const now = new Date();
-      const [hours, minutes] = time.split(':');
-      now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hour = String(now.getHours()).padStart(2, '0');
-      const minute = String(now.getMinutes()).padStart(2, '0');
-      const second = String(now.getSeconds()).padStart(2, '0');
-      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-
-      await intakesApi.create({
-        treatment_id: treatmentId,
-        taken_at,
-        status: 'TAKEN',
-      });
+      await intakesApi.markAsTaken(treatmentId, time, currentUser.id);
 
       setSuccessMessage(`Dosis de las ${time} marcada como tomada`);
       return true;
@@ -301,25 +231,19 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
-      // Formatear datetime sin timezone (igual que en markAsTaken)
-      const now = new Date();
-      const [hours, minutes] = time.split(':');
-      now.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      // ============================================================================
+      // FIX: Usar intakesApi.markAsMissed() en lugar de intakesApi.create()
+      // porque markAsMissed() envía el parámetro 'time' que se guarda como scheduled_time
+      // 
+      // time = hora programada de la dosis (ej: "08:00") - se guarda en scheduled_time
+      // taken_at = hora actual cuando el usuario marca la dosis - se calcula en el backend
+      // ============================================================================
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      // Formatear como "YYYY-MM-DD HH:mm:ss" (sin timezone)
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hour = String(now.getHours()).padStart(2, '0');
-      const minute = String(now.getMinutes()).padStart(2, '0');
-      const second = String(now.getSeconds()).padStart(2, '0');
-      const taken_at = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-
-      await intakesApi.create({
-        treatment_id: treatmentId,
-        taken_at,
-        status: 'MISSED',
-      });
+      await intakesApi.markAsMissed(treatmentId, time, currentUser.id);
 
       setSuccessMessage(`Dosis de las ${time} marcada como omitida`);
       return true;

@@ -16,6 +16,7 @@ export interface HistoryItem {
   id: number;
   treatment_id: number;
   taken_at: string;
+  scheduled_time?: string; // Hora programada de la dosis (ej: "08:00")
   status: string;
   medication_name?: string;
   dosage?: string;
@@ -46,9 +47,12 @@ export const useAsistencialHistory = () => {
   // Estados principales
   const [patients, setPatients] = useState<Patient[]>([]);
   // Leer paciente seleccionado desde localStorage al inicializar
+  // null = "Todos" (por defecto), número = paciente específico
   const [selectedPatientId, setSelectedPatientIdState] = useState<number | null>(() => {
     const stored = localStorage.getItem('selectedPatientId');
-    return stored ? Number(stored) : null;
+    if (!stored) return null;
+    if (stored === 'all' || stored === 'null') return null;
+    return Number(stored);
   });
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
@@ -91,7 +95,7 @@ export const useAsistencialHistory = () => {
       if (assignments.length === 0) {
         setPatients([]);
         setSelectedPatientIdState(null);
-        localStorage.removeItem('selectedPatientId');
+        localStorage.setItem('selectedPatientId', 'all');
         return;
       }
 
@@ -103,12 +107,10 @@ export const useAsistencialHistory = () => {
       const patientsData = await Promise.all(patientPromises);
       setPatients(patientsData);
 
-      // Seleccionar el primero por defecto si no hay ninguno seleccionado
-      if (!selectedPatientId && patientsData.length > 0) {
-        const firstPatientId = patientsData[0].id;
-        setSelectedPatientIdState(firstPatientId);
-        localStorage.setItem('selectedPatientId', firstPatientId.toString());
-        window.dispatchEvent(new CustomEvent('patientSelected', { detail: firstPatientId }));
+      // Por defecto, mantener "Todos" (null) si no hay ninguno seleccionado
+      // No seleccionamos automáticamente el primer paciente
+      if (selectedPatientId === null) {
+        localStorage.setItem('selectedPatientId', 'all');
       }
     } catch (err) {
       const errorMsg =
@@ -180,34 +182,43 @@ export const useAsistencialHistory = () => {
           filters.treatment_id = treatmentId;
         }
 
-        const response = await fetch('http://localhost:8000/intake/paginated', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            limit: 20,
-            last_seen_id: cursor,
-            filters,
-          }),
+        // Usar intakesApi.list() en lugar de fetch directo
+        const response = await intakesApi.list({
+          limit: 20,
+          last_seen_id: cursor,
+          filters,
         });
 
-        if (!response.ok) {
-          throw new Error('Error al cargar historial');
-        }
-
-        const responseData = await response.json();
-        let intakes = responseData.intakes || [];
+        let intakes = response.items || [];
 
         // Enriquecer con datos del tratamiento
         let historyData: HistoryItem[] = intakes.map((intake: IntakeLog) => {
           const treatment = treatments.find((t) => t.id === intake.treatment_id) || intake.treatment || null;
 
+          // scheduled_time: hora programada de la dosis (debe venir del backend)
+          // Si no está disponible, intentar extraerla de taken_at como fallback
+          let scheduledTime = intake.scheduled_time;
+          
+          if (!scheduledTime && intake.taken_at) {
+            try {
+              const takenAtDate = new Date(intake.taken_at);
+              const hours = String(takenAtDate.getHours()).padStart(2, '0');
+              const minutes = String(takenAtDate.getMinutes()).padStart(2, '0');
+              scheduledTime = `${hours}:${minutes}`;
+            } catch (e) {
+              scheduledTime = 'N/A';
+            }
+          }
+          
+          if (!scheduledTime) {
+            scheduledTime = 'N/A';
+          }
+
           return {
             id: intake.id,
             treatment_id: intake.treatment_id,
             taken_at: intake.taken_at,
+            scheduled_time: scheduledTime, // Hora programada de la dosis
             status: intake.status,
             medication_name: treatment?.medication_name || 'Desconocido',
             dosage: treatment?.dosage || '',
@@ -235,8 +246,8 @@ export const useAsistencialHistory = () => {
         }
 
         // Actualizar cursor y estado de hasMore
-        setNextCursor(responseData.next_cursor);
-        setHasMore(responseData.next_cursor !== null);
+        setNextCursor(response.next_cursor);
+        setHasMore(response.next_cursor !== null);
       } catch (err) {
         const errorMsg =
           err instanceof ApiError ? err.message : 'Error al cargar historial';
@@ -254,9 +265,14 @@ export const useAsistencialHistory = () => {
   );
 
   // Cambiar paciente seleccionado
-  const selectPatient = useCallback((patientId: number) => {
+  // patientId puede ser null (Todos) o un número (paciente específico)
+  const selectPatient = useCallback((patientId: number | null) => {
     setSelectedPatientIdState(patientId);
-    localStorage.setItem('selectedPatientId', patientId.toString());
+    if (patientId === null) {
+      localStorage.setItem('selectedPatientId', 'all');
+    } else {
+      localStorage.setItem('selectedPatientId', patientId.toString());
+    }
     window.dispatchEvent(new CustomEvent('patientSelected', { detail: patientId }));
     // Resetear filtros al cambiar de paciente
     setFilterStatus('all');
@@ -275,7 +291,10 @@ export const useAsistencialHistory = () => {
 
     const handleStorageChange = () => {
       const stored = localStorage.getItem('selectedPatientId');
-      const storedId = stored ? Number(stored) : null;
+      let storedId: number | null = null;
+      if (stored && stored !== 'all' && stored !== 'null') {
+        storedId = Number(stored);
+      }
       if (storedId !== selectedPatientId) {
         setSelectedPatientIdState(storedId);
       }

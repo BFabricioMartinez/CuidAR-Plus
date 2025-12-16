@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, intakesApi, assignmentsApi, authApi, ApiError } from '../../api';
-import type { Treatment, OverviewStats } from '../../api';
+import { treatmentsApi, patientsApi, statisticsApi, intakesApi, authApi, ApiError } from '../../api';
+import type { Treatment, PersonalStats } from '../../api';
 
 export interface UpcomingDose {
   treatment_id: number;
@@ -13,7 +13,7 @@ export interface UpcomingDose {
 export const useDashboard = () => {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [upcomingDoses, setUpcomingDoses] = useState<UpcomingDose[]>([]);
-  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [stats, setStats] = useState<PersonalStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -111,137 +111,67 @@ export const useDashboard = () => {
     [parseTimesFromFrequency]
   );
 
-  // Obtener el patient_id del usuario actual
-  const getMyPatientId = useCallback(async (): Promise<number | null> => {
-    const currentUser = authApi.getStoredUser();
-    if (!currentUser || !currentUser.id) {
-      return null;
-    }
-
-    // Para usuarios PERSONAL, obtener el paciente a través de las asignaciones
-    let myPatientId: number | null = null;
-
-    // Buscar asignaciones activas donde el patient_id corresponde a este usuario
-    try {
-      const assignments = await assignmentsApi.getAll(undefined, currentUser.id);
-      if (assignments.length > 0 && assignments[0].active) {
-        myPatientId = assignments[0].patient_id;
-        return myPatientId;
-      }
-    } catch {
-      // Continuar con otro método
-    }
-
-    // Si no se encontró, buscar todas las asignaciones activas y verificar
-    // si alguna corresponde a un paciente creado para este usuario
-    try {
-      const allAssignments = await assignmentsApi.getAll();
-      const activeAssignments = allAssignments.filter(a => a.active);
-      
-      // Para cada asignación, verificar si el paciente fue creado para este usuario
-      for (const assignment of activeAssignments) {
-        try {
-          const patient = await patientsApi.getById(assignment.patient_id);
-          // Verificar si el paciente tiene una nota que indica que fue creado para este usuario
-          if (patient.notes && patient.notes.includes(currentUser.email)) {
-            myPatientId = patient.id;
-            return myPatientId;
-          }
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      // Si falla, retornar null
-    }
-
-    return null;
-  }, []);
-
-  // Calcular estadísticas del paciente manualmente
-  const calculatePatientStats = useCallback(async (patientId: number): Promise<OverviewStats> => {
-    // Obtener todos los intakes de hoy para este paciente
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-    try {
-      // Obtener historial de intakes del paciente
-      const intakesResponse = await intakesApi.getPatientHistory(patientId);
-
-      // Filtrar solo los intakes de hoy
-      const todayIntakes = intakesResponse.intakes.filter(intake => {
-        if (!intake.taken_at) return false;
-        const intakeDate = new Date(intake.taken_at);
-        return intakeDate >= startOfDay && intakeDate <= endOfDay;
-      });
-
-      // Contar dosis tomadas y omitidas
-      const taken = todayIntakes.filter(i => i.status === 'TAKEN').length;
-      const missed = todayIntakes.filter(i => i.status === 'MISSED').length;
-      const total = taken + missed;
-      const adherence_percentage = total > 0 ? (taken / total) * 100 : null;
-
-      return {
-        active_users: 0, // No relevante para usuario PERSONAL
-        total_patients: 0, // No relevante para usuario PERSONAL
-        active_treatments: 0, // Se puede calcular después si es necesario
-        today_doses: {
-          taken,
-          missed,
-          total,
-          adherence_percentage,
-        },
-      };
-    } catch (err) {
-      console.error('Error calculating patient stats:', err);
-      // Retornar estadísticas vacías en caso de error
-      return {
-        active_users: 0,
-        total_patients: 0,
-        active_treatments: 0,
-        today_doses: {
-          taken: 0,
-          missed: 0,
-          total: 0,
-          adherence_percentage: null,
-        },
-      };
-    }
-  }, []);
-
   // Cargar todo el dashboard
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      // Obtener el patient_id del usuario actual
-      const myPatientId = await getMyPatientId();
+      // ============================================================================
+      // FIX: Para rol PERSONAL, el usuario es su propio cuidador
+      // User.id === Patient.caregiver_id (NO Patient.id, porque los pacientes
+      // pueden existir sin usuario y los IDs van desincronizados)
+      // ============================================================================
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      if (myPatientId) {
-        // Calcular estadísticas específicas del paciente (solo sus datos)
-        const statsData = await calculatePatientStats(myPatientId);
-        setStats(statsData);
+      try {
+        // Obtener el paciente donde caregiver_id coincide con el usuario actual
+        const patientsResponse = await patientsApi.list({
+          limit: 1,
+          filters: {
+            caregiver_id: currentUser.id,
+            active: true
+          },
+        });
 
-        // Cargar tratamientos del paciente
-        const treatmentsData = await treatmentsApi.getByPatient(myPatientId);
-        setTreatments(treatmentsData.treatments);
-        await calculateUpcomingDoses(treatmentsData.treatments, myPatientId);
-      } else {
-        // Si no tiene paciente asignado, no mostrar datos
+        if (patientsResponse.items.length > 0) {
+          const myPatient = patientsResponse.items[0];
+
+          // Cargar tratamientos del paciente
+          const treatmentsData = await treatmentsApi.getByPatient(myPatient.id);
+          setTreatments(treatmentsData.treatments);
+          await calculateUpcomingDoses(treatmentsData.treatments, myPatient.id);
+
+          // Cargar estadísticas específicas del usuario PERSONAL
+          // Esto mostrará solo las estadísticas de este paciente específico
+          const statsData = await statisticsApi.personalStats(currentUser.id);
+          setStats(statsData);
+        } else {
+          setTreatments([]);
+          setUpcomingDoses([]);
+          // Si no hay paciente, usar estadísticas vacías
+          setStats({
+            today_doses: {
+              taken: 0,
+              missed: 0,
+              adherence_percentage: 0
+            }
+          });
+        }
+      } catch (patientErr) {
+        // Si no se encuentra el paciente, mostrar mensaje apropiado
+        console.error('Error al obtener datos del paciente:', patientErr);
         setTreatments([]);
         setUpcomingDoses([]);
         setStats({
-          active_users: 0,
-          total_patients: 0,
-          active_treatments: 0,
           today_doses: {
             taken: 0,
             missed: 0,
-            total: 0,
-            adherence_percentage: null,
-          },
+            adherence_percentage: 0
+          }
         });
       }
     } catch (err) {
@@ -254,7 +184,7 @@ export const useDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [calculateUpcomingDoses, getMyPatientId, calculatePatientStats]);
+  }, [calculateUpcomingDoses]);
 
   return {
     treatments,

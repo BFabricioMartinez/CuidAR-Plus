@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAsistencialTreatments } from '../../hooks/asistencial/useAsistencialTreatments';
 import { toastSuccess, toastError, toastLoading, toastDismiss, toastWarning } from '../../utils/toast';
 import type { Treatment } from '../../api';
@@ -7,6 +8,7 @@ import type { Treatment } from '../../api';
 // COMPONENTE PRINCIPAL
 // ============================================
 export default function TratamientoView() {
+  const navigate = useNavigate();
   const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
   const [newTime, setNewTime] = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -37,6 +39,13 @@ export default function TratamientoView() {
   useEffect(() => {
     fetchMyPatients();
   }, [fetchMyPatients]);
+
+  // Redirigir al dashboard si "Todos" está seleccionado
+  useEffect(() => {
+    if (selectedPatientId === null) {
+      navigate('/asistencial/dashboard');
+    }
+  }, [selectedPatientId, navigate]);
 
   // Nombre del paciente seleccionado
   const selectedPatientName =
@@ -210,15 +219,15 @@ export default function TratamientoView() {
                 Paciente seleccionado: <strong>{selectedPatientName}</strong>
               </p>
             )}
-          </div>
-          {selectedPatientId && !showForm && (
+        </div>
+        {selectedPatientId && !showForm && (
             <button onClick={openCreateForm} className="btn-add-treatment">
               <svg className="btn-icon-add" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
               </svg>
               <span>Nuevo Tratamiento</span>
-            </button>
-          )}
+          </button>
+        )}
         </div>
       </div>
 
@@ -232,11 +241,11 @@ export default function TratamientoView() {
               Utilizá el selector de paciente en la parte superior para gestionar
               sus tratamientos activos.
             </p>
-          </div>
+      </div>
         )}
 
         {/* Formulario */}
-        {showForm && selectedPatientId && (
+      {showForm && selectedPatientId && (
           <div className="treatment-form-card">
             <div className="form-header">
               <h2 className="form-title">
@@ -246,7 +255,7 @@ export default function TratamientoView() {
                     · Paciente: <strong>{selectedPatientName}</strong>
                   </span>
                 )}
-              </h2>
+          </h2>
               <button onClick={handleCancelForm} className="btn-close-form">
                 <svg viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -263,16 +272,16 @@ export default function TratamientoView() {
                     </svg>
                     Medicamento <span className="required">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="medication_name"
-                    value={formData.medication_name}
-                    onChange={handleInputChange}
+                <input
+                  type="text"
+                  name="medication_name"
+                  value={formData.medication_name}
+                  onChange={handleInputChange}
                     className="field-input"
                     placeholder="Ej: Paracetamol, Ibuprofeno..."
-                    required
-                  />
-                </div>
+                  required
+                />
+              </div>
 
                 <div className="form-field">
                   <label className="field-label">
@@ -282,17 +291,17 @@ export default function TratamientoView() {
                     </svg>
                     Dosis <span className="required">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="dosage"
-                    value={formData.dosage}
-                    onChange={handleInputChange}
+                <input
+                  type="text"
+                  name="dosage"
+                  value={formData.dosage}
+                  onChange={handleInputChange}
                     className="field-input"
                     placeholder="Ej: 500mg, 1 comprimido..."
-                    required
-                  />
-                </div>
+                  required
+                />
               </div>
+            </div>
 
               {/* Selector de Horarios Interactivo */}
               <div className="form-field form-field-full">
@@ -340,7 +349,7 @@ export default function TratamientoView() {
                     </button>
                   ) : (
                     <div className="time-picker-input-group">
-                      <input
+              <input
                         type="time"
                         value={newTime}
                         onChange={(e) => setNewTime(e.target.value)}
@@ -397,8 +406,8 @@ export default function TratamientoView() {
 
                 <input
                   type="hidden"
-                  name="frequency"
-                  value={formData.frequency}
+                name="frequency"
+                value={formData.frequency}
                   required={selectedTimes.length === 0}
                 />
 
@@ -407,8 +416,8 @@ export default function TratamientoView() {
                     ? `${selectedTimes.length} ${selectedTimes.length === 1 ? 'horario configurado para este paciente' : 'horarios configurados para este paciente'}`
                     : 'Agregá los horarios en que el paciente debe tomar este medicamento'
                   }
-                </small>
-              </div>
+              </small>
+            </div>
 
               <div className="form-grid">
                 <div className="form-field">
@@ -418,15 +427,15 @@ export default function TratamientoView() {
                     </svg>
                     Fecha de inicio <span className="required">*</span>
                   </label>
-                  <input
-                    type="date"
-                    name="start_date"
-                    value={formData.start_date}
-                    onChange={handleInputChange}
+                <input
+                  type="date"
+                  name="start_date"
+                  value={formData.start_date}
+                  onChange={handleInputChange}
                     className="field-input"
-                    required
-                  />
-                </div>
+                  required
+                />
+              </div>
 
                 <div className="form-field">
                   <label className="field-label">
@@ -435,15 +444,15 @@ export default function TratamientoView() {
                     </svg>
                     Fecha de fin
                   </label>
-                  <input
-                    type="date"
-                    name="end_date"
-                    value={formData.end_date}
-                    onChange={handleInputChange}
+                <input
+                  type="date"
+                  name="end_date"
+                  value={formData.end_date}
+                  onChange={handleInputChange}
                     className="field-input"
-                  />
-                </div>
+                />
               </div>
+            </div>
 
               <div className="form-field form-field-full">
                 <label className="field-label">
@@ -452,20 +461,20 @@ export default function TratamientoView() {
                   </svg>
                   Notas adicionales
                 </label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
                   className="field-textarea"
                   placeholder="Información adicional sobre el tratamiento del paciente..."
-                  rows={3}
-                />
-              </div>
+                rows={3}
+              />
+            </div>
 
               <div className="form-actions">
                 <button type="button" onClick={handleCancelForm} className="btn-cancel">
-                  Cancelar
-                </button>
+                Cancelar
+              </button>
                 <button type="submit" disabled={loading} className="btn-submit">
                   {loading ? (
                     <>
@@ -483,14 +492,14 @@ export default function TratamientoView() {
                       {editingTreatment ? 'Actualizar' : 'Crear Tratamiento'}
                     </>
                   )}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
-        {/* Lista de tratamientos */}
-        {selectedPatientId && (
+      {/* Lista de tratamientos */}
+      {selectedPatientId && (
           loading && treatments.length === 0 ? (
             <div className="loading-state">
               <div className="loading-spinner">
@@ -541,7 +550,7 @@ export default function TratamientoView() {
                       <div className="info-content">
                         <span className="info-label">Frecuencia</span>
                         <span className="info-value">{treatment.frequency}</span>
-                      </div>
+                    </div>
                     </div>
 
                     {treatment.start_date && (
@@ -553,8 +562,8 @@ export default function TratamientoView() {
                           <span className="info-label">Inicio</span>
                           <span className="info-value">
                             {new Date(treatment.start_date).toLocaleDateString('es-AR')}
-                          </span>
-                        </div>
+                      </span>
+                    </div>
                       </div>
                     )}
 
@@ -566,8 +575,8 @@ export default function TratamientoView() {
                         <div className="info-content">
                           <span className="info-label">Fin</span>
                           <span className="info-value">
-                            {new Date(treatment.end_date).toLocaleDateString('es-AR')}
-                          </span>
+                          {new Date(treatment.end_date).toLocaleDateString('es-AR')}
+                        </span>
                         </div>
                       </div>
                     )}
