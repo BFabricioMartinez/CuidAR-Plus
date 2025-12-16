@@ -4,7 +4,7 @@ from sqlalchemy import select, or_
 from sqlalchemy.orm import joinedload
 from models import User, InputUser, InputUserUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
-from auth.security import Security
+from auth.roles import require_roles
 from utils.update import is_valid_change
 import traceback
 
@@ -28,10 +28,10 @@ async def get_users_paginated(req: Request, body: InputPaginatedRequestFilter):
         JSONResponse con lista de usuarios y cursor para siguiente página
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         # Extraer parámetros
         limit = body.limit or 20
@@ -140,10 +140,10 @@ async def get_user_by_id(req: Request, user_id: int):
         JSONResponse con los datos del usuario
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -195,10 +195,10 @@ async def update_user(req: Request, data: InputUserUpdate):
         JSONResponse con mensaje de actualización
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             # Buscar usuario
@@ -285,10 +285,10 @@ async def deactivate_user(req: Request, user_id: int):
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = select(User).where(User.id == user_id)
@@ -330,10 +330,10 @@ async def get_users_by_role(req: Request, role: str):
         JSONResponse con lista de usuarios del rol
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         async with AsyncSessionLocal() as session:
             stmt = (

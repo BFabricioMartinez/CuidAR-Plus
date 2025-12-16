@@ -11,9 +11,9 @@ from auth.security import (
     hash_password,
     verify_password,
     create_access_token,
-    Security,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from auth.roles import require_roles
 
 auth = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -136,15 +136,20 @@ async def login(req: Request, credentials: LoginRequest):
 
 @auth.get("/me")
 async def get_me(req: Request):
-    """Obtener informacion del usuario autenticado"""
+    """
+    Obtener informacion del usuario autenticado.
+
+    Control de acceso por rol:
+    - ADMIN, ASISTENCIAL, PERSONAL: cualquier usuario autenticado puede acceder a su propia información
+    """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (todos los roles autenticados)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
 
         # Obtener user_id del token decodificado
-        user_id = has_access.get("sub")
+        user_id = payload.get("sub")
 
         async with AsyncSessionLocal() as session:
             stmt = select(User).where(User.id == int(user_id))

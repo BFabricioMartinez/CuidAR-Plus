@@ -2,9 +2,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from models import Treatment, Patient, InputTreatment, InputTreatmentUpdate, InputPaginatedRequestFilter
+from models import Treatment, Patient, Assignment, InputTreatment, InputTreatmentUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
-from auth.security import Security
+from auth.roles import require_roles
 from utils.update import is_valid_change
 import traceback
 
@@ -23,14 +23,22 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
     - active: Filtro por estado activo
     - order: "desc" para descendente, "asc" para ascendente
 
+    Control de acceso por rol:
+    - ADMIN: acceso total a todos los tratamientos
+    - PERSONAL: solo tratamientos de pacientes donde Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo tratamientos de pacientes con Assignment activa donde Assignment.caregiver_id == user_id
+
     Returns:
         JSONResponse con lista de tratamientos y cursor para siguiente página
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         # Extraer parámetros
         limit = body.limit or 20
@@ -44,10 +52,22 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
 
         async with AsyncSessionLocal() as session:
             # Construir query base
-            stmt = (
-                select(Treatment)
-                .options(joinedload(Treatment.patient))
-            )
+            stmt = select(Treatment)
+
+            # ============================================================================
+            # FILTROS POR ROL - Control de acceso basado en ownership
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: solo tratamientos de pacientes propios
+                stmt = stmt.join(Patient, Patient.id == Treatment.patient_id)
+                stmt = stmt.where(Patient.caregiver_id == user_id)
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: solo tratamientos de pacientes con Assignment activa
+                stmt = stmt.join(Patient, Patient.id == Treatment.patient_id)
+                stmt = stmt.join(Assignment, Assignment.patient_id == Patient.id)
+                stmt = stmt.where(Assignment.caregiver_id == user_id)
+                stmt = stmt.where(Assignment.active == True)
+            # ADMIN: sin filtros adicionales (acceso total)
 
             # Filtrar por active
             if hasattr(Treatment, "active"):
@@ -88,9 +108,12 @@ async def get_treatments_paginated(req: Request, body: InputPaginatedRequestFilt
             # Aplicar límite
             stmt = stmt.limit(limit)
 
+            # Agregar joinedload para cargar relaciones (después de todos los filtros)
+            stmt = stmt.options(joinedload(Treatment.patient))
+
             # Ejecutar query
             result = await session.execute(stmt)
-            treatments = result.scalars().all()
+            treatments = result.unique().scalars().all()
 
             # Serializar
             data = []
@@ -136,6 +159,11 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
     """
     Obtiene un tratamiento por su ID.
 
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - PERSONAL: solo si el paciente del tratamiento tiene Patient.caregiver_id == user_id
+    - ASISTENCIAL: solo si existe Assignment activa con Assignment.caregiver_id == user_id
+
     Args:
         treatment_id: ID del tratamiento
 
@@ -143,10 +171,13 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
         JSONResponse con los datos del tratamiento
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -165,7 +196,41 @@ async def get_treatment_by_id(req: Request, treatment_id: int):
                     content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
                 )
 
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
             patient = treatment_found.patient
+
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if not patient or patient.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                if not patient:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient.id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             treatment_data = {
                 "id": treatment_found.id,
@@ -202,6 +267,10 @@ async def create_treatment(req: Request, data: InputTreatment):
     """
     Crea un nuevo tratamiento.
 
+    Control de acceso por rol:
+    - ADMIN: puede crear tratamientos para cualquier paciente
+    - PERSONAL: solo puede crear tratamientos para sus propios pacientes (Patient.caregiver_id == user_id)
+
     Args:
         data: Datos del tratamiento (InputTreatment)
 
@@ -209,10 +278,13 @@ async def create_treatment(req: Request, data: InputTreatment):
         JSONResponse con el tratamiento creado
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el paciente existe
@@ -225,6 +297,18 @@ async def create_treatment(req: Request, data: InputTreatment):
                     status_code=404,
                     content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if patient.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             # Crear tratamiento
             new_treatment = Treatment(
@@ -275,6 +359,10 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
     """
     Actualiza un tratamiento existente.
 
+    Control de acceso por rol:
+    - ADMIN: puede actualizar cualquier tratamiento
+    - PERSONAL: solo puede actualizar tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+
     Args:
         data: Datos a actualizar (InputTreatmentUpdate)
 
@@ -282,10 +370,13 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
         JSONResponse con mensaje de actualización
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Buscar tratamiento
@@ -298,6 +389,22 @@ async def update_treatment(req: Request, data: InputTreatmentUpdate):
                     status_code=404,
                     content={"message": f"Tratamiento con ID {data.id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment_found.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             updated = False
 
@@ -381,6 +488,10 @@ async def deactivate_treatment(req: Request, treatment_id: int):
     """
     Desactiva un tratamiento (soft delete).
 
+    Control de acceso por rol:
+    - ADMIN: puede desactivar cualquier tratamiento
+    - PERSONAL: solo puede desactivar tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+
     Args:
         treatment_id: ID del tratamiento
 
@@ -388,10 +499,13 @@ async def deactivate_treatment(req: Request, treatment_id: int):
         JSONResponse con mensaje de confirmación
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             stmt = select(Treatment).where(Treatment.id == treatment_id)
@@ -403,6 +517,22 @@ async def deactivate_treatment(req: Request, treatment_id: int):
                     status_code=404,
                     content={"message": f"Tratamiento con ID {treatment_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente del tratamiento
+                stmt_patient_check = select(Patient).where(Patient.id == treatment_found.patient_id)
+                result_patient_check = await session.execute(stmt_patient_check)
+                patient_check = result_patient_check.scalar_one_or_none()
+
+                if not patient_check or patient_check.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             treatment_found.active = False
             await session.commit()
@@ -426,6 +556,11 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
     """
     Obtiene todos los tratamientos de un paciente.
 
+    Control de acceso por rol:
+    - ADMIN: puede ver tratamientos de cualquier paciente
+    - PERSONAL: solo puede ver tratamientos de sus propios pacientes (Patient.caregiver_id == user_id)
+    - ASISTENCIAL: solo puede ver tratamientos de pacientes con Assignment activa donde Assignment.caregiver_id == user_id
+
     Args:
         patient_id: ID del paciente
 
@@ -433,10 +568,13 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
         JSONResponse con lista de tratamientos del paciente
     """
     try:
-        # Verificar token
-        has_access = Security.verify_token(req.headers)
-        if "sub" not in has_access:
-            return JSONResponse(status_code=401, content=has_access)
+        # Verificar token y rol (ADMIN, ASISTENCIAL, PERSONAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
 
         async with AsyncSessionLocal() as session:
             # Verificar que el paciente existe
@@ -449,6 +587,34 @@ async def get_treatments_by_patient(req: Request, patient_id: int):
                     status_code=404,
                     content={"message": f"Paciente con ID {patient_id} no encontrado"}
                 )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if patient.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = (
+                    select(Assignment)
+                    .where(Assignment.patient_id == patient_id)
+                    .where(Assignment.caregiver_id == user_id)
+                    .where(Assignment.active == True)
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+
+                if not assignment:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
 
             # Obtener tratamientos del paciente (solo activos por defecto)
             stmt = (
