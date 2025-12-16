@@ -5,6 +5,7 @@ from datetime import timedelta
 import traceback
 
 from models import User, SignupRequest, LoginRequest
+from models.patient import Patient
 from config.db import AsyncSessionLocal
 from auth.security import (
     hash_password,
@@ -36,6 +37,7 @@ async def signup(req: Request, user_data: SignupRequest):
             # Crear usuario con password hasheada
             new_user = User(
                 email=user_data.email,
+                name=user_data.name,
                 password=hash_password(user_data.password),
                 role=user_data.role
             )
@@ -44,6 +46,18 @@ async def signup(req: Request, user_data: SignupRequest):
             await session.commit()
             await session.refresh(new_user)
 
+            # Si el rol es PERSONAL, crear automaticamente un registro de paciente
+            # donde el usuario es su propio cuidador
+            if user_data.role == "PERSONAL":
+                new_patient = Patient(
+                    name=user_data.name,
+                    caregiver_id=new_user.id,
+                    active=True,
+                    notes="Paciente auto-registrado"
+                )
+                session.add(new_patient)
+                await session.commit()
+
             return JSONResponse(
                 status_code=201,
                 content={
@@ -51,6 +65,7 @@ async def signup(req: Request, user_data: SignupRequest):
                     "user": {
                         "id": new_user.id,
                         "email": new_user.email,
+                        "name": new_user.name,
                         "role": new_user.role
                     }
                 }

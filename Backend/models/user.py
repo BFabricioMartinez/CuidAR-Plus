@@ -59,6 +59,7 @@ class SignupRequest(BaseModel):
     email: str
     password: str
     role: str = "PERSONAL"
+    name: str
 
 class LoginRequest(BaseModel):
     """Modelo para login de usuario"""

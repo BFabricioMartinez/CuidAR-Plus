@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { treatmentsApi, patientsApi, intakesApi, ApiError } from '../../api';
+import { treatmentsApi, patientsApi, intakesApi, authApi, ApiError } from '../../api';
 import type { Treatment, CreateTreatmentRequest } from '../../api';
 
 export interface TreatmentFormData {
@@ -33,17 +33,35 @@ export const useTreatmentManagement = () => {
     setError('');
 
     try {
-      // Obtener paciente del usuario
-      const patientsResponse = await patientsApi.list({
-        limit: 1,
-        filters: { active: true },
-      });
+      // ============================================================================
+      // FIX: Para rol PERSONAL, el usuario es su propio cuidador
+      // User.id === Patient.caregiver_id (NO Patient.id, porque los pacientes
+      // pueden existir sin usuario y los IDs van desincronizados)
+      // ============================================================================
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        throw new Error('No se encontró información del usuario');
+      }
 
-      if (patientsResponse.items.length > 0) {
-        const myPatient = patientsResponse.items[0];
-        const data = await treatmentsApi.getByPatient(myPatient.id);
-        setTreatments(data.treatments);
-      } else {
+      try {
+        // Obtener el paciente donde caregiver_id coincide con el usuario actual
+        const patientsResponse = await patientsApi.list({
+          limit: 1,
+          filters: {
+            caregiver_id: currentUser.id,
+            active: true
+          },
+        });
+
+        if (patientsResponse.items.length > 0) {
+          const myPatient = patientsResponse.items[0];
+          const data = await treatmentsApi.getByPatient(myPatient.id);
+          setTreatments(data.treatments);
+        } else {
+          setTreatments([]);
+        }
+      } catch (patientErr) {
+        console.error('Error al obtener datos del paciente:', patientErr);
         setTreatments([]);
       }
     } catch (err) {
@@ -65,10 +83,23 @@ export const useTreatmentManagement = () => {
     setSuccessMessage('');
 
     try {
-      // Obtener patient_id
+      // ============================================================================
+      // FIX: Para rol PERSONAL, el usuario es su propio cuidador
+      // User.id === Patient.caregiver_id (NO Patient.id, porque los pacientes
+      // pueden existir sin usuario y los IDs van desincronizados)
+      // ============================================================================
+      const currentUser = authApi.getStoredUser();
+      if (!currentUser) {
+        throw new Error('No se encontró información del usuario');
+      }
+
+      // Obtener el paciente donde caregiver_id coincide con el usuario actual
       const patientsResponse = await patientsApi.list({
         limit: 1,
-        filters: { active: true },
+        filters: {
+          caregiver_id: currentUser.id,
+          active: true
+        },
       });
 
       if (patientsResponse.items.length === 0) {
