@@ -390,7 +390,7 @@ export default function AsistencialDashboard() {
                     <h2 className="doses-box-title">
                       <span className="section-icon">⏰</span>
                       Dosis Programadas para Hoy - {selectedPatientName}
-          </h2>
+                    </h2>
                   </div>
 
                   <div className="doses-box-content">
@@ -536,21 +536,22 @@ export default function AsistencialDashboard() {
               <div className="doses-box">
                 <div className="doses-box-header">
                   <h2 className="doses-box-title">
-                    <span className="section-icon">👤</span>
-                    Selecciona un Paciente
+                    <span className="section-icon">📊</span>
+                    Vista General - Todos los Pacientes
                   </h2>
                 </div>
                 <div className="doses-box-content">
                   <div className="empty-state">
-                    <div className="empty-icon">👥</div>
-                    <h3 className="empty-title">Selecciona un paciente</h3>
+                    <div className="empty-icon">📈</div>
+                    <h3 className="empty-title">Estadísticas Generales</h3>
                     <p className="empty-text">
-                      Por favor, selecciona un paciente de la lista para ver sus dosis y tratamientos
+                      Estás viendo un resumen general de todos tus pacientes asignados. <br />
+                      Selecciona un paciente específico para ver sus dosis programadas y tratamientos.
                     </p>
                   </div>
-          </div>
-        </div>
-      )}
+                </div>
+              </div>
+            )}
     </div>
         </div>
       </div>

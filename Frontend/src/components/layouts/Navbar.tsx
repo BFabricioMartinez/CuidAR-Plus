@@ -151,11 +151,23 @@ export default function Navbar() {
               <span className="patients-count-text">{patients.length}</span>
               <div className="patient-selector-divider"></div>
               <select
-                value={selectedPatientId || ''}
-                onChange={(e) => selectPatient(Number(e.target.value))}
+                value={selectedPatientId || 'all'}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'all') {
+                    // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
+                    if (location.pathname !== '/asistencial/dashboard') {
+                      navigate('/asistencial/dashboard');
+                    }
+                    selectPatient(null);
+                  } else {
+                    selectPatient(Number(value));
+                  }
+                }}
                 className="patient-selector-dropdown"
                 title="Seleccionar paciente"
               >
+                <option value="all">Todos</option>
                 {patients.map((patient) => (
                   <option key={patient.id} value={patient.id}>
                     {patient.name}
@@ -229,10 +241,23 @@ export default function Navbar() {
                   <span>Paciente ({patients.length}):</span>
                 </label>
                 <select
-                  value={selectedPatientId || ''}
-                  onChange={(e) => selectPatient(Number(e.target.value))}
+                  value={selectedPatientId || 'all'}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'all') {
+                      // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
+                      if (location.pathname !== '/asistencial/dashboard') {
+                        navigate('/asistencial/dashboard');
+                        setMenuOpen(false);
+                      }
+                      selectPatient(null);
+                    } else {
+                      selectPatient(Number(value));
+                    }
+                  }}
                   className="patient-selector-dropdown-mobile"
                 >
+                  <option value="all">Todos</option>
                   {patients.map((patient) => (
                     <option key={patient.id} value={patient.id}>
                       {patient.name}

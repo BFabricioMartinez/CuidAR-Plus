@@ -46,9 +46,12 @@ export const useAsistencialHistory = () => {
   // Estados principales
   const [patients, setPatients] = useState<Patient[]>([]);
   // Leer paciente seleccionado desde localStorage al inicializar
+  // null = "Todos" (por defecto), número = paciente específico
   const [selectedPatientId, setSelectedPatientIdState] = useState<number | null>(() => {
     const stored = localStorage.getItem('selectedPatientId');
-    return stored ? Number(stored) : null;
+    if (!stored) return null;
+    if (stored === 'all' || stored === 'null') return null;
+    return Number(stored);
   });
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
@@ -91,7 +94,7 @@ export const useAsistencialHistory = () => {
       if (assignments.length === 0) {
         setPatients([]);
         setSelectedPatientIdState(null);
-        localStorage.removeItem('selectedPatientId');
+        localStorage.setItem('selectedPatientId', 'all');
         return;
       }
 
@@ -103,12 +106,10 @@ export const useAsistencialHistory = () => {
       const patientsData = await Promise.all(patientPromises);
       setPatients(patientsData);
 
-      // Seleccionar el primero por defecto si no hay ninguno seleccionado
-      if (!selectedPatientId && patientsData.length > 0) {
-        const firstPatientId = patientsData[0].id;
-        setSelectedPatientIdState(firstPatientId);
-        localStorage.setItem('selectedPatientId', firstPatientId.toString());
-        window.dispatchEvent(new CustomEvent('patientSelected', { detail: firstPatientId }));
+      // Por defecto, mantener "Todos" (null) si no hay ninguno seleccionado
+      // No seleccionamos automáticamente el primer paciente
+      if (selectedPatientId === null) {
+        localStorage.setItem('selectedPatientId', 'all');
       }
     } catch (err) {
       const errorMsg =
@@ -254,9 +255,14 @@ export const useAsistencialHistory = () => {
   );
 
   // Cambiar paciente seleccionado
-  const selectPatient = useCallback((patientId: number) => {
+  // patientId puede ser null (Todos) o un número (paciente específico)
+  const selectPatient = useCallback((patientId: number | null) => {
     setSelectedPatientIdState(patientId);
-    localStorage.setItem('selectedPatientId', patientId.toString());
+    if (patientId === null) {
+      localStorage.setItem('selectedPatientId', 'all');
+    } else {
+      localStorage.setItem('selectedPatientId', patientId.toString());
+    }
     window.dispatchEvent(new CustomEvent('patientSelected', { detail: patientId }));
     // Resetear filtros al cambiar de paciente
     setFilterStatus('all');
@@ -275,7 +281,10 @@ export const useAsistencialHistory = () => {
 
     const handleStorageChange = () => {
       const stored = localStorage.getItem('selectedPatientId');
-      const storedId = stored ? Number(stored) : null;
+      let storedId: number | null = null;
+      if (stored && stored !== 'all' && stored !== 'null') {
+        storedId = Number(stored);
+      }
       if (storedId !== selectedPatientId) {
         setSelectedPatientIdState(storedId);
       }

@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAsistencialHistory } from '../../hooks/asistencial/useAsistencialHistory';
 
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 export default function HistorialView() {
+  const navigate = useNavigate();
   const {
     patients,
     selectedPatientId,
@@ -31,6 +33,13 @@ export default function HistorialView() {
   useEffect(() => {
     fetchMyPatients();
   }, [fetchMyPatients]);
+
+  // Redirigir al dashboard si "Todos" está seleccionado
+  useEffect(() => {
+    if (selectedPatientId === null) {
+      navigate('/asistencial/dashboard');
+    }
+  }, [selectedPatientId, navigate]);
 
   // Scroll infinito dentro del cuadro de historial (como en MiHistorial)
   useEffect(() => {
