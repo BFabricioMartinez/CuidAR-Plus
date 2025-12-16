@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Select from 'react-select';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
 import type { Assignment, User, Patient } from '../../api';
 import { toastSuccess, toastError, toastWarning } from '../../utils/toast';
@@ -37,8 +38,8 @@ export default function AsignacionesView() {
   const [showCreatePatientForm, setShowCreatePatientForm] = useState(false);
 
   // Form de asignación
-  const [selectedCaregiver, setSelectedCaregiver] = useState<string>('');
-  const [selectedPatient, setSelectedPatient] = useState<string>('');
+  const [selectedCaregiver, setSelectedCaregiver] = useState<{ value: string; label: string } | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<{ value: string; label: string } | null>(null);
 
   // Form de crear paciente
   const [patientFormData, setPatientFormData] = useState({
@@ -46,10 +47,6 @@ export default function AsignacionesView() {
     caregiver_id: '',
     notes: '',
   });
-
-  // Búsqueda en selects
-  const [caregiverSearch, setCaregiverSearch] = useState<string>('');
-  const [patientSearch, setPatientSearch] = useState<string>('');
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -204,11 +201,14 @@ export default function AsignacionesView() {
       return;
     }
 
+    const caregiverId = selectedCaregiver.value;
+    const patientId = selectedPatient.value;
+
     // Verificar si ya existe la asignación
     const exists = assignments.some(
       (a) =>
-        a.caregiver_id === Number(selectedCaregiver) &&
-        a.patient_id === Number(selectedPatient) &&
+        a.caregiver_id === Number(caregiverId) &&
+        a.patient_id === Number(patientId) &&
         a.active
     );
 
@@ -221,16 +221,14 @@ export default function AsignacionesView() {
 
     try {
       await assignmentsApi.create({
-        caregiver_id: Number(selectedCaregiver),
-        patient_id: Number(selectedPatient),
+        caregiver_id: Number(caregiverId),
+        patient_id: Number(patientId),
       });
 
       toastSuccess('Asignación creada correctamente');
 
-      setSelectedCaregiver('');
-      setSelectedPatient('');
-      setCaregiverSearch('');
-      setPatientSearch('');
+      setSelectedCaregiver(null);
+      setSelectedPatient(null);
       setShowForm(false);
 
       // Esperar un momento para que el backend procese la asignación
@@ -273,10 +271,8 @@ export default function AsignacionesView() {
   // Cancelar formulario
   const cancelForm = () => {
     setShowForm(false);
-    setSelectedCaregiver('');
-    setSelectedPatient('');
-    setCaregiverSearch('');
-    setPatientSearch('');
+    setSelectedCaregiver(null);
+    setSelectedPatient(null);
   };
 
   // Crear paciente
@@ -351,12 +347,6 @@ export default function AsignacionesView() {
     });
   };
 
-  // Filtrar cuidadores por búsqueda
-  const filteredCaregivers = caregivers.filter((caregiver) =>
-    caregiver.name?.toLowerCase().includes(caregiverSearch.toLowerCase()) ||
-    caregiver.email.toLowerCase().includes(caregiverSearch.toLowerCase())
-  );
-
   // Obtener IDs de pacientes/usuarios que ya tienen asignación activa
   const assignedIds = new Set(
     assignments
@@ -364,18 +354,19 @@ export default function AsignacionesView() {
       .map(a => a.patient_id)
   );
 
-  // Filtrar items asignables: excluir los que ya tienen asignación y aplicar búsqueda
-  const filteredAssignableItems = assignableItems.filter((item) => {
-    // Excluir si ya tiene asignación activa
-    if (assignedIds.has(item.id)) {
-      return false;
-    }
-    // Aplicar filtro de búsqueda
-    return (
-      item.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
-      (item.email && item.email.toLowerCase().includes(patientSearch.toLowerCase()))
-    );
-  });
+  // Preparar opciones para react-select (cuidadores)
+  const caregiverOptions = caregivers.map((caregiver) => ({
+    value: caregiver.id.toString(),
+    label: `${caregiver.name || 'Sin nombre'} (${caregiver.email})`,
+  }));
+
+  // Preparar opciones para react-select (pacientes/usuarios personal)
+  const assignableOptions = assignableItems
+    .filter((item) => !assignedIds.has(item.id)) // Excluir si ya tiene asignación activa
+    .map((item) => ({
+      value: item.id.toString(),
+      label: `${item.name}${item.type === 'personal' ? ' [PERSONAL]' : ' [Paciente]'}`,
+    }));
 
   // Filtrar asignaciones
   const filteredAssignments = assignments.filter((assignment) => {
@@ -559,31 +550,17 @@ export default function AsignacionesView() {
                     </svg>
                     Cuidador <span className="required">*</span>
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Buscar cuidador..."
-                    value={caregiverSearch}
-                    onChange={(e) => setCaregiverSearch(e.target.value)}
-                    className="field-input"
-                  />
-                  <select
+                  <Select
                     value={selectedCaregiver}
-                    onChange={(e) => setSelectedCaregiver(e.target.value)}
-                    className="field-input"
-                    style={{ marginTop: '0.5rem', minHeight: '120px' }}
-                    required
-                    size={5}
-                  >
-                    <option value="">Seleccionar cuidador...</option>
-                    {filteredCaregivers.map((caregiver) => (
-                      <option key={caregiver.id} value={caregiver.id}>
-                        {caregiver.name} ({caregiver.email})
-                      </option>
-                    ))}
-                  </select>
-                  {filteredCaregivers.length === 0 && caregiverSearch && (
-                    <small className="field-hint">No se encontraron cuidadores</small>
-                  )}
+                    onChange={(option) => setSelectedCaregiver(option)}
+                    options={caregiverOptions}
+                    placeholder="Seleccionar cuidador..."
+                    isSearchable
+                    isClearable
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => 'No se encontraron cuidadores'}
+                  />
                 </div>
 
                 <div className="form-field">
@@ -593,31 +570,17 @@ export default function AsignacionesView() {
                     </svg>
                     Paciente o Usuario Personal <span className="required">*</span>
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Buscar paciente o usuario personal..."
-                    value={patientSearch}
-                    onChange={(e) => setPatientSearch(e.target.value)}
-                    className="field-input"
-                  />
-                  <select
+                  <Select
                     value={selectedPatient}
-                    onChange={(e) => setSelectedPatient(e.target.value)}
-                    className="field-input"
-                    style={{ marginTop: '0.5rem', minHeight: '120px' }}
-                    required
-                    size={5}
-                  >
-                    <option value="">Seleccionar paciente o usuario personal...</option>
-                    {filteredAssignableItems.map((item) => (
-                      <option key={`${item.type}-${item.id}`} value={item.id}>
-                        {item.name} {item.type === 'personal' ? ' [PERSONAL]' : ' [Paciente]'}
-                      </option>
-                    ))}
-                  </select>
-                  {filteredAssignableItems.length === 0 && patientSearch && (
-                    <small className="field-hint">No se encontraron pacientes ni usuarios personal</small>
-                  )}
+                    onChange={(option) => setSelectedPatient(option)}
+                    options={assignableOptions}
+                    placeholder="Seleccionar paciente o usuario personal..."
+                    isSearchable
+                    isClearable
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => 'No se encontraron pacientes ni usuarios personal'}
+                  />
                 </div>
               </div>
 
@@ -1001,6 +964,117 @@ export default function AsignacionesView() {
 
         .field-textarea {
           resize: vertical;
+        }
+
+        /* React Select Styles */
+        .react-select-container {
+          margin-top: 0.5rem;
+        }
+
+        .react-select__control {
+          min-height: 48px;
+          border: 2px solid #e5e7eb !important;
+          border-radius: 12px !important;
+          background: #fff !important;
+          box-shadow: none !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .react-select__control:hover {
+          border-color: #d1d5db !important;
+        }
+
+        .react-select__control--is-focused {
+          border-color: #667eea !important;
+          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1) !important;
+          transform: translateY(-1px);
+        }
+
+        .react-select__value-container {
+          padding: 0.5rem 1rem !important;
+        }
+
+        .react-select__input-container {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .react-select__input {
+          font-size: 1rem !important;
+          color: #1f2937 !important;
+        }
+
+        .react-select__single-value {
+          color: #1f2937 !important;
+          font-size: 1rem !important;
+        }
+
+        .react-select__placeholder {
+          color: #9ca3af !important;
+          font-size: 1rem !important;
+        }
+
+        .react-select__indicator-separator {
+          display: none !important;
+        }
+
+        .react-select__dropdown-indicator {
+          color: #6b7280 !important;
+          padding: 0.5rem !important;
+        }
+
+        .react-select__dropdown-indicator:hover {
+          color: #667eea !important;
+        }
+
+        .react-select__clear-indicator {
+          color: #6b7280 !important;
+          padding: 0.5rem !important;
+        }
+
+        .react-select__clear-indicator:hover {
+          color: #ef4444 !important;
+        }
+
+        .react-select__menu {
+          border-radius: 12px !important;
+          border: 2px solid #e5e7eb !important;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+          margin-top: 0.5rem !important;
+          overflow: hidden !important;
+        }
+
+        .react-select__menu-list {
+          padding: 0.5rem !important;
+        }
+
+        .react-select__option {
+          padding: 0.75rem 1rem !important;
+          border-radius: 8px !important;
+          font-size: 1rem !important;
+          color: #1f2937 !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .react-select__option:hover {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
+          color: #667eea !important;
+        }
+
+        .react-select__option--is-selected {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+          color: #fff !important;
+        }
+
+        .react-select__option--is-focused {
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%) !important;
+          color: #667eea !important;
+        }
+
+        .react-select__option--is-focused.react-select__option--is-selected {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+          color: #fff !important;
         }
 
         .field-hint {
