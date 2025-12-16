@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, ApiError } from '../api';
-import { toastSuccess } from '../utils/toast';
+import { toastSuccess, toastError, toastWarning } from '../utils/toast';
 
 // ============================================
 // TIPOS
@@ -28,8 +28,12 @@ const Login: React.FC = () => {
     name: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: boolean;
+    password?: boolean;
+    confirmPassword?: boolean;
+  }>({});
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -37,22 +41,30 @@ const Login: React.FC = () => {
       ...prev,
       [name]: value
     }));
-    setError('');
+    // Limpiar error del campo cuando el usuario empieza a escribir
+    if (fieldErrors[name as keyof typeof fieldErrors]) {
+      setFieldErrors(prev => ({
+        ...prev,
+        [name]: false
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setFieldErrors({});
 
     if (!isLogin) {
       if (formData.password !== formData.confirmPassword) {
-        setError('Las contraseñas no coinciden');
+        toastError('Las contraseñas no coinciden');
+        setFieldErrors({ password: true, confirmPassword: true });
         setLoading(false);
         return;
       }
       if (formData.password.length < 6) {
-        setError('La contraseña debe tener al menos 6 caracteres');
+        toastError('La contraseña debe tener al menos 6 caracteres');
+        setFieldErrors({ password: true, confirmPassword: true });
         setLoading(false);
         return;
       }
@@ -87,17 +99,46 @@ const Login: React.FC = () => {
 
         setIsLogin(true);
         setFormData({ email: '', password: '', confirmPassword: '', role: 'PERSONAL', name: '' });
-        setError('');
         toastSuccess('Cuenta creada exitosamente. Ahora puedes iniciar sesión.');
       }
     } catch (err) {
+      let errorMessage = 'Error de conexión. Por favor, intentá nuevamente.';
+      const errors: { email?: boolean; password?: boolean } = {};
+
       if (err instanceof ApiError) {
-        setError(err.message);
+        errorMessage = err.message;
       } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Error de conexión');
+        errorMessage = err.message;
       }
+
+      // Detectar qué campo tiene el error basándose en el mensaje
+      const messageLower = errorMessage.toLowerCase();
+      
+      // Errores específicos de email
+      if (messageLower.includes('correo') || messageLower.includes('email') || 
+          messageLower.includes('usuario no encontrado') || messageLower.includes('usuario no existe') ||
+          messageLower.includes('email no existe') || messageLower.includes('correo no existe')) {
+        errors.email = true;
+      }
+      // Errores específicos de contraseña
+      else if (messageLower.includes('contraseña') || messageLower.includes('password') ||
+               messageLower.includes('contraseña incorrecta') || messageLower.includes('password incorrect') ||
+               messageLower.includes('credenciales inválidas') || messageLower.includes('invalid credentials')) {
+        errors.password = true;
+      }
+      // Si el mensaje menciona "credenciales" sin especificar, marcar ambos
+      else if (messageLower.includes('credenciales') || messageLower.includes('credentials')) {
+        errors.email = true;
+        errors.password = true;
+      }
+      // Si no podemos determinar, marcar ambos campos
+      else {
+        errors.email = true;
+        errors.password = true;
+      }
+
+      setFieldErrors(errors);
+      toastError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -105,8 +146,8 @@ const Login: React.FC = () => {
 
   const switchMode = () => {
     setIsLogin(!isLogin);
-    setError('');
     setFormData({ email: '', password: '', confirmPassword: '', role: 'PERSONAL', name: '' });
+    setFieldErrors({});
   };
 
   return (
@@ -154,16 +195,6 @@ const Login: React.FC = () => {
           <p className="brand-subtitle">Tu salud, siempre contigo</p>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="error-alert slide-down">
-            <svg className="error-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span>{error}</span>
-          </div>
-        )}
-
         {/* Form */}
         <form onSubmit={handleSubmit} className="auth-form">
           {!isLogin && (
@@ -198,7 +229,7 @@ const Login: React.FC = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="form-input"
+                className={`form-input ${fieldErrors.email ? 'input-error' : ''}`}
                 placeholder="correo@ejemplo.com"
                 required
               />
@@ -216,7 +247,7 @@ const Login: React.FC = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleInputChange}
-                className="form-input"
+                className={`form-input ${fieldErrors.password ? 'input-error' : ''}`}
                 placeholder="••••••••"
                 required
               />
@@ -253,7 +284,7 @@ const Login: React.FC = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className="form-input"
+                    className={`form-input ${fieldErrors.confirmPassword ? 'input-error' : ''}`}
                     placeholder="••••••••"
                     required
                   />
@@ -526,41 +557,6 @@ const Login: React.FC = () => {
           font-weight: 500;
         }
 
-        .error-alert {
-          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-          color: #dc2626;
-          padding: 0.875rem 1rem;
-          border-radius: 12px;
-          font-size: 0.875rem;
-          margin-bottom: 1.25rem;
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          border: 1px solid #fca5a5;
-          font-weight: 500;
-        }
-
-        .slide-down {
-          animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .error-icon {
-          width: 20px;
-          height: 20px;
-          flex-shrink: 0;
-        }
-
         .auth-form {
           display: flex;
           flex-direction: column;
@@ -631,6 +627,20 @@ const Login: React.FC = () => {
           background: #fff;
           box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
           transform: translateY(-1px);
+        }
+
+        .form-input.input-error {
+          border-color: #ef4444 !important;
+          background: #fef2f2 !important;
+        }
+
+        .form-input.input-error:focus {
+          border-color: #ef4444 !important;
+          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .form-input.input-error + .eye-button {
+          color: #ef4444;
         }
 
         .select-arrow {
@@ -769,10 +779,12 @@ const Login: React.FC = () => {
           left: 50%;
           transform: translate(-50%, -50%);
           background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(20px);
           padding: 0 1rem;
           color: #9ca3af;
           font-size: 0.875rem;
           font-weight: 600;
+          border-radius: 20px;
         }
 
         .switch-text {
