@@ -1,6 +1,6 @@
 // Cliente HTTP centralizado con manejo de autenticación y errores
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export class ApiError extends Error {
   constructor(
