@@ -14,7 +14,7 @@ class Assignment(Base):
     caregiver_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     patient_id = Column(Integer, ForeignKey('patients.id'), nullable=False)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     caregiver = relationship('User', foreign_keys=[caregiver_id])
     patient = relationship('Patient', foreign_keys=[patient_id])
