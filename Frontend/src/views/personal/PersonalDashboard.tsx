@@ -153,7 +153,6 @@ export default function PersonalDashboard() {
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
           </div>
-          <p className="loading-text">Cargando tu información de salud...</p>
         </div>
       </div>
     );

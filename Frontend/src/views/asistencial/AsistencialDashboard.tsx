@@ -166,7 +166,6 @@ export default function AsistencialDashboard() {
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
         </div>
-          <p className="loading-text">Cargando información de pacientes...</p>
       </div>
       </div>
     );

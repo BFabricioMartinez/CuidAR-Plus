@@ -214,7 +214,6 @@ export default function AdminDashboard() {
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
           </div>
-          <p className="loading-text">Cargando dashboard...</p>
         </div>
       </div>
     );
