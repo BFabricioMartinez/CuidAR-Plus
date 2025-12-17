@@ -158,15 +158,16 @@ export default function AsistencialDashboard() {
   };
 
   if (loading && !stats) {
-    return (
-      <div className="dashboard-container loading-container">
+  return (
+      <div className="dashboard-container">
         <div className="loading-screen">
           <div className="loading-spinner">
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
-          </div>
         </div>
+          <p className="loading-text">Cargando información de pacientes...</p>
+      </div>
       </div>
     );
   }
@@ -750,40 +751,19 @@ export default function AsistencialDashboard() {
           padding-bottom: 4rem;
         }
 
-        .dashboard-container.loading-container {
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          right: 0 !important;
-          bottom: 0 !important;
-          min-height: 100vh !important;
-          padding: 0 !important;
-          padding-bottom: 0 !important;
-          margin: 0 !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%) !important;
-          z-index: 999 !important;
-        }
-
         .loading-screen {
-          display: flex !important;
-          flex-direction: column !important;
-          align-items: center !important;
-          justify-content: center !important;
-          gap: 2rem !important;
-          width: 100% !important;
-          height: 100% !important;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          gap: 2rem;
         }
 
         .loading-spinner {
           position: relative;
           width: 80px;
           height: 80px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
         }
 
         .spinner-ring {
@@ -793,33 +773,19 @@ export default function AsistencialDashboard() {
           border: 4px solid transparent;
           border-top-color: #667eea;
           border-radius: 50%;
-          animation: spin 1.2s linear infinite;
+          animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
         }
 
         .spinner-ring:nth-child(1) {
-          width: 100%;
-          height: 100%;
-          border-top-color: #667eea;
-          animation-duration: 1.2s;
+          animation-delay: -0.45s;
         }
 
         .spinner-ring:nth-child(2) {
-          width: 75%;
-          height: 75%;
-          top: 12.5%;
-          left: 12.5%;
-          border-top-color: #764ba2;
-          animation-duration: 1s;
-          animation-direction: reverse;
+          animation-delay: -0.3s;
         }
 
         .spinner-ring:nth-child(3) {
-          width: 50%;
-          height: 50%;
-          top: 25%;
-          left: 25%;
-          border-top-color: #667eea;
-          animation-duration: 0.8s;
+          animation-delay: -0.15s;
         }
 
         @keyframes spin {
@@ -831,8 +797,6 @@ export default function AsistencialDashboard() {
           font-size: 1.125rem;
           color: #6b7280;
           font-weight: 500;
-          text-align: center;
-          margin: 0;
         }
 
         .dashboard-header {
