@@ -29,6 +29,7 @@ const Login: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     email?: boolean;
     password?: boolean;
@@ -145,9 +146,15 @@ const Login: React.FC = () => {
   };
 
   const switchMode = () => {
-    setIsLogin(!isLogin);
-    setFormData({ email: '', password: '', confirmPassword: '', role: 'PERSONAL', name: '' });
-    setFieldErrors({});
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setIsLogin(!isLogin);
+      setFormData({ email: '', password: '', confirmPassword: '', role: 'PERSONAL', name: '' });
+      setFieldErrors({});
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 50);
+    }, 200);
   };
 
   return (
@@ -196,102 +203,28 @@ const Login: React.FC = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className={`auth-form ${isTransitioning ? 'transitioning' : ''}`}>
           {!isLogin && (
-            <div className="form-group fade-in">
-              <label className="form-label">Nombre completo</label>
-              <div className="input-wrapper">
-                <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                </svg>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="Tu nombre"
-                  required
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">Correo electrónico</label>
-            <div className="input-wrapper">
-              <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-              </svg>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className={`form-input ${fieldErrors.email ? 'input-error' : ''}`}
-                placeholder="correo@ejemplo.com"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Contraseña</label>
-            <div className="input-wrapper">
-              <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              </svg>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className={`form-input ${fieldErrors.password ? 'input-error' : ''}`}
-                placeholder="••••••••"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="eye-button"
-              >
-                {showPassword ? (
-                  <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
-                  </svg>
-                ) : (
-                  <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {!isLogin && (
-            <>
-              <div className="form-group fade-in">
-                <label className="form-label">Confirmar contraseña</label>
+            <div className={`form-row fade-in ${isTransitioning ? 'fade-out' : ''}`}>
+              <div className="form-group form-group-half">
+                <label className="form-label">Nombre completo</label>
                 <div className="input-wrapper">
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                   </svg>
                   <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
+                    type="text"
+                    name="name"
+                    value={formData.name}
                     onChange={handleInputChange}
-                    className={`form-input ${fieldErrors.confirmPassword ? 'input-error' : ''}`}
-                    placeholder="••••••••"
+                    className="form-input"
+                    placeholder="Tu nombre"
                     required
                   />
                 </div>
               </div>
 
-              <div className="form-group fade-in">
+              <div className="form-group form-group-half fade-in">
                 <label className="form-label">Tipo de usuario</label>
                 <div className="input-wrapper">
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -313,7 +246,118 @@ const Login: React.FC = () => {
                   </svg>
                 </div>
               </div>
-            </>
+            </div>
+          )}
+
+          <div className={`form-group ${isLogin && !isTransitioning ? 'fade-in' : ''} ${isTransitioning && isLogin ? 'fade-out' : ''}`}>
+            <label className="form-label">Correo electrónico</label>
+            <div className="input-wrapper">
+              <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+              </svg>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                className={`form-input ${fieldErrors.email ? 'input-error' : ''}`}
+                placeholder="correo@ejemplo.com"
+                required
+              />
+            </div>
+          </div>
+
+          {!isLogin ? (
+            <div className={`form-row fade-in ${isTransitioning ? 'fade-out' : ''}`}>
+              <div className="form-group form-group-half">
+                <label className="form-label">Contraseña</label>
+                <div className="input-wrapper">
+                  <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={`form-input ${fieldErrors.password ? 'input-error' : ''}`}
+                    placeholder="••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="eye-button"
+                  >
+                    {showPassword ? (
+                      <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                        <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                      </svg>
+                    ) : (
+                      <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group form-group-half fade-in">
+                <label className="form-label">Confirmar contraseña</label>
+                <div className="input-wrapper">
+                  <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    className={`form-input ${fieldErrors.confirmPassword ? 'input-error' : ''}`}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className={`form-group ${isLogin && !isTransitioning ? 'fade-in' : ''} ${isTransitioning && isLogin ? 'fade-out' : ''}`}>
+              <label className="form-label">Contraseña</label>
+              <div className="input-wrapper">
+                <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className={`form-input ${fieldErrors.password ? 'input-error' : ''}`}
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="eye-button"
+                >
+                  {showPassword ? (
+                    <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                      <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                    </svg>
+                  ) : (
+                    <svg className="eye-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                      <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
           )}
 
           <button
@@ -433,9 +477,9 @@ const Login: React.FC = () => {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(20px);
           border-radius: 32px;
-          padding: 3rem 2.5rem 2.5rem 2.5rem;
+          padding: 2.5rem 2.5rem 2rem 2.5rem;
           width: 100%;
-          max-width: 480px;
+          max-width: 520px;
           box-shadow: 0 40px 80px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.1);
           position: relative;
           z-index: 10;
@@ -492,7 +536,7 @@ const Login: React.FC = () => {
 
         .logo-section {
           text-align: center;
-          margin-bottom: 2rem;
+          margin-bottom: 1.5rem;
         }
 
         .logo-wrapper {
@@ -560,7 +604,7 @@ const Login: React.FC = () => {
         .auth-form {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: 0.875rem;
         }
 
         .form-group {
@@ -569,17 +613,52 @@ const Login: React.FC = () => {
           gap: 0.5rem;
         }
 
+        .form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+
+        .form-group-half {
+          width: 100%;
+        }
+
         .fade-in {
-          animation: fadeIn 0.3s ease-out;
+          animation: fadeIn 0.4s ease-out;
+        }
+
+        .fade-out {
+          animation: fadeOut 0.2s ease-in;
         }
 
         @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from { 
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes fadeOut {
+          from { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+          to { 
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+        }
+
+        .auth-form.transitioning {
+          pointer-events: none;
         }
 
         .form-label {
-          font-size: 0.875rem;
+          font-size: 0.8125rem;
           font-weight: 600;
           color: #374151;
           margin-left: 0.25rem;
@@ -593,9 +672,9 @@ const Login: React.FC = () => {
 
         .input-icon {
           position: absolute;
-          left: 1rem;
-          width: 20px;
-          height: 20px;
+          left: 0.875rem;
+          width: 18px;
+          height: 18px;
           color: #9ca3af;
           pointer-events: none;
           z-index: 1;
@@ -604,8 +683,8 @@ const Login: React.FC = () => {
         .form-input,
         .form-select {
           width: 100%;
-          padding: 1rem 3rem 1rem 3rem;
-          font-size: 1rem;
+          padding: 0.875rem 2.75rem 0.875rem 2.75rem;
+          font-size: 0.9375rem;
           border: 2px solid #e5e7eb;
           border-radius: 14px;
           outline: none;
@@ -618,7 +697,7 @@ const Login: React.FC = () => {
         .form-select {
           appearance: none;
           cursor: pointer;
-          padding-right: 3rem;
+          padding-right: 2.75rem;
         }
 
         .form-input:focus,
@@ -645,16 +724,16 @@ const Login: React.FC = () => {
 
         .select-arrow {
           position: absolute;
-          right: 1rem;
-          width: 20px;
-          height: 20px;
+          right: 0.875rem;
+          width: 18px;
+          height: 18px;
           color: #9ca3af;
           pointer-events: none;
         }
 
         .eye-button {
           position: absolute;
-          right: 1rem;
+          right: 0.875rem;
           background: none;
           border: none;
           cursor: pointer;
@@ -680,14 +759,14 @@ const Login: React.FC = () => {
         .submit-button {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           color: #fff;
-          padding: 1.125rem 2rem;
-          font-size: 1.0625rem;
+          padding: 1rem 2rem;
+          font-size: 1rem;
           font-weight: 700;
           border: none;
           border-radius: 14px;
           cursor: pointer;
           transition: all 0.3s ease;
-          margin-top: 0.5rem;
+          margin-top: 0.25rem;
           box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.5);
           position: relative;
           overflow: hidden;
@@ -887,6 +966,37 @@ const Login: React.FC = () => {
           .back-arrow {
             width: 20px;
             height: 20px;
+          }
+
+          .form-row {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+          }
+
+          .form-group-half .form-label {
+            font-size: 0.8125rem;
+          }
+
+          .form-group-half .form-input,
+          .form-group-half .form-select {
+            padding: 0.875rem 2.5rem 0.875rem 2.75rem;
+            font-size: 0.9375rem;
+          }
+
+          .form-group-half .input-icon {
+            width: 18px;
+            height: 18px;
+            left: 0.875rem;
+          }
+
+          .form-group-half .select-arrow {
+            right: 0.875rem;
+            width: 18px;
+            height: 18px;
+          }
+
+          .form-group-half .eye-button {
+            right: 0.875rem;
           }
         }
       `}</style>
