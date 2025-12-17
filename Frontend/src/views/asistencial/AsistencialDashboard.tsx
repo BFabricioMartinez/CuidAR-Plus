@@ -1759,16 +1759,22 @@ export default function AsistencialDashboard() {
           background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(10px);
           border-radius: 24px;
-          padding: 2rem;
+          padding: 0;
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
           border: 1px solid rgba(255, 255, 255, 0.8);
           animation: fadeInUp 0.6s ease-out;
           animation-delay: 0.1s;
           animation-fill-mode: both;
+          display: flex;
+          flex-direction: column;
+          max-height: 600px;
+          overflow: hidden;
         }
 
         .chart-card-header {
-          margin-bottom: 1.5rem;
+          padding: 2rem 2rem 1.5rem;
+          flex-shrink: 0;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .chart-card-title {
@@ -1791,6 +1797,28 @@ export default function AsistencialDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1.25rem;
+          padding: 2rem;
+          overflow-y: auto;
+          flex: 1;
+        }
+
+        /* Scroll personalizado para adherence-bars-container */
+        .adherence-bars-container::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .adherence-bars-container::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+        }
+
+        .adherence-bars-container::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .adherence-bars-container::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
         }
 
         .adherence-bar-item {

@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import Select from 'react-select';
 import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
-import type { JSX } from 'react/jsx-dev-runtime';
 
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
 
@@ -42,6 +42,38 @@ export default function Navbar() {
       fetchMyPatients();
     }
   }, [isAsistencial, fetchMyPatients]);
+
+  // Preparar opciones para react-select (pacientes)
+  const patientOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos' },
+      ...patients.map((patient) => ({
+        value: patient.id.toString(),
+        label: patient.name,
+      })),
+    ];
+  }, [patients]);
+
+  // Valor seleccionado para react-select
+  const selectedPatientOption = useMemo(() => {
+    const value = selectedPatientId ? selectedPatientId.toString() : 'all';
+    return patientOptions.find(opt => opt.value === value) || patientOptions[0];
+  }, [selectedPatientId, patientOptions]);
+
+  // Handler para cambio de paciente
+  const handlePatientChange = (option: { value: string; label: string } | null) => {
+    if (!option) return;
+    const value = option.value;
+    if (value === 'all') {
+      // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
+      if (location.pathname !== '/asistencial/dashboard') {
+        navigate('/asistencial/dashboard');
+      }
+      selectPatient(null);
+    } else {
+      selectPatient(Number(value));
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -112,6 +144,16 @@ export default function Navbar() {
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Determinar si un item de navegación debe estar deshabilitado
+  const isDisabled = (item: NavItem) => {
+    // Solo deshabilitar para usuarios asistenciales cuando no hay paciente seleccionado
+    if (user?.role === 'ASISTENCIAL' && selectedPatientId === null) {
+      // Deshabilitar "Tratamientos" e "Historial" cuando está en "Todos"
+      return item.path === '/asistencial/tratamientos' || item.path === '/asistencial/historial';
+    }
+    return false;
+  };
+
   if (!user) return null;
 
   return (
@@ -145,45 +187,82 @@ export default function Navbar() {
               </svg>
               <span className="patients-count-text">{patients.length}</span>
               <div className="patient-selector-divider"></div>
-              <select
-                value={selectedPatientId || 'all'}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'all') {
-                    // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
-                    if (location.pathname !== '/asistencial/dashboard') {
-                      navigate('/asistencial/dashboard');
-                    }
-                    selectPatient(null);
-                  } else {
-                    selectPatient(Number(value));
-                  }
+              <Select
+                value={selectedPatientOption}
+                onChange={handlePatientChange}
+                options={patientOptions}
+                isSearchable
+                isClearable={false}
+                className="react-select-navbar-container"
+                classNamePrefix="react-select-navbar"
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    background: 'transparent',
+                    border: 'none',
+                    boxShadow: 'none',
+                    minHeight: 'auto',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      border: 'none',
+                    },
+                  }),
+                  valueContainer: (base) => ({
+                    ...base,
+                    padding: '0.25rem 0.5rem',
+                  }),
+                  singleValue: (base) => ({
+                    ...base,
+                    color: '#1f2937',
+                    fontSize: '0.9375rem',
+                    fontWeight: 600,
+                    margin: 0,
+                  }),
+                  input: (base) => ({
+                    ...base,
+                    margin: 0,
+                    padding: 0,
+                  }),
+                  indicatorSeparator: () => ({
+                    display: 'none',
+                  }),
+                  dropdownIndicator: (base) => ({
+                    ...base,
+                    color: '#667eea',
+                    padding: '0 0.25rem',
+                    '&:hover': {
+                      color: '#764ba2',
+                    },
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    zIndex: 9999,
+                    minWidth: '200px',
+                  }),
                 }}
-                className="patient-selector-dropdown"
-                title="Seleccionar paciente"
-              >
-                <option value="all">Todos</option>
-                {patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
           {/* Desktop Navigation */}
           <div className="nav-links-desktop">
-            {visibleItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
-              >
-                <span className="nav-link-icon">{item.icon}</span>
-                <span className="nav-link-label">{item.label}</span>
-              </button>
-            ))}
+            {visibleItems.map((item) => {
+              const disabled = isDisabled(item);
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => !disabled && navigate(item.path)}
+                  disabled={disabled}
+                  className={`nav-link ${isActive(item.path) ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+                  title={disabled ? 'Selecciona un paciente para acceder' : ''}
+                >
+                  <span className="nav-link-icon">{item.icon}</span>
+                  <span className="nav-link-label">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* User Menu */}
@@ -235,46 +314,70 @@ export default function Navbar() {
                   </svg>
                   <span>Paciente ({patients.length}):</span>
                 </label>
-                <select
-                  value={selectedPatientId || 'all'}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === 'all') {
-                      // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
-                      if (location.pathname !== '/asistencial/dashboard') {
-                        navigate('/asistencial/dashboard');
-                        setMenuOpen(false);
-                      }
-                      selectPatient(null);
-                    } else {
-                      selectPatient(Number(value));
+                <Select
+                  value={selectedPatientOption}
+                  onChange={(option) => {
+                    handlePatientChange(option);
+                    if (option?.value === 'all' && location.pathname !== '/asistencial/dashboard') {
+                      setMenuOpen(false);
                     }
                   }}
-                  className="patient-selector-dropdown-mobile"
-                >
-                  <option value="all">Todos</option>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.name}
-                    </option>
-                  ))}
-                </select>
+                  options={patientOptions}
+                  isSearchable
+                  isClearable={false}
+                  className="react-select-navbar-mobile-container"
+                  classNamePrefix="react-select-navbar-mobile"
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{
+                    control: (base, state) => ({
+                      ...base,
+                      background: '#fff',
+                      border: state.isFocused 
+                        ? '2px solid #667eea' 
+                        : '2px solid rgba(102, 126, 234, 0.2)',
+                      borderRadius: '8px',
+                      minHeight: '44px',
+                      boxShadow: state.isFocused 
+                        ? '0 0 0 3px rgba(102, 126, 234, 0.1)' 
+                        : 'none',
+                      '&:hover': {
+                        borderColor: '#667eea',
+                      },
+                    }),
+                    menu: (base) => ({
+                      ...base,
+                      zIndex: 9999,
+                    }),
+                    menuPortal: (base) => ({
+                      ...base,
+                      zIndex: 9999,
+                    }),
+                  }}
+                />
               </div>
             )}
             <div className="mobile-menu-links">
-              {visibleItems.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => {
-                    navigate(item.path);
-                    setMenuOpen(false);
-                  }}
-                  className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''}`}
-                >
-                  <span className="mobile-nav-icon">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
+              {visibleItems.map((item) => {
+                const disabled = isDisabled(item);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => {
+                      if (!disabled) {
+                        navigate(item.path);
+                        setMenuOpen(false);
+                      }
+                    }}
+                    disabled={disabled}
+                    className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+                    title={disabled ? 'Selecciona un paciente para acceder' : ''}
+                  >
+                    <span className="mobile-nav-icon">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
             <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="mobile-logout-btn">
               <svg className="logout-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -412,6 +515,21 @@ export default function Navbar() {
           width: 100%;
         }
 
+        .nav-link.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+        .nav-link.disabled:hover {
+          background: transparent;
+          color: #6b7280;
+        }
+
+        .nav-link.disabled:hover::before {
+          width: 0;
+        }
+
         .nav-link-icon {
           width: 20px;
           height: 20px;
@@ -463,26 +581,60 @@ export default function Navbar() {
           flex-shrink: 0;
         }
 
-        .patient-selector-dropdown {
-          background: transparent;
-          border: none;
-          color: #1f2937;
-          font-size: 0.9375rem;
-          font-weight: 600;
-          cursor: pointer;
-          outline: none;
-          font-family: inherit;
-          padding: 0.25rem 0.5rem;
+        /* React Select Styles para Navbar Desktop */
+        .react-select-navbar-container {
           min-width: 150px;
           max-width: 200px;
         }
 
-        .patient-selector-dropdown:hover {
-          color: #667eea;
+        .react-select-navbar__control {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          min-height: auto !important;
+          cursor: pointer !important;
         }
 
-        .patient-selector-dropdown:focus {
-          color: #667eea;
+        .react-select-navbar__control:hover {
+          border: none !important;
+        }
+
+        .react-select-navbar__value-container {
+          padding: 0.25rem 0.5rem !important;
+        }
+
+        .react-select-navbar__single-value {
+          color: #1f2937 !important;
+          font-size: 0.9375rem !important;
+          font-weight: 600 !important;
+          margin: 0 !important;
+        }
+
+        .react-select-navbar__input-container {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .react-select-navbar__indicator-separator {
+          display: none !important;
+        }
+
+        .react-select-navbar__dropdown-indicator {
+          color: #667eea !important;
+          padding: 0 0.25rem !important;
+        }
+
+        .react-select-navbar__dropdown-indicator:hover {
+          color: #764ba2 !important;
+        }
+
+        .react-select-navbar__menu {
+          z-index: 9999 !important;
+          min-width: 200px !important;
+        }
+
+        .react-select-navbar__menu-portal {
+          z-index: 9999 !important;
         }
 
         .patient-selector-mobile {
@@ -503,28 +655,45 @@ export default function Navbar() {
           margin-bottom: 0.5rem;
         }
 
-        .patient-selector-dropdown-mobile {
+        /* React Select Styles para Navbar Mobile */
+        .react-select-navbar-mobile-container {
           width: 100%;
-          padding: 0.75rem;
-          background: #fff;
-          border: 2px solid rgba(102, 126, 234, 0.2);
-          border-radius: 8px;
-          color: #1f2937;
-          font-size: 0.9375rem;
-          font-weight: 600;
-          cursor: pointer;
-          outline: none;
-          font-family: inherit;
-          transition: all 0.3s ease;
         }
 
-        .patient-selector-dropdown-mobile:hover {
-          border-color: #667eea;
+        .react-select-navbar-mobile__control {
+          background: #fff !important;
+          border: 2px solid rgba(102, 126, 234, 0.2) !important;
+          borderRadius: 8px !important;
+          minHeight: 44px !important;
+          boxShadow: none !important;
+          transition: all 0.3s ease !important;
         }
 
-        .patient-selector-dropdown-mobile:focus {
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        .react-select-navbar-mobile__control:hover {
+          borderColor: #667eea !important;
+        }
+
+        .react-select-navbar-mobile__control--is-focused {
+          borderColor: #667eea !important;
+          boxShadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        }
+
+        .react-select-navbar-mobile__value-container {
+          padding: 0.75rem !important;
+        }
+
+        .react-select-navbar-mobile__single-value {
+          color: #1f2937 !important;
+          font-size: 0.9375rem !important;
+          font-weight: 600 !important;
+        }
+
+        .react-select-navbar-mobile__menu {
+          z-index: 9999 !important;
+        }
+
+        .react-select-navbar-mobile__menu-portal {
+          z-index: 9999 !important;
         }
 
         .user-section {
@@ -663,6 +832,17 @@ export default function Navbar() {
         .mobile-nav-link.active {
           background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(118, 75, 162, 0.12) 100%);
           color: #667eea;
+        }
+
+        .mobile-nav-link.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+        .mobile-nav-link.disabled:hover {
+          background: transparent;
+          color: #6b7280;
         }
 
         .mobile-nav-icon {
