@@ -1,0 +1,15 @@
+// Punto de entrada centralizado para todas las APIs
+
+export { apiClient, ApiError } from './client';
+export { authApi } from './auth';
+export { patientsApi } from './patients';
+export { treatmentsApi } from './treatments';
+export { intakesApi } from './intakes';
+export { statisticsApi } from './statistics';
+export { assignmentsApi } from './assignments';
+export { usersApi } from './users';
+
+// Re-exportar tipos
+export type * from '../types/api';
+export type { Assignment, AssignmentWithDetails } from './assignments';
+export type { UserFilters, CreateUserRequest, UpdateUserRequest } from './users';

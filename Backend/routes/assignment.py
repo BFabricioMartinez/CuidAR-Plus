@@ -1,0 +1,428 @@
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from models import Assignment, User, Patient, InputAssignment, InputAssignmentUpdate, InputPaginatedRequestFilter
+from config.db import AsyncSessionLocal
+from auth.roles import require_roles
+from utils.update import is_valid_change
+import traceback
+
+assignment = APIRouter()
+
+
+@assignment.post("/assignment/paginated")
+async def get_assignments_paginated(req: Request, body: InputPaginatedRequestFilter):
+    """
+    Obtiene una lista paginada de asignaciones con filtros dinámicos.
+
+    Filtros disponibles en body.filters:
+    - caregiver_id: Filtro por ID del cuidador
+    - patient_id: Filtro por ID del paciente
+    - active: Filtro por estado activo
+    - order: "desc" para descendente, "asc" para ascendente
+
+    Control de acceso por rol:
+    - ADMIN: acceso total a todas las asignaciones
+    - ASISTENCIAL: solo asignaciones donde Assignment.caregiver_id == user_id
+    - PERSONAL: acceso denegado
+    """
+    try:
+        # Verificar token y rol (ADMIN, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
+
+        limit = body.limit or 20
+        last_seen_id = body.last_seen_id
+        filters = body.filters or {}
+        order_raw = (filters.get("order") or "").lower()
+
+        order_desc = order_raw in ("desc", "newest", "mas_nuevos")
+
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Assignment)
+                .options(joinedload(Assignment.caregiver))
+                .options(joinedload(Assignment.patient))
+            )
+
+            # ============================================================================
+            # FILTRO POR ROL - Control de acceso basado en ownership
+            # ============================================================================
+            if user_role == "ASISTENCIAL":
+                # ASISTENCIAL: solo asignaciones propias
+                stmt = stmt.where(Assignment.caregiver_id == user_id)
+            # ADMIN: sin filtros adicionales (acceso total)
+
+            if hasattr(Assignment, "active"):
+                active_filter = filters.get("active")
+                if active_filter is not None:
+                    stmt = stmt.where(Assignment.active.is_(active_filter))
+                else:
+                    stmt = stmt.where(Assignment.active.is_(True))
+
+            caregiver_id_filter = filters.get("caregiver_id")
+            if caregiver_id_filter:
+                stmt = stmt.where(Assignment.caregiver_id == caregiver_id_filter)
+
+            patient_id_filter = filters.get("patient_id")
+            if patient_id_filter:
+                stmt = stmt.where(Assignment.patient_id == patient_id_filter)
+
+            if order_desc:
+                stmt = stmt.order_by(Assignment.id.desc())
+            else:
+                stmt = stmt.order_by(Assignment.id.asc())
+
+            if last_seen_id is not None:
+                if order_desc:
+                    stmt = stmt.where(Assignment.id < last_seen_id)
+                else:
+                    stmt = stmt.where(Assignment.id > last_seen_id)
+
+            stmt = stmt.limit(limit)
+
+            result = await session.execute(stmt)
+            assignments = result.scalars().all()
+
+            data = []
+            for a in assignments:
+                caregiver = a.caregiver
+                patient = a.patient
+                data.append({
+                    "id": a.id,
+                    "caregiver_id": a.caregiver_id,
+                    "patient_id": a.patient_id,
+                    "active": a.active,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "caregiver": {
+                        "id": caregiver.id if caregiver else None,
+                        "name": caregiver.name if caregiver else None,
+                        "email": caregiver.email if caregiver else None
+                    } if caregiver else None,
+                    "patient": {
+                        "id": patient.id if patient else None,
+                        "name": patient.name if patient else None
+                    } if patient else None
+                })
+
+            next_cursor = assignments[-1].id if len(assignments) == limit else None
+
+            return JSONResponse(
+                status_code=200,
+                content={"assignments": data, "next_cursor": next_cursor}
+            )
+
+    except Exception as error:
+        print("Error al obtener asignaciones paginadas ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener asignaciones"}
+        )
+
+
+@assignment.get("/assignment/{assignment_id}")
+async def get_assignment_by_id(req: Request, assignment_id: int):
+    """
+    Obtiene una asignación por su ID.
+
+    Control de acceso por rol:
+    - ADMIN: acceso total
+    - ASISTENCIAL: solo si Assignment.caregiver_id == user_id
+    - PERSONAL: acceso denegado
+    """
+    try:
+        # Verificar token y rol (ADMIN, ASISTENCIAL)
+        payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
+
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(Assignment)
+                .options(joinedload(Assignment.caregiver))
+                .options(joinedload(Assignment.patient))
+                .where(Assignment.id == assignment_id)
+            )
+
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {assignment_id} no encontrada"}
+                )
+
+            # ============================================================================
+            # VALIDACIÓN DE ACCESO POR ROL
+            # ============================================================================
+            if user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar ownership
+                if assignment_found.caregiver_id != user_id:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"message": "Acceso denegado"}
+                    )
+            # ADMIN: sin validaciones adicionales
+
+            caregiver = assignment_found.caregiver
+            patient = assignment_found.patient
+
+            assignment_data = {
+                "id": assignment_found.id,
+                "caregiver_id": assignment_found.caregiver_id,
+                "patient_id": assignment_found.patient_id,
+                "active": assignment_found.active,
+                "created_at": assignment_found.created_at.isoformat() if assignment_found.created_at else None,
+                "caregiver": {
+                    "id": caregiver.id if caregiver else None,
+                    "name": caregiver.name if caregiver else None,
+                    "email": caregiver.email if caregiver else None,
+                    "role": caregiver.role if caregiver else None
+                } if caregiver else None,
+                "patient": {
+                    "id": patient.id if patient else None,
+                    "name": patient.name if patient else None,
+                    "caregiver_id": patient.caregiver_id if patient else None
+                } if patient else None
+            }
+
+            return JSONResponse(status_code=200, content=assignment_data)
+
+    except Exception as error:
+        print("Error al obtener asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al obtener asignación"}
+        )
+
+
+@assignment.post("/assignment/create")
+async def create_assignment(req: Request, data: InputAssignment):
+    """Crea una nueva asignación de cuidador a paciente."""
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            # Verificar que el cuidador existe y tiene rol ASISTENCIAL
+            stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+            result_caregiver = await session.execute(stmt_caregiver)
+            caregiver = result_caregiver.scalar_one_or_none()
+
+            if not caregiver:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Cuidador con ID {data.caregiver_id} no encontrado"}
+                )
+
+            if caregiver.role != "ASISTENCIAL":
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "El usuario debe tener rol ASISTENCIAL para ser cuidador"}
+                )
+
+            # Variable para el patient_id final (puede cambiar si es usuario PERSONAL)
+            final_patient_id = data.patient_id
+
+            # Verificar que el paciente existe (puede ser Patient o User con rol PERSONAL)
+            stmt_patient = select(Patient).where(Patient.id == final_patient_id)
+            result_patient = await session.execute(stmt_patient)
+            patient = result_patient.scalar_one_or_none()
+
+            # Si no es paciente, verificar si es usuario PERSONAL y crear paciente automáticamente
+            if not patient:
+                stmt_user = select(User).where(User.id == final_patient_id).where(User.role == "PERSONAL")
+                result_user = await session.execute(stmt_user)
+                user_personal = result_user.scalar_one_or_none()
+                
+                if not user_personal:
+                    return JSONResponse(
+                        status_code=404,
+                        content={"message": f"Paciente o usuario PERSONAL con ID {final_patient_id} no encontrado"}
+                    )
+                
+                # Crear paciente automáticamente para el usuario PERSONAL
+                patient_name = user_personal.name if user_personal.name else user_personal.email.split('@')[0]
+                new_patient = Patient(
+                    name=patient_name,
+                    caregiver_id=None,
+                    notes=f"Paciente creado automáticamente para usuario PERSONAL: {user_personal.email}"
+                )
+                session.add(new_patient)
+                await session.flush()  # Flush para obtener el ID sin commit
+                await session.refresh(new_patient)
+                
+                # Usar el ID del paciente recién creado
+                final_patient_id = new_patient.id
+
+            # Verificar que no existe ya una asignación activa
+            stmt_check = (
+                select(Assignment)
+                .where(Assignment.caregiver_id == data.caregiver_id)
+                .where(Assignment.patient_id == final_patient_id)
+                .where(Assignment.active.is_(True))
+            )
+            result_check = await session.execute(stmt_check)
+            existing = result_check.scalar_one_or_none()
+
+            if existing:
+                return JSONResponse(
+                    status_code=409,
+                    content={"message": "Esta asignación ya existe"}
+                )
+
+            new_assignment = Assignment(
+                caregiver_id=data.caregiver_id,
+                patient_id=final_patient_id
+            )
+
+            session.add(new_assignment)
+            await session.commit()
+            await session.refresh(new_assignment)
+
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": "Asignación creada correctamente",
+                    "assignment": {
+                        "id": new_assignment.id,
+                        "caregiver_id": new_assignment.caregiver_id,
+                        "patient_id": new_assignment.patient_id,
+                        "active": new_assignment.active,
+                        "created_at": new_assignment.created_at.isoformat() if new_assignment.created_at else None
+                    }
+                }
+            )
+
+    except Exception as error:
+        print("Error al crear asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al crear asignación"}
+        )
+
+
+@assignment.put("/assignment/update")
+async def update_assignment(req: Request, data: InputAssignmentUpdate):
+    """Actualiza una asignación existente."""
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Assignment).where(Assignment.id == data.id)
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {data.id} no encontrada"}
+                )
+
+            updated = False
+
+            if is_valid_change(data.caregiver_id, assignment_found.caregiver_id):
+                stmt_caregiver = select(User).where(User.id == data.caregiver_id)
+                result_caregiver = await session.execute(stmt_caregiver)
+                caregiver = result_caregiver.scalar_one_or_none()
+
+                if not caregiver or caregiver.role != "ASISTENCIAL":
+                    return JSONResponse(
+                        status_code=400,
+                        content={"message": "El usuario debe existir y tener rol ASISTENCIAL"}
+                    )
+
+                assignment_found.caregiver_id = data.caregiver_id
+                updated = True
+
+            if is_valid_change(data.patient_id, assignment_found.patient_id):
+                stmt_patient = select(Patient).where(Patient.id == data.patient_id)
+                result_patient = await session.execute(stmt_patient)
+                patient = result_patient.scalar_one_or_none()
+
+                if not patient:
+                    return JSONResponse(
+                        status_code=404,
+                        content={"message": f"Paciente con ID {data.patient_id} no encontrado"}
+                    )
+
+                assignment_found.patient_id = data.patient_id
+                updated = True
+
+            if is_valid_change(data.active, assignment_found.active):
+                assignment_found.active = data.active
+                updated = True
+
+            if updated:
+                await session.commit()
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "Asignación actualizada correctamente"}
+                )
+            else:
+                return JSONResponse(
+                    status_code=200,
+                    content={"message": "No se realizaron cambios"}
+                )
+
+    except Exception as error:
+        print("Error al actualizar asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al actualizar asignación"}
+        )
+
+
+@assignment.put("/assignment/{assignment_id}/deactivate")
+async def deactivate_assignment(req: Request, assignment_id: int):
+    """Desactiva una asignación (soft delete)."""
+    try:
+        # Verificar token y rol (SOLO ADMIN)
+        payload = require_roles(req.headers, ["ADMIN"])
+        if isinstance(payload, JSONResponse):
+            return payload
+
+        async with AsyncSessionLocal() as session:
+            stmt = select(Assignment).where(Assignment.id == assignment_id)
+            result = await session.execute(stmt)
+            assignment_found = result.scalar_one_or_none()
+
+            if not assignment_found:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Asignación con ID {assignment_id} no encontrada"}
+                )
+
+            assignment_found.active = False
+            await session.commit()
+
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Asignación desactivada correctamente"}
+            )
+
+    except Exception as error:
+        print("Error al desactivar asignación ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al desactivar asignación"}
+        )

@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+from jose import jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 
@@ -40,14 +39,61 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
     return encoded_jwt
 
-# Decodificar y validar un token JWT
-def decode_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token invalido o expirado",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+# Clase Security siguiendo el patrón del proyecto anterior
+class Security:
+    """
+    Clase para manejo de seguridad y validación de tokens.
+    Sigue el patrón del proyecto anterior (sistema Escuela).
+    """
+    secret = SECRET_KEY
+
+    @classmethod
+    def verify_token(cls, headers: dict) -> dict:
+        """
+        Verifica y valida el token JWT desde los headers de la request.
+        Retorna el payload del token si es válido, o un dict de error si no lo es.
+
+        Args:
+            headers: Headers de la request (debe contener "authorization")
+
+        Returns:
+            dict: Payload del token con "sub", "exp", "email", "role"
+                  O dict con mensaje de error si falla
+
+        Uso en endpoints:
+            has_access = Security.verify_token(req.headers)
+            if "sub" not in has_access:
+                return JSONResponse(status_code=401, content=has_access)
+        """
+        # Verificar que exista el header authorization
+        if "authorization" not in headers:
+            return {"message": "Authorization header faltante", "detail": "No se envió el token de autorización"}
+
+        try:
+            # Extraer el token (formato: "Bearer TOKEN")
+            auth_header = headers["authorization"]
+            if not auth_header.startswith("Bearer "):
+                return {"message": "Formato de token inválido", "detail": "El token debe tener formato 'Bearer TOKEN'"}
+
+            token = auth_header.split(" ")[1]
+
+            # Decodificar y validar el token
+            payload = jwt.decode(token, cls.secret, algorithms=[ALGORITHM])
+
+            # Retornar el payload completo
+            return payload
+
+        except jwt.ExpiredSignatureError:
+            return {"message": "Token expirado", "detail": "El token ha expirado, por favor inicia sesión nuevamente"}
+
+        except jwt.InvalidSignatureError:
+            return {"message": "Firma de token inválida", "detail": "El token ha sido modificado o es inválido"}
+
+        except jwt.DecodeError:
+            return {"message": "Token inválido", "detail": "No se pudo decodificar el token"}
+
+        except IndexError:
+            return {"message": "Formato de token inválido", "detail": "El token no tiene el formato correcto"}
+
+        except Exception as e:
+            return {"message": "Error al verificar token", "detail": str(e)}
