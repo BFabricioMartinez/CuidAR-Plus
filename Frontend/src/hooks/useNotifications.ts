@@ -80,7 +80,7 @@ export const useNotifications = () => {
     scheduledTime: Date
   ) => {
     if (!enabled || permission !== 'granted') {
-      console.warn('Notificaciones no habilitadas');
+      // Silencioso - las notificaciones no están habilitadas
       return;
     }
 
@@ -117,7 +117,7 @@ export const useNotifications = () => {
   // Mostrar notificación
   const showNotification = useCallback((title: string, body: string, icon?: string) => {
     if (permission !== 'granted') {
-      console.warn('No hay permiso para mostrar notificaciones');
+      // Silencioso - el usuario simplemente no tiene permisos activados
       return;
     }
 
