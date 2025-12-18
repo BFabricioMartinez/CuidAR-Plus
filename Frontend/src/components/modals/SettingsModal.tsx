@@ -1,4 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+  type ColumnFiltersState,
+} from '@tanstack/react-table';
+import Select from 'react-select';
 import { useUsers } from '../../hooks/useUsers';
 import { usersApi } from '../../api/users';
 import type { User } from '../../types/api';
@@ -15,15 +26,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { users, loading, error, hasMore, loadMore, refresh, search } = useUsers();
   const [searchQuery, setSearchQuery] = useState('');
   const [hasInitialLoad, setHasInitialLoad] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<'ADMIN' | 'ASISTENCIAL' | 'PERSONAL' | 'all'>('all');
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
 
+  // TanStack Table States
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
   // Estado para modales de edición
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(null);
-  const [deactivatingUser, setDeactivatingUser] = useState<User | null>(null);
-  const [deactivateLoading, setDeactivateLoading] = useState(false);
+  const [togglingUser, setTogglingUser] = useState<User | null>(null);
+  const [toggleLoading, setToggleLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Función auxiliar para obtener las iniciales del nombre
   const getInitials = (name: string | null): string => {
@@ -49,31 +67,169 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  // Opciones para react-select (filtro de rol)
+  const roleOptions = useMemo(
+    () => [
+      { value: 'all', label: 'Todos los roles' },
+      { value: 'ADMIN', label: 'Administrador' },
+      { value: 'ASISTENCIAL', label: 'Asistencial' },
+      { value: 'PERSONAL', label: 'Personal' },
+    ],
+    []
+  );
+
+  // Definición de columnas para TanStack Table
+  const columns = useMemo<ColumnDef<User>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: 'Nombre',
+        cell: ({ row }) => {
+          const user = row.original;
+          return (
+            <div className="user-info-cell">
+              <div className="user-avatar-small">{getInitials(user.name)}</div>
+              <span>{user.name || 'Sin nombre'}</span>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: 'email',
+        header: 'Email',
+        cell: ({ getValue }) => <span className="cell-email">{getValue() as string}</span>,
+      },
+      {
+        accessorKey: 'role',
+        header: 'Rol',
+        cell: ({ getValue }) => {
+          const role = getValue() as string;
+          return (
+            <span className={`role-badge role-${role.toLowerCase()}`}>
+              {getRoleText(role)}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        cell: ({ row }) => {
+          const user = row.original;
+          return (
+            <div className="actions-group">
+              <button
+                className="action-btn action-edit"
+                title="Editar usuario"
+                onClick={() => setEditingUser(user)}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+              </button>
+              <button
+                className="action-btn action-password"
+                title="Cambiar contraseña"
+                onClick={() => setChangingPasswordUser(user)}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+              <button
+                className={`action-btn ${user.active ? 'action-deactivate' : 'action-activate'}`}
+                title={user.active ? 'Desactivar usuario' : 'Activar usuario'}
+                onClick={() => setTogglingUser(user)}
+              >
+                {user.active ? (
+                  <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          );
+        },
+        enableSorting: false,
+      },
+    ],
+    []
+  );
+
+  // Filtrar usuarios por rol
+  const filteredUsers = useMemo(() => {
+    if (roleFilter === 'all') return users;
+    return users.filter((user) => user.role === roleFilter);
+  }, [users, roleFilter]);
+
+  // Configuración de TanStack Table
+  const table = useReactTable({
+    data: filteredUsers,
+    columns,
+    state: {
+      sorting,
+      columnFilters,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    manualPagination: true, // Paginación manual desde el backend
+  });
+
   // Handler para guardar cambios de usuario
   const handleSaveUser = async (userId: number, data: { name?: string; email?: string; role?: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL' }) => {
-    await usersApi.update({ id: userId, ...data });
-    await refresh(); // Recargar la lista de usuarios
+    try {
+      setErrorMessage(null);
+      await usersApi.update({ id: userId, ...data });
+      setSuccessMessage('Usuario actualizado correctamente');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await refresh(); // Recargar la lista de usuarios
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error al actualizar el usuario');
+      setTimeout(() => setErrorMessage(null), 5000);
+      throw err;
+    }
   };
 
   // Handler para cambiar contraseña
   const handleChangePassword = async (userId: number, password: string) => {
-    await usersApi.update({ id: userId, password });
+    try {
+      setErrorMessage(null);
+      await usersApi.update({ id: userId, password });
+      setSuccessMessage('Contraseña actualizada correctamente');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      await refresh(); // Recargar la lista de usuarios
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error al cambiar la contraseña');
+      setTimeout(() => setErrorMessage(null), 5000);
+      throw err;
+    }
   };
 
-  // Handler para desactivar/eliminar usuario
-  const handleDeactivateUser = async () => {
-    if (!deactivatingUser) return;
+  // Handler para activar/desactivar usuario
+  const handleToggleUser = async () => {
+    if (!togglingUser) return;
 
-    setDeactivateLoading(true);
+    setToggleLoading(true);
+    setErrorMessage(null);
     try {
-      await usersApi.deactivate(deactivatingUser.id);
+      const newActiveState = !togglingUser.active;
+      await usersApi.update({ id: togglingUser.id, active: newActiveState });
+      setSuccessMessage(`Usuario ${newActiveState ? 'activado' : 'desactivado'} correctamente`);
+      setTimeout(() => setSuccessMessage(null), 3000);
       await refresh(); // Recargar la lista de usuarios
-      setDeactivatingUser(null);
+      setTogglingUser(null);
     } catch (err: any) {
-      console.error('Error deactivating user:', err);
-      // Aquí podrías mostrar un mensaje de error al usuario
+      setErrorMessage(err.message || 'Error al cambiar el estado del usuario');
+      setTimeout(() => setErrorMessage(null), 5000);
     } finally {
-      setDeactivateLoading(false);
+      setToggleLoading(false);
     }
   };
 
@@ -125,10 +281,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     const timer = setTimeout(() => {
       if (searchQuery.trim() !== '') {
-        search(searchQuery);
+        search(searchQuery.trim());
+        refresh();
+      } else {
+        // Si se limpia la búsqueda, recargar todos los usuarios
+        search('');
         refresh();
       }
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,6 +342,24 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Body */}
           <div className="modal-body">
+            {/* Success/Error Messages */}
+            {successMessage && (
+              <div className="message-banner message-success">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <span>{successMessage}</span>
+              </div>
+            )}
+            {errorMessage && (
+              <div className="message-banner message-error">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             {/* Search Bar */}
             <div className="search-section">
               <div className="search-wrapper">
@@ -196,9 +374,45 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <div className="filter-wrapper">
+                <Select
+                  value={roleOptions.find((opt) => opt.value === roleFilter) || roleOptions[0]}
+                  onChange={(option) => setRoleFilter((option?.value || 'all') as typeof roleFilter)}
+                  options={roleOptions}
+                  placeholder="Filtrar por rol..."
+                  isSearchable={false}
+                  className="react-select-container"
+                  classNamePrefix="react-select"
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{
+                    control: (base) => ({
+                      ...base,
+                      minWidth: '180px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '0.9375rem',
+                      cursor: 'pointer',
+                      boxShadow: 'none',
+                      '&:hover': {
+                        borderColor: '#667eea',
+                      },
+                    }),
+                    controlFocused: (base) => ({
+                      ...base,
+                      border: '2px solid #667eea',
+                      boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                    }),
+                    menuPortal: (base) => ({
+                      ...base,
+                      zIndex: 10000,
+                    }),
+                  }}
+                />
+              </div>
               <div className="users-count">
                 <span className="count-badge">
-                  {users.length} usuario{users.length !== 1 ? 's' : ''}
+                  {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
                 </span>
               </div>
             </div>
@@ -214,84 +428,64 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
               )}
 
-              {!error && users.length === 0 && !loading && (
-                <div className="empty-state">
-                  <svg viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                  </svg>
-                  <p>No se encontraron usuarios</p>
-                </div>
-              )}
+              <div className="table-content-wrapper">
+                {loading && filteredUsers.length === 0 && (
+                  <div className="loading-overlay">
+                    <div className="loading-spinner-inline">
+                      <div className="spinner-dot"></div>
+                      <div className="spinner-dot"></div>
+                      <div className="spinner-dot"></div>
+                    </div>
+                  </div>
+                )}
 
-              {users.length > 0 && (
-                <table className="users-table">
-                  <thead>
-                    <tr className="table-header-row">
-                      <th className="table-header">Nombre</th>
-                      <th className="table-header">Email</th>
-                      <th className="table-header">Rol</th>
-                      <th className="table-header table-header-actions">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr key={user.id} className="table-row">
-                        <td className="table-cell cell-name">
-                          <div className="user-info-cell">
-                            <div className="user-avatar-small">{getInitials(user.name)}</div>
-                            <span>{user.name || 'Sin nombre'}</span>
-                          </div>
-                        </td>
-                        <td className="table-cell cell-email">{user.email}</td>
-                        <td className="table-cell cell-role">
-                          <span className={`role-badge role-${user.role.toLowerCase()}`}>
-                            {getRoleText(user.role)}
-                          </span>
-                        </td>
-                        <td className="table-cell cell-actions">
-                          <div className="actions-group">
-                            <button
-                              className="action-btn action-edit"
-                              title="Editar usuario"
-                              onClick={() => setEditingUser(user)}
-                            >
-                              <svg viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                              </svg>
-                            </button>
-                            <button
-                              className="action-btn action-password"
-                              title="Cambiar contraseña"
-                              onClick={() => setChangingPasswordUser(user)}
-                            >
-                              <svg viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                            <button className="action-btn action-delete" title="Eliminar usuario">
-                              <svg viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                {!error && filteredUsers.length === 0 && !loading && (
+                  <div className="empty-state">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    <p>No se encontraron usuarios</p>
+                  </div>
+                )}
+
+                {filteredUsers.length > 0 && (
+                  <div className="table-wrapper">
+                    <table className="users-table">
+                      <thead>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                          <tr key={headerGroup.id} className="table-header-row">
+                            {headerGroup.headers.map((header) => (
+                              <th key={header.id} className="table-header">
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(header.column.columnDef.header, header.getContext())}
+                              </th>
+                            ))}
+                          </tr>
+                        ))}
+                      </thead>
+                      <tbody>
+                        {table.getRowModel().rows.map((row) => (
+                          <tr key={row.id} className="table-row">
+                            {row.getVisibleCells().map((cell) => (
+                              <td key={cell.id} className="table-cell">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
 
               {/* Trigger para infinite scroll */}
-              {hasMore && (
+              {hasMore && roleFilter === 'all' && !loading && (
                 <div ref={loadMoreTriggerRef} className="load-more-trigger">
-                  {loading && (
-                    <div className="loading-spinner">
-                      <svg className="spinner" viewBox="0 0 50 50">
-                        <circle className="spinner-circle" cx="25" cy="25" r="20" fill="none" strokeWidth="5"></circle>
-                      </svg>
-                      <span>Cargando más usuarios...</span>
-                    </div>
-                  )}
+                  <div className="load-more-indicator">
+                    <span>Cargar más</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -474,6 +668,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           flex-wrap: wrap;
         }
 
+        .react-select-container {
+          font-size: 0.9375rem;
+        }
+
+        .react-select__control {
+          min-height: 42px;
+        }
+
+        .react-select__value-container {
+          padding: 0.5rem 0.75rem;
+        }
+
+        .react-select__indicator {
+          padding: 0.5rem;
+        }
+
+        .react-select__menu {
+          border-radius: 10px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+          border: 1px solid #e5e7eb;
+          overflow: hidden;
+        }
+
+        .react-select__option {
+          padding: 0.75rem 1rem;
+          cursor: pointer;
+        }
+
+        .react-select__option--is-focused {
+          background: rgba(102, 126, 234, 0.1);
+          color: #667eea;
+        }
+
+        .react-select__option--is-selected {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+        }
+
         .search-wrapper {
           flex: 1;
           min-width: 250px;
@@ -499,7 +731,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           font-size: 0.9375rem;
           color: #1f2937;
           font-family: inherit;
-          transition: all 0.3s ease;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
           background: #ffffff;
         }
 
@@ -507,6 +739,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           outline: none;
           border-color: #667eea;
           box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-input::placeholder {
+          color: #9ca3af;
+          transition: opacity 0.2s ease;
         }
 
         .search-input::placeholder {
@@ -527,6 +764,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           font-size: 0.875rem;
           font-weight: 600;
           color: #667eea;
+          transition: all 0.2s ease;
         }
 
         /* Users Table */
@@ -535,12 +773,120 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           overflow-y: auto;
           overflow-x: hidden;
           padding: 0;
+          min-height: 400px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .table-content-wrapper {
+          flex: 1;
+          position: relative;
+          min-height: 300px;
+          transition: opacity 0.15s ease;
+        }
+
+        .table-wrapper {
+          width: 100%;
+          overflow-x: auto;
+          opacity: 1;
+          transition: opacity 0.15s ease;
+          will-change: opacity;
+        }
+
+        .table-wrapper:not(:empty) {
+          animation: fadeInTable 0.2s ease-out;
+        }
+
+        @keyframes fadeInTable {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        .loading-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(2px);
+          z-index: 10;
+          animation: fadeIn 0.15s ease-out;
+        }
+
+        .loading-spinner-inline {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .spinner-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          animation: spinner-bounce 1.4s ease-in-out infinite both;
+        }
+
+        .spinner-dot:nth-child(1) {
+          animation-delay: -0.32s;
+        }
+
+        .spinner-dot:nth-child(2) {
+          animation-delay: -0.16s;
+        }
+
+        @keyframes spinner-bounce {
+          0%, 80%, 100% {
+            transform: scale(0);
+            opacity: 0.5;
+          }
+          40% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        .load-more-indicator {
+          padding: 1rem;
+          text-align: center;
+          color: #6b7280;
+          font-size: 0.875rem;
         }
 
         .users-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
+          table-layout: fixed;
+        }
+
+        .users-table th:first-child,
+        .users-table td:first-child {
+          width: 30%;
+        }
+
+        .users-table th:nth-child(2),
+        .users-table td:nth-child(2) {
+          width: 35%;
+        }
+
+        .users-table th:nth-child(3),
+        .users-table td:nth-child(3) {
+          width: 20%;
+        }
+
+        .users-table th:last-child,
+        .users-table td:last-child {
+          width: 15%;
         }
 
         .table-header-row {
@@ -577,7 +923,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         .table-row {
           border-bottom: 1px solid #f3f4f6;
-          transition: all 0.2s ease;
+          transition: background-color 0.15s ease;
         }
 
         .table-row:hover {
@@ -720,12 +1066,71 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           color: #6b7280;
         }
 
-        .action-delete:hover {
+        .action-deactivate {
+          border-color: #e5e7eb;
+          color: #6b7280;
+        }
+
+        .action-deactivate:hover {
           background: rgba(239, 68, 68, 0.1);
           border-color: #ef4444;
           color: #ef4444;
           transform: translateY(-2px);
           box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+        }
+
+        .action-activate {
+          border-color: #e5e7eb;
+          color: #6b7280;
+        }
+
+        .action-activate:hover {
+          background: rgba(34, 197, 94, 0.1);
+          border-color: #22c55e;
+          color: #22c55e;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+        }
+
+        /* Message Banners */
+        .message-banner {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1rem 2rem;
+          margin: 0;
+          font-size: 0.9375rem;
+          font-weight: 500;
+          animation: slideDown 0.2s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .message-banner svg {
+          width: 20px;
+          height: 20px;
+          flex-shrink: 0;
+        }
+
+        .message-success {
+          background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%);
+          border-bottom: 2px solid rgba(34, 197, 94, 0.3);
+          color: #16a34a;
+        }
+
+        .message-error {
+          background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+          border-bottom: 2px solid rgba(239, 68, 68, 0.3);
+          color: #dc2626;
         }
 
         /* Loading & Empty States */
@@ -737,6 +1142,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           justify-content: center;
           padding: 3rem 2rem;
           text-align: center;
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          min-height: 300px;
         }
 
         .error-message svg,
@@ -763,56 +1174,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         /* Infinite Scroll Trigger */
         .load-more-trigger {
-          padding: 1.5rem;
+          padding: 1rem;
           display: flex;
           align-items: center;
           justify-content: center;
-        }
-
-        .loading-spinner {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 0.75rem;
-        }
-
-        .spinner {
-          width: 40px;
-          height: 40px;
-          animation: rotate 2s linear infinite;
-        }
-
-        .spinner-circle {
-          stroke: #667eea;
-          stroke-linecap: round;
-          animation: dash 1.5s ease-in-out infinite;
-        }
-
-        @keyframes rotate {
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-
-        @keyframes dash {
-          0% {
-            stroke-dasharray: 1, 150;
-            stroke-dashoffset: 0;
-          }
-          50% {
-            stroke-dasharray: 90, 150;
-            stroke-dashoffset: -35;
-          }
-          100% {
-            stroke-dasharray: 90, 150;
-            stroke-dashoffset: -124;
-          }
-        }
-
-        .loading-spinner span {
-          font-size: 0.875rem;
-          color: #667eea;
-          font-weight: 500;
+          border-top: 1px solid #f3f4f6;
         }
 
         @media (max-width: 640px) {
@@ -847,6 +1213,14 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           .search-wrapper {
             min-width: 100%;
+          }
+
+          .filter-wrapper {
+            width: 100%;
+          }
+
+          .react-select-container {
+            width: 100%;
           }
 
           .users-table-wrapper {
@@ -915,6 +1289,23 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         onClose={() => setChangingPasswordUser(null)}
         user={changingPasswordUser}
         onSave={handleChangePassword}
+      />
+
+      {/* Dialog de Confirmación para Activar/Desactivar */}
+      <ConfirmDialog
+        isOpen={!!togglingUser}
+        onClose={() => setTogglingUser(null)}
+        onConfirm={handleToggleUser}
+        title={togglingUser?.active ? 'Desactivar Usuario' : 'Activar Usuario'}
+        message={
+          togglingUser?.active
+            ? `¿Estás seguro de que deseas desactivar a ${togglingUser.name || togglingUser.email}? El usuario no podrá acceder al sistema.`
+            : `¿Estás seguro de que deseas activar a ${togglingUser?.name || togglingUser?.email}? El usuario podrá acceder al sistema nuevamente.`
+        }
+        confirmText={togglingUser?.active ? 'Desactivar' : 'Activar'}
+        cancelText="Cancelar"
+        type={togglingUser?.active ? 'warning' : 'info'}
+        loading={toggleLoading}
       />
     </>
   );

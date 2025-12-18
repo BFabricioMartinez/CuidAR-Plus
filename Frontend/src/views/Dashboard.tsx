@@ -76,6 +76,11 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer style={styles.dashboardFooter}>
+        <span style={styles.footerText}>CuidAR+ © {new Date().getFullYear()} | v1.0 MVP</span>
+      </footer>
     </div>
   );
 };
@@ -277,6 +282,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     color: '#9ca3af',
     fontWeight: 500,
+  },
+  dashboardFooter: {
+    position: 'fixed' as 'fixed',
+    bottom: '1rem',
+    left: '1rem',
+    padding: '0.5rem 1rem',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: '6px',
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: 400,
+    letterSpacing: '0.3px',
+    zIndex: 1000,
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+  },
+  footerText: {
+    display: 'inline-block',
   },
 };
 

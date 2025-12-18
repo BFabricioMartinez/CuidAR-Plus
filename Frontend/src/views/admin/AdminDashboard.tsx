@@ -1819,7 +1819,63 @@ export default function AdminDashboard() {
             font-size: 1.5rem;
           }
         }
+
+        /* Dashboard Footer */
+        .dashboard-footer {
+          position: fixed;
+          bottom: 1rem;
+          left: 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          font-size: 0.875rem;
+          color: #6b7280;
+          z-index: 100;
+          border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .dashboard-footer svg {
+          width: 16px;
+          height: 16px;
+          color: #667eea;
+        }
+
+        .dashboard-footer-text {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .dashboard-footer-year {
+          font-weight: 600;
+          color: #667eea;
+        }
+
+        @media (max-width: 640px) {
+          .dashboard-footer {
+            bottom: 0.5rem;
+            left: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+          }
+        }
       `}</style>
+      
+      {/* Footer */}
+      <div className="dashboard-footer">
+        <svg viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+        </svg>
+        <div className="dashboard-footer-text">
+          <span className="dashboard-footer-year">{new Date().getFullYear()}</span>
+          <span>CuidAR</span>
+        </div>
+      </div>
     </div>
   );
 }
