@@ -28,7 +28,7 @@ interface IntakeLog {
 interface Treatment {
   id: number;
   medication_name: string;
-  dosage: string;
+  dosage: string | null;
 }
 
 interface HistoryItem extends IntakeLog {
@@ -102,7 +102,7 @@ export default function MiHistorial() {
   });
   
   // Ref para el timeout del debounce
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // Definición de columnas para TanStack Table
@@ -505,7 +505,7 @@ export default function MiHistorial() {
                 <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                 </svg>
-                Historial de Tomas
+                Historial
               </h2>
               {activeFiltersCount > 0 && (
                 <button onClick={clearFilters} className="btn-clear-filters-compact">
@@ -541,21 +541,16 @@ export default function MiHistorial() {
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
-                  control: (base) => ({
+                  control: (base, state) => ({
                     ...base,
-                    border: '1.5px solid #e5e7eb',
+                    border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #e5e7eb',
                     borderRadius: '8px',
                     minHeight: '40px',
-                    boxShadow: 'none',
+                    boxShadow: state.isFocused ? '0 0 0 3px rgba(102, 126, 234, 0.1)' : 'none',
                     background: '#fff',
                     '&:hover': {
-                      border: '1.5px solid #cbd5e1',
+                      border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #cbd5e1',
                     },
-                  }),
-                  controlFocused: (base) => ({
-                    ...base,
-                    border: '1.5px solid #667eea',
-                    boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
                   }),
                   menuPortal: (base) => ({
                     ...base,
@@ -586,21 +581,16 @@ export default function MiHistorial() {
                 menuPortalTarget={document.body}
                 menuPosition="fixed"
                 styles={{
-                  control: (base) => ({
+                  control: (base, state) => ({
                     ...base,
-                    border: '1.5px solid #e5e7eb',
+                    border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #e5e7eb',
                     borderRadius: '8px',
                     minHeight: '40px',
-                    boxShadow: 'none',
+                    boxShadow: state.isFocused ? '0 0 0 3px rgba(102, 126, 234, 0.1)' : 'none',
                     background: '#fff',
                     '&:hover': {
-                      border: '1.5px solid #cbd5e1',
+                      border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #cbd5e1',
                     },
-                  }),
-                  controlFocused: (base) => ({
-                    ...base,
-                    border: '1.5px solid #667eea',
-                    boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
                   }),
                   menuPortal: (base) => ({
                     ...base,

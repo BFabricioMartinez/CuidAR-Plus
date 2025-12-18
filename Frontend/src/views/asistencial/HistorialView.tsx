@@ -168,7 +168,10 @@ export default function HistorialView() {
       <div className="history-header">
         <div className="header-content-history">
           <div className="title-section">
-            <h1 className="page-title">Historial de Tomas</h1>
+            <h1 className="page-title">
+              <span className="title-text-desktop">Historial de Tomas</span>
+              <span className="title-text-mobile">Historial</span>
+            </h1>
             <p className="page-subtitle">Registro de medicación de tus pacientes</p>
             {selectedPatientName && (
               <p className="page-subtitle-secondary">
@@ -212,7 +215,7 @@ export default function HistorialView() {
                     <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    Historial de Tomas del Paciente
+                    Historial del Paciente
                   </h2>
                   {activeFiltersCount > 0 && (
                     <button onClick={handleClearFilters} className="btn-clear-filters-compact">
@@ -561,6 +564,10 @@ export default function HistorialView() {
           color: #fff;
           margin: 0 0 0.5rem 0;
           text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .title-text-mobile {
+          display: none;
         }
 
         .page-subtitle {
@@ -1288,8 +1295,20 @@ export default function HistorialView() {
             font-size: 2rem;
           }
 
+          .title-text-desktop {
+            display: none;
+          }
+
+          .title-text-mobile {
+            display: inline;
+          }
+
           .history-content {
             padding: 0 1.5rem;
+          }
+
+          .history-box {
+            margin-top: 2rem;
           }
 
           .history-box {
