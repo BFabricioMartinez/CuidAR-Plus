@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import Select from 'react-select';
 import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
+import { useNotifications } from '../../hooks/useNotifications';
 import SettingsModal from '../modals/SettingsModal';
 
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
@@ -28,6 +29,15 @@ export default function Navbar() {
 
   const userStr = localStorage.getItem('user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
+
+  // Hook de notificaciones
+  const {
+    enabled: notificationsEnabled,
+    isSupported,
+    enableNotifications,
+    disableNotifications,
+    testNotification,
+  } = useNotifications();
 
   // Hook para selección de paciente (solo para usuarios asistenciales)
   const isAsistencial = user?.role === 'ASISTENCIAL';
@@ -82,6 +92,26 @@ export default function Navbar() {
     localStorage.removeItem('user');
     localStorage.removeItem('selectedPatientId'); // Limpiar selección de paciente
     navigate('/');
+  };
+
+  // Handler para toggle de notificaciones
+  const handleToggleNotifications = async () => {
+    if (!isSupported) {
+      alert('Tu navegador no soporta notificaciones push');
+      return;
+    }
+
+    if (notificationsEnabled) {
+      disableNotifications();
+    } else {
+      const success = await enableNotifications();
+      if (success) {
+        // Mostrar notificación de prueba
+        testNotification();
+      } else {
+        alert('No se pudo activar las notificaciones. Verifica los permisos de tu navegador.');
+      }
+    }
   };
 
   const navItems: NavItem[] = [
@@ -282,6 +312,25 @@ export default function Navbar() {
                 </div>
               </div>
             </div>
+
+            {/* Notifications Button - Todos los usuarios */}
+            {isSupported && (
+              <button
+                onClick={handleToggleNotifications}
+                className={`notifications-btn ${notificationsEnabled ? 'active' : ''}`}
+                title={notificationsEnabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
+              >
+                {notificationsEnabled ? (
+                  <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                  </svg>
+                ) : (
+                  <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2.014 2.014 0 0017 13.657V8a7 7 0 00-5.755-6.882 3 3 0 00-5.49 0A6.956 6.956 0 004 5.732V3.707L3.707 2.293zM6 6.732V8a5.938 5.938 0 00.814 3l.025.047L6 11.586V8c0-.771.319-1.467.833-1.965L6 6.732zM9.268 15l-1-1H8a3 3 0 005.905.75L12.732 13H12v2c0 .34-.06.667-.17.97l-.898-.898a3 3 0 01-1.664.928z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+            )}
 
             {/* Settings Button - Solo para ADMIN */}
             {user.role === 'ADMIN' && (
@@ -758,6 +807,58 @@ export default function Navbar() {
           font-size: 0.8125rem;
           color: #6b7280;
           line-height: 1;
+        }
+
+        .notifications-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          background: transparent;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+          position: relative;
+        }
+
+        .notifications-btn:hover {
+          background: rgba(102, 126, 234, 0.08);
+          border-color: #667eea;
+          color: #667eea;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .notifications-btn.active {
+          background: rgba(102, 126, 234, 0.1);
+          border-color: #667eea;
+          color: #667eea;
+        }
+
+        .notifications-btn.active:hover {
+          background: rgba(102, 126, 234, 0.15);
+        }
+
+        .notifications-icon {
+          width: 20px;
+          height: 20px;
+          transition: transform 0.3s ease;
+        }
+
+        .notifications-btn:hover .notifications-icon {
+          animation: bell-ring 0.6s ease-in-out;
+        }
+
+        @keyframes bell-ring {
+          0%, 100% { transform: rotate(0deg); }
+          10%, 30% { transform: rotate(-10deg); }
+          20%, 40% { transform: rotate(10deg); }
+          50% { transform: rotate(0deg); }
         }
 
         .settings-btn {
