@@ -114,6 +114,26 @@ export default function Navbar() {
     }
   };
 
+  // Handler para probar notificación programada (10 segundos)
+  const handleTestNotification = () => {
+    if (!notificationsEnabled) {
+      alert('Primero activa las notificaciones con el botón de la campana');
+      return;
+    }
+
+    alert('En 10 segundos recibirás una notificación de prueba');
+
+    setTimeout(() => {
+      new Notification('💊 Hora de medicación', {
+        body: 'Tomar Paracetamol 500mg',
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+        requireInteraction: true,
+        tag: 'med-reminder'
+      });
+    }, 10000);
+  };
+
   const navItems: NavItem[] = [
     // ADMIN
     {
@@ -315,21 +335,36 @@ export default function Navbar() {
 
             {/* Notifications Button - Todos los usuarios */}
             {isSupported && (
-              <button
-                onClick={handleToggleNotifications}
-                className={`notifications-btn ${notificationsEnabled ? 'active' : ''}`}
-                title={notificationsEnabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
-              >
-                {notificationsEnabled ? (
-                  <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                  </svg>
-                ) : (
-                  <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2.014 2.014 0 0017 13.657V8a7 7 0 00-5.755-6.882 3 3 0 00-5.49 0A6.956 6.956 0 004 5.732V3.707L3.707 2.293zM6 6.732V8a5.938 5.938 0 00.814 3l.025.047L6 11.586V8c0-.771.319-1.467.833-1.965L6 6.732zM9.268 15l-1-1H8a3 3 0 005.905.75L12.732 13H12v2c0 .34-.06.667-.17.97l-.898-.898a3 3 0 01-1.664.928z" clipRule="evenodd" />
-                  </svg>
+              <>
+                <button
+                  onClick={handleToggleNotifications}
+                  className={`notifications-btn ${notificationsEnabled ? 'active' : ''}`}
+                  title={notificationsEnabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
+                >
+                  {notificationsEnabled ? (
+                    <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                    </svg>
+                  ) : (
+                    <svg className="notifications-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2.014 2.014 0 0017 13.657V8a7 7 0 00-5.755-6.882 3 3 0 00-5.49 0A6.956 6.956 0 004 5.732V3.707L3.707 2.293zM6 6.732V8a5.938 5.938 0 00.814 3l.025.047L6 11.586V8c0-.771.319-1.467.833-1.965L6 6.732zM9.268 15l-1-1H8a3 3 0 005.905.75L12.732 13H12v2c0 .34-.06.667-.17.97l-.898-.898a3 3 0 01-1.664.928z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Test Notification Button - Solo si las notificaciones están activadas */}
+                {notificationsEnabled && (
+                  <button
+                    onClick={handleTestNotification}
+                    className="test-notification-btn"
+                    title="Probar notificación (10 seg)"
+                  >
+                    <svg className="test-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    </svg>
+                  </button>
                 )}
-              </button>
+              </>
             )}
 
             {/* Settings Button - Solo para ADMIN */}
@@ -859,6 +894,37 @@ export default function Navbar() {
           10%, 30% { transform: rotate(-10deg); }
           20%, 40% { transform: rotate(10deg); }
           50% { transform: rotate(0deg); }
+        }
+
+        .test-notification-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border: none;
+          border-radius: 12px;
+          color: white;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+          position: relative;
+        }
+
+        .test-notification-btn:hover {
+          transform: translateY(-2px) scale(1.05);
+          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .test-notification-btn:active {
+          transform: translateY(0) scale(0.95);
+        }
+
+        .test-icon {
+          width: 20px;
+          height: 20px;
         }
 
         .settings-btn {
