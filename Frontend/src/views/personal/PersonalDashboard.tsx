@@ -1469,8 +1469,67 @@ export default function PersonalDashboard() {
             gap: 1rem;
           }
 
+          /* Hacer los cuadros de estadísticas más pequeños en mobile */
+          .chart-card {
+            padding: 1.25rem 1.5rem;
+          }
+
+          .chart-card-featured {
+            padding: 1.5rem 1.5rem;
+          }
+
+          .chart-title {
+            font-size: 1.25rem;
+          }
+
+          .chart-subtitle {
+            font-size: 0.875rem;
+          }
+
+          .chart-title-small {
+            font-size: 0.9375rem;
+          }
+
+          .chart-subtitle-small {
+            font-size: 0.75rem;
+          }
+
+          .chart-icon-wrapper {
+            width: 40px;
+            height: 40px;
+          }
+
+          .chart-icon {
+            width: 20px;
+            height: 20px;
+          }
+
+          .circular-chart {
+            max-width: 180px;
+          }
+
+          .circular-chart-value {
+            font-size: 2rem;
+          }
+
+          .circular-chart-label {
+            font-size: 0.75rem;
+          }
+
+          .chart-value-large {
+            font-size: 1.75rem;
+          }
+
+          .chart-header {
+            margin-bottom: 1rem;
+          }
+
+          .mini-chart-container {
+            gap: 0.75rem;
+          }
+
           .doses-box {
-            max-height: 400px;
+            max-height: 600px;
           }
 
           .doses-box-header {

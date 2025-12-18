@@ -480,7 +480,7 @@ export default function MiHistorial() {
       <div className="history-header">
         <div className="header-content-history">
           <div className="title-section">
-            <h1 className="page-title">Mi Historial de Tomas</h1>
+            <h1 className="page-title">Mi Historial</h1>
             <p className="page-subtitle">Registro completo de medicación</p>
           </div>
         </div>
@@ -870,6 +870,10 @@ export default function MiHistorial() {
           padding: 0 2rem;
           position: relative;
           z-index: 5;
+        }
+
+        .history-box {
+          margin-top: 0;
         }
 
         .history-box-header-top {
@@ -1630,6 +1634,7 @@ export default function MiHistorial() {
           .history-box {
             max-height: calc(100vh - 60px);
             border-radius: 20px;
+            margin-top: 2rem;
           }
 
           .history-box-header {
