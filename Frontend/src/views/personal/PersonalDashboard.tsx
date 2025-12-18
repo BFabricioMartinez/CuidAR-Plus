@@ -1330,12 +1330,16 @@ export default function PersonalDashboard() {
           border: 1px solid rgba(255, 255, 255, 0.8);
           box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 280px);
         }
 
         .treatments-box-header {
           padding: 1.5rem 2rem;
           background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
           border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+          flex-shrink: 0;
         }
 
         .treatments-box-title {
@@ -1349,7 +1353,28 @@ export default function PersonalDashboard() {
         }
 
         .treatments-box-content {
+          flex: 1;
+          overflow-y: auto;
           padding: 1.5rem;
+        }
+
+        /* Scroll personalizado para tratamientos */
+        .treatments-box-content::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .treatments-box-content::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+        }
+
+        .treatments-box-content::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+        }
+
+        .treatments-box-content::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
         }
 
         .treatments-grid {
@@ -1465,8 +1490,8 @@ export default function PersonalDashboard() {
           }
 
           .mini-stats-grid {
-            grid-template-columns: 1fr;
-            gap: 1rem;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
           }
 
           /* Hacer los cuadros de estadísticas más pequeños en mobile */
@@ -1542,6 +1567,10 @@ export default function PersonalDashboard() {
 
           .doses-box-content {
             padding: 1rem;
+          }
+
+          .treatments-box {
+            max-height: 400px;
           }
 
           .treatments-box-header {
