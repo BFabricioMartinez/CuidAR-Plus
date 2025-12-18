@@ -3,6 +3,7 @@ import Select from 'react-select';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
 import type { Assignment, User, Patient } from '../../api';
 import { toastSuccess, toastError, toastWarning } from '../../utils/toast';
+import ConfirmDialog from '../../components/modals/ConfirmDialog';
 
 // ============================================
 // TIPOS
@@ -36,6 +37,17 @@ export default function AsignacionesView() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showCreatePatientForm, setShowCreatePatientForm] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    assignmentId: number | null;
+    caregiverName: string;
+    patientName: string;
+  }>({
+    isOpen: false,
+    assignmentId: null,
+    caregiverName: '',
+    patientName: '',
+  });
 
   // Form de asignación
   const [selectedCaregiver, setSelectedCaregiver] = useState<{ value: string; label: string } | null>(null);
@@ -243,21 +255,33 @@ export default function AsignacionesView() {
     }
   };
 
-  // Eliminar asignación
-  const handleDelete = async (id: number, caregiverName: string, patientName: string) => {
-    // Confirmación nativa para operaciones críticas
-    const confirmed = window.confirm(
-      `¿Confirmar eliminación?\n\nCuidador: ${caregiverName}\nPaciente: ${patientName}\n\nEsta acción no se puede deshacer.`
-    );
+  // Abrir modal de confirmación de eliminación
+  const handleDeleteClick = (id: number, caregiverName: string, patientName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      assignmentId: id,
+      caregiverName,
+      patientName,
+    });
+  };
 
-    if (!confirmed) return;
+  // Confirmar eliminación
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.assignmentId) return;
 
     setLoading(true);
 
     try {
-      await assignmentsApi.deactivate(id);
+      await assignmentsApi.deactivate(deleteModal.assignmentId);
 
       toastSuccess('Asignación eliminada correctamente');
+
+      setDeleteModal({
+        isOpen: false,
+        assignmentId: null,
+        caregiverName: '',
+        patientName: '',
+      });
 
       fetchAssignments();
     } catch (err: any) {
@@ -265,6 +289,18 @@ export default function AsignacionesView() {
       toastError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cerrar modal de eliminación
+  const handleCloseDeleteModal = () => {
+    if (!loading) {
+      setDeleteModal({
+        isOpen: false,
+        assignmentId: null,
+        caregiverName: '',
+        patientName: '',
+      });
     }
   };
 
@@ -560,6 +596,8 @@ export default function AsignacionesView() {
                     className="react-select-container"
                     classNamePrefix="react-select"
                     noOptionsMessage={() => 'No se encontraron cuidadores'}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
                   />
                 </div>
 
@@ -580,6 +618,8 @@ export default function AsignacionesView() {
                     className="react-select-container"
                     classNamePrefix="react-select"
                     noOptionsMessage={() => 'No se encontraron pacientes ni usuarios personal'}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
                   />
                 </div>
               </div>
@@ -672,7 +712,7 @@ export default function AsignacionesView() {
                       </div>
                       <button
                         onClick={() =>
-                          handleDelete(
+                          handleDeleteClick(
                             assignment.id,
                             assignment.caregiver_name,
                             assignment.patient_name
@@ -693,6 +733,19 @@ export default function AsignacionesView() {
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de eliminación */}
+      <ConfirmDialog
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Confirmar eliminación"
+        message={`¿Estás seguro de que querés eliminar esta asignación?\n\nCuidador: ${deleteModal.caregiverName}\nPaciente: ${deleteModal.patientName}\n\nEsta acción no se puede deshacer.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        type="danger"
+        loading={loading}
+      />
 
       <style>{`
         .admin-assignments-container {
@@ -1042,6 +1095,11 @@ export default function AsignacionesView() {
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
           margin-top: 0.5rem !important;
           overflow: hidden !important;
+          z-index: 9999 !important;
+        }
+
+        .react-select__menu-portal {
+          z-index: 9999 !important;
         }
 
         .react-select__menu-list {
