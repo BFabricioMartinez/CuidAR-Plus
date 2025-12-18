@@ -115,25 +115,38 @@ export default function Navbar() {
   };
 
   // Handler para probar notificación programada (10 segundos)
-  const handleTestNotification = () => {
+  const handleTestNotification = async () => {
     if (!notificationsEnabled) {
       alert('Primero activa las notificaciones con el botón de la campana');
       return;
     }
 
     // Verificar permisos explícitamente
-    console.log('🔍 Estado de permisos:', Notification.permission);
     if (Notification.permission !== 'granted') {
       alert('ERROR: Permisos no otorgados. Estado: ' + Notification.permission);
       return;
     }
 
     alert('✅ Permisos OK. En 10 segundos recibirás la notificación');
-    console.log('⏰ Notificación programada para dentro de 10 segundos...');
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
-        console.log('🚀 Intentando crear notificación...');
+        // Intentar usar Service Worker primero (Android)
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.showNotification('💊 Hora de medicación', {
+            body: 'Tomar Paracetamol 500mg',
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-192x192.png',
+            requireInteraction: true,
+            tag: 'med-reminder',
+            data: { url: window.location.origin }
+          });
+          console.log('✅ Notificación enviada vía Service Worker');
+          return;
+        }
+
+        // Fallback: Notification API (iOS, desktop)
         const notification = new Notification('💊 Hora de medicación', {
           body: 'Tomar Paracetamol 500mg',
           icon: '/pwa-192x192.png',
@@ -143,20 +156,14 @@ export default function Navbar() {
         });
 
         notification.onclick = () => {
-          console.log('👆 Click en notificación!');
-          alert('Click en notificación!');
+          window.focus();
           notification.close();
         };
 
-        notification.onerror = (error) => {
-          console.error('❌ Error en notificación:', error);
-          alert('ERROR en notificación: ' + error);
-        };
-
-        console.log('✅ Notificación creada correctamente');
+        console.log('✅ Notificación enviada vía Notification API');
       } catch (error) {
         console.error('❌ Error al crear notificación:', error);
-        alert('ERROR al crear notificación: ' + error);
+        alert('ERROR: ' + (error instanceof Error ? error.message : String(error)));
       }
     }, 10000);
   };

@@ -114,23 +114,37 @@ export const useNotifications = () => {
     return timeoutId;
   }, [enabled, permission]);
 
-  // Mostrar notificación
-  const showNotification = useCallback((title: string, body: string, icon?: string) => {
+  // Mostrar notificación (usando Service Worker para compatibilidad con Android)
+  const showNotification = useCallback(async (title: string, body: string, icon?: string) => {
     if (permission !== 'granted') {
       // Silencioso - el usuario simplemente no tiene permisos activados
       return;
     }
 
     try {
+      // Intentar usar Service Worker primero (más confiable en Android)
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, {
+          body,
+          icon: icon || '/pwa-192x192.png',
+          badge: '/pwa-192x192.png',
+          tag: 'medication-reminder',
+          requireInteraction: true,
+          data: { url: window.location.origin }, // Para manejar clicks
+        });
+        return;
+      }
+
+      // Fallback: usar Notification API directa (iOS, desktop)
       const notification = new Notification(title, {
         body,
         icon: icon || '/pwa-192x192.png',
         badge: '/pwa-192x192.png',
         tag: 'medication-reminder',
-        requireInteraction: true, // La notificación no se cierra automáticamente
+        requireInteraction: true,
       });
 
-      // Opcional: manejar click en notificación
       notification.onclick = () => {
         window.focus();
         notification.close();
