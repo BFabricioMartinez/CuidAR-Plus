@@ -81,7 +81,7 @@ export default function Navbar() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('selectedPatientId'); // Limpiar selección de paciente
-    navigate('/');
+    navigate('/login');
   };
 
   const navItems: NavItem[] = [

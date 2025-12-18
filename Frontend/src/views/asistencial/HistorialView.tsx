@@ -168,7 +168,7 @@ export default function HistorialView() {
         <div className="header-content-history">
           <div className="title-section">
             <h1 className="page-title">
-              <span className="title-text-desktop">Historial de Tomas</span>
+              <span className="title-text-desktop">Historial</span>
               <span className="title-text-mobile">Historial</span>
             </h1>
             <p className="page-subtitle">Registro de medicación de tus pacientes</p>
