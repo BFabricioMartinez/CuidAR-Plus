@@ -121,16 +121,43 @@ export default function Navbar() {
       return;
     }
 
-    alert('En 10 segundos recibirás una notificación de prueba');
+    // Verificar permisos explícitamente
+    console.log('🔍 Estado de permisos:', Notification.permission);
+    if (Notification.permission !== 'granted') {
+      alert('ERROR: Permisos no otorgados. Estado: ' + Notification.permission);
+      return;
+    }
+
+    alert('✅ Permisos OK. En 10 segundos recibirás la notificación');
+    console.log('⏰ Notificación programada para dentro de 10 segundos...');
 
     setTimeout(() => {
-      new Notification('💊 Hora de medicación', {
-        body: 'Tomar Paracetamol 500mg',
-        icon: '/pwa-192x192.png',
-        badge: '/pwa-192x192.png',
-        requireInteraction: true,
-        tag: 'med-reminder'
-      });
+      try {
+        console.log('🚀 Intentando crear notificación...');
+        const notification = new Notification('💊 Hora de medicación', {
+          body: 'Tomar Paracetamol 500mg',
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-192x192.png',
+          requireInteraction: true,
+          tag: 'med-reminder'
+        });
+
+        notification.onclick = () => {
+          console.log('👆 Click en notificación!');
+          alert('Click en notificación!');
+          notification.close();
+        };
+
+        notification.onerror = (error) => {
+          console.error('❌ Error en notificación:', error);
+          alert('ERROR en notificación: ' + error);
+        };
+
+        console.log('✅ Notificación creada correctamente');
+      } catch (error) {
+        console.error('❌ Error al crear notificación:', error);
+        alert('ERROR al crear notificación: ' + error);
+      }
     }, 10000);
   };
 
