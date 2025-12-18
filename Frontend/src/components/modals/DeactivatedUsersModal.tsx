@@ -174,16 +174,14 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
 
           {/* Body */}
           <div className="modal-body">
-            {error && (
+            {error ? (
               <div className="error-message">
                 <svg viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
                 <p>{error}</p>
               </div>
-            )}
-
-            {loading && deactivatedUsers.length === 0 && (
+            ) : loading ? (
               <div className="loading-overlay">
                 <div className="loading-spinner-inline">
                   <div className="spinner-dot"></div>
@@ -191,18 +189,15 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
                   <div className="spinner-dot"></div>
                 </div>
               </div>
-            )}
-
-            {!error && deactivatedUsers.length === 0 && !loading && (
+            ) : deactivatedUsers.length === 0 ? (
               <div className="empty-state">
                 <svg viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                 </svg>
-                <p>No hay usuarios desactivados</p>
+                <h3 className="empty-state-title">No hay usuarios desactivados</h3>
+                <p className="empty-state-text">Todos los usuarios del sistema están activos en este momento.</p>
               </div>
-            )}
-
-            {deactivatedUsers.length > 0 && (
+            ) : (
               <div className="deactivated-users-list">
                 {deactivatedUsers.map((user) => (
                   <div key={user.id} className="deactivated-user-card">
@@ -395,6 +390,7 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
           flex: 1;
           display: flex;
           flex-direction: column;
+          min-height: 300px;
         }
 
         .modal-body::-webkit-scrollbar {
@@ -573,15 +569,17 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 3rem 2rem;
+          padding: 4rem 2rem;
           text-align: center;
+          width: 100%;
+          min-height: 300px;
         }
 
         .error-message svg,
         .empty-state svg {
-          width: 64px;
-          height: 64px;
-          margin-bottom: 1rem;
+          width: 80px;
+          height: 80px;
+          margin-bottom: 1.25rem;
         }
 
         .error-message svg {
@@ -589,7 +587,8 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
         }
 
         .empty-state svg {
-          color: #9ca3af;
+          color: #6b7280;
+          opacity: 0.8;
         }
 
         .error-message p,
@@ -597,6 +596,20 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
           font-size: 0.9375rem;
           color: #6b7280;
           margin: 0;
+        }
+
+        .empty-state-title {
+          font-size: 1.125rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 0.5rem 0;
+        }
+
+        .empty-state-text {
+          font-size: 0.9375rem;
+          color: #6b7280;
+          margin: 0;
+          line-height: 1.5;
         }
 
         .loading-spinner-inline {
@@ -651,6 +664,12 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
 
           .modal-body {
             padding: 1.5rem;
+            min-height: 250px;
+          }
+
+          .empty-state {
+            padding: 3rem 1.5rem;
+            min-height: 250px;
           }
 
           .user-card-header {
@@ -676,6 +695,20 @@ export default function DeactivatedUsersModal({ isOpen, onClose, onUserReactivat
           .reactivate-btn-top {
             width: 40px;
             height: 40px;
+          }
+
+          .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 1.25rem;
+          }
+
+          .empty-state-title {
+            font-size: 1.25rem;
+          }
+
+          .empty-state-text {
+            font-size: 1rem;
           }
         }
       `}</style>
