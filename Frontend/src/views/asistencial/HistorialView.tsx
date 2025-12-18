@@ -19,7 +19,6 @@ export default function HistorialView() {
     nextCursor,
     hasMore,
     filterStatus,
-    filterDate,
     filterDateFrom,
     filterDateTo,
     filterTreatment,
@@ -44,7 +43,7 @@ export default function HistorialView() {
   });
 
   // Ref para el timeout del debounce
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sincronizar estados locales con los del hook
   useEffect(() => {
@@ -251,21 +250,16 @@ export default function HistorialView() {
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
-                        control: (base) => ({
+                        control: (base, state) => ({
                           ...base,
-                          border: '1.5px solid #e5e7eb',
+                          border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #e5e7eb',
                           borderRadius: '8px',
                           minHeight: '40px',
-                          boxShadow: 'none',
+                          boxShadow: state.isFocused ? '0 0 0 3px rgba(102, 126, 234, 0.1)' : 'none',
                           background: '#fff',
                           '&:hover': {
-                            border: '1.5px solid #cbd5e1',
+                            border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #cbd5e1',
                           },
-                        }),
-                        controlFocused: (base) => ({
-                          ...base,
-                          border: '1.5px solid #667eea',
-                          boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
                         }),
                         menuPortal: (base) => ({
                           ...base,
@@ -296,21 +290,16 @@ export default function HistorialView() {
                       menuPortalTarget={document.body}
                       menuPosition="fixed"
                       styles={{
-                        control: (base) => ({
+                        control: (base, state) => ({
                           ...base,
-                          border: '1.5px solid #e5e7eb',
+                          border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #e5e7eb',
                           borderRadius: '8px',
                           minHeight: '40px',
-                          boxShadow: 'none',
+                          boxShadow: state.isFocused ? '0 0 0 3px rgba(102, 126, 234, 0.1)' : 'none',
                           background: '#fff',
                           '&:hover': {
-                            border: '1.5px solid #cbd5e1',
+                            border: state.isFocused ? '1.5px solid #667eea' : '1.5px solid #cbd5e1',
                           },
-                        }),
-                        controlFocused: (base) => ({
-                          ...base,
-                          border: '1.5px solid #667eea',
-                          boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
                         }),
                         menuPortal: (base) => ({
                           ...base,
