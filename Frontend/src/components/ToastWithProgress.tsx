@@ -59,6 +59,7 @@ export function ToastWithProgress({ t, message, icon, type }: ToastWithProgressP
         opacity: t.visible ? 1 : 0,
         transform: t.visible ? 'translateY(0)' : 'translateY(-10px)',
         transition: 'opacity 0.3s ease, transform 0.3s ease',
+        zIndex: 10001, // Asegurar que aparezca por encima de modales (z-index 9999)
       }}
     >
       {/* Contenido del toast */}

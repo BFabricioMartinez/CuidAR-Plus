@@ -12,10 +12,14 @@ import {
 import Select from 'react-select';
 import { useUsers } from '../../hooks/useUsers';
 import { usersApi } from '../../api/users';
+import { assignmentsApi } from '../../api/assignments';
+import { patientsApi } from '../../api/patients';
 import type { User } from '../../types/api';
 import EditUserModal from './EditUserModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import ConfirmDialog from './ConfirmDialog';
+import DeactivatedUsersModal from './DeactivatedUsersModal';
+import { toastSuccess, toastError } from '../../utils/toast';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -40,8 +44,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(null);
   const [togglingUser, setTogglingUser] = useState<User | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showDeactivatedUsersModal, setShowDeactivatedUsersModal] = useState(false);
 
   // Función auxiliar para obtener las iniciales del nombre
   const getInitials = (name: string | null): string => {
@@ -160,11 +163,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     []
   );
 
-  // Filtrar usuarios por rol
+  // Filtrar usuarios por rol y búsqueda local
   const filteredUsers = useMemo(() => {
-    if (roleFilter === 'all') return users;
-    return users.filter((user) => user.role === roleFilter);
-  }, [users, roleFilter]);
+    let result = users;
+
+    // Filtrar por rol
+    if (roleFilter !== 'all') {
+      result = result.filter((user) => user.role === roleFilter);
+    }
+
+    // Filtrar por búsqueda local (nombre e email)
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.trim().toLowerCase();
+      result = result.filter((user) => {
+        const nameMatch = user.name?.toLowerCase().includes(query) || false;
+        const emailMatch = user.email?.toLowerCase().includes(query) || false;
+        return nameMatch || emailMatch;
+      });
+    }
+
+    return result;
+  }, [users, roleFilter, searchQuery]);
 
   // Configuración de TanStack Table
   const table = useReactTable({
@@ -179,20 +198,24 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getRowId: (row) => `user-${row.id}`, // Key estable para cada fila
     manualPagination: true, // Paginación manual desde el backend
+    enableFilters: false, // Deshabilitar filtros de TanStack ya que filtramos manualmente
   });
 
   // Handler para guardar cambios de usuario
-  const handleSaveUser = async (userId: number, data: { name?: string; email?: string; role?: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL' }) => {
+  const handleSaveUser = async (userId: number, data: { name?: string; email?: string }) => {
     try {
-      setErrorMessage(null);
-      await usersApi.update({ id: userId, ...data });
-      setSuccessMessage('Usuario actualizado correctamente');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      // Asegurar que solo se envíen los campos permitidos, sin password
+      const updateData: { id: number; name?: string; email?: string } = { id: userId };
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.email !== undefined) updateData.email = data.email;
+      
+      await usersApi.update(updateData);
+      toastSuccess('Usuario actualizado correctamente');
       await refresh(); // Recargar la lista de usuarios
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al actualizar el usuario');
-      setTimeout(() => setErrorMessage(null), 5000);
+      toastError(err.message || 'Error al actualizar el usuario');
       throw err;
     }
   };
@@ -200,14 +223,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // Handler para cambiar contraseña
   const handleChangePassword = async (userId: number, password: string) => {
     try {
-      setErrorMessage(null);
-      await usersApi.update({ id: userId, password });
-      setSuccessMessage('Contraseña actualizada correctamente');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      // Enviar la contraseña en texto plano - el backend la hasheará con bcrypt
+      // Asegurar que solo se envíe id y password, sin otros campos
+      await usersApi.update({ 
+        id: userId, 
+        password: password // El backend hasheará esta contraseña con bcrypt
+      });
+      toastSuccess('Contraseña actualizada correctamente');
       await refresh(); // Recargar la lista de usuarios
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al cambiar la contraseña');
-      setTimeout(() => setErrorMessage(null), 5000);
+      toastError(err.message || 'Error al cambiar la contraseña');
       throw err;
     }
   };
@@ -217,17 +242,145 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (!togglingUser) return;
 
     setToggleLoading(true);
-    setErrorMessage(null);
     try {
       const newActiveState = !togglingUser.active;
-      await usersApi.update({ id: togglingUser.id, active: newActiveState });
-      setSuccessMessage(`Usuario ${newActiveState ? 'activado' : 'desactivado'} correctamente`);
-      setTimeout(() => setSuccessMessage(null), 3000);
-      await refresh(); // Recargar la lista de usuarios
+      const userId = togglingUser.id;
+      
+      // Usar el endpoint específico de deactivate para desactivar
+      // Usar update con active: true para activar
+      if (!newActiveState) {
+        // Desactivar usando el endpoint específico
+        await usersApi.deactivate(userId);
+        
+        // Si es un usuario PERSONAL, desactivar también su paciente y asignaciones
+        if (togglingUser.role === 'PERSONAL') {
+          try {
+            // Para usuarios PERSONAL: User.id === Patient.caregiver_id (NO Patient.id)
+            // El usuario PERSONAL es su propio cuidador
+            // Primero buscar el paciente asociado al usuario
+            const patientsResponse = await patientsApi.list({
+              limit: 1,
+              filters: {
+                caregiver_id: userId,
+                active: true
+              },
+            });
+
+            if (patientsResponse.items.length > 0) {
+              const patient = patientsResponse.items[0];
+              
+              // Desactivar el paciente asociado
+              await patientsApi.deactivate(patient.id);
+              
+              // Ahora buscar las asignaciones donde este paciente está asignado
+              const assignments = await assignmentsApi.getAll(undefined, patient.id);
+              const activeAssignments = assignments.filter(a => a.active);
+              
+              // Desactivar cada asignación activa
+              if (activeAssignments.length > 0) {
+                await Promise.all(
+                  activeAssignments.map(assignment => 
+                    assignmentsApi.deactivate(assignment.id)
+                  )
+                );
+              }
+            }
+          } catch (assignmentsErr: any) {
+            console.error('Error al desactivar paciente y asignaciones:', assignmentsErr);
+            // No mostrar error al usuario, solo loguear
+            // El usuario ya fue desactivado, el paciente y asignaciones son secundarias
+          }
+        }
+      } else {
+        // Activar usando el endpoint de update
+        // Asegurar que solo se envíe id y active, sin otros campos
+        await usersApi.update({ 
+          id: userId, 
+          active: true 
+        });
+        
+        // Si es un usuario PERSONAL, reactivar también su paciente asociado
+        if (togglingUser.role === 'PERSONAL') {
+          try {
+            // Para usuarios PERSONAL: User.id === Patient.caregiver_id
+            // Obtener información actualizada del usuario que incluye los pacientes
+            const updatedUser = await usersApi.getById(userId);
+            
+            let patientId: number | null = null;
+            
+            // Intentar obtener el paciente desde la información del usuario (si está disponible)
+            if (updatedUser.patients && updatedUser.patients.length > 0) {
+              patientId = updatedUser.patients[0].id;
+            } else {
+              // Si no está disponible, buscar el paciente usando el endpoint de pacientes
+              // El backend filtra por active: true por defecto, así que necesitamos especificar active: false
+              const patientsResponse = await patientsApi.list({
+                limit: 1,
+                filters: {
+                  caregiver_id: userId,
+                  active: false, // Buscar pacientes desactivados para reactivarlos
+                },
+              });
+
+              if (patientsResponse.items.length > 0) {
+                patientId = patientsResponse.items[0].id;
+              }
+            }
+            
+            // Si encontramos el paciente, reactivarlo
+            if (patientId) {
+              await patientsApi.update({
+                id: patientId,
+                active: true,
+              });
+            }
+          } catch (patientErr: any) {
+            console.error('Error al reactivar paciente:', patientErr);
+            // No mostrar error al usuario, solo loguear
+            // El usuario ya fue reactivado, el paciente es secundario
+          }
+        }
+      }
+      
+      // Mostrar mensaje de éxito
+      let successMessage = `Usuario ${newActiveState ? 'activado' : 'desactivado'} correctamente`;
+      
+      // Si es un usuario PERSONAL y se desactivó, informar sobre paciente y asignaciones desactivadas
+      if (togglingUser.role === 'PERSONAL' && !newActiveState) {
+        try {
+          const patientsResponse = await patientsApi.list({
+            limit: 1,
+            filters: {
+              caregiver_id: userId,
+            },
+          });
+
+          if (patientsResponse.items.length > 0) {
+            const patient = patientsResponse.items[0];
+            const assignments = await assignmentsApi.getAll(undefined, patient.id);
+            const activeAssignments = assignments.filter(a => a.active);
+            
+            let parts = ['Usuario desactivado', 'Paciente desactivado'];
+            if (activeAssignments.length > 0) {
+              parts.push(`${activeAssignments.length} asignación${activeAssignments.length > 1 ? 'es' : ''} desactivada${activeAssignments.length > 1 ? 's' : ''}`);
+            }
+            successMessage = parts.join('. ') + '.';
+          }
+        } catch (err) {
+          // Si hay error al verificar, solo mostrar el mensaje básico
+          console.error('Error al verificar paciente y asignaciones:', err);
+        }
+      }
+      
+      toastSuccess(successMessage);
+      
+      // Cerrar el modal de confirmación
       setTogglingUser(null);
+      
+      // Recargar la lista de usuarios para reflejar el cambio
+      await refresh();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error al cambiar el estado del usuario');
-      setTimeout(() => setErrorMessage(null), 5000);
+      toastError(err.message || 'Error al cambiar el estado del usuario');
     } finally {
       setToggleLoading(false);
     }
@@ -275,40 +428,88 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     };
   }, [isOpen, hasMore, loading, loadMore, error]);
 
-  // Manejar búsqueda con debounce
+  // Manejar búsqueda: filtro local funciona inmediatamente
+  // Solo recargamos del servidor cuando se limpia la búsqueda
   useEffect(() => {
     if (!isOpen || error || !hasInitialLoad) return;
 
-    const timer = setTimeout(() => {
-      if (searchQuery.trim() !== '') {
-        search(searchQuery.trim());
-        refresh();
-      } else {
-        // Si se limpia la búsqueda, recargar todos los usuarios
+    // Si se limpia la búsqueda, recargar todos los usuarios del servidor
+    if (searchQuery.trim() === '') {
+      const timer = setTimeout(() => {
         search('');
         refresh();
-      }
-    }, 300);
+      }, 300);
 
-    return () => clearTimeout(timer);
+      return () => clearTimeout(timer);
+    }
+    // El filtro local maneja la búsqueda mientras se escribe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, isOpen, hasInitialLoad]);
 
-  // Cerrar modal con tecla ESC
+  // Cerrar modal con tecla ESC y prevenir scroll del fondo
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
 
+    // Prevenir scroll del mouse en el fondo
+    const preventBackgroundScroll = (e: WheelEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      const modalBackdrop = document.querySelector('.modal-backdrop');
+      
+      // Si el evento viene del modal, permitirlo (el scroll dentro del modal funciona)
+      if (modalBackdrop && modalBackdrop.contains(target)) {
+        return;
+      }
+      
+      // Si el evento viene del fondo, prevenirlo
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
     if (isOpen) {
+      // Guardar la posición actual del scroll
+      const scrollY = window.scrollY;
+      const scrollX = window.scrollX;
+      
       document.addEventListener('keydown', handleEscape);
-      // Prevenir scroll del body cuando el modal está abierto
+      
+      // Bloquear overflow del body y mantener posición
       document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.left = `-${scrollX}px`;
+      document.body.style.width = '100%';
+      
+      // Prevenir scroll del mouse en el fondo
+      // Usar capture phase para interceptar antes de que llegue al body
+      document.addEventListener('wheel', preventBackgroundScroll, { passive: false, capture: true });
+      document.addEventListener('touchmove', preventBackgroundScroll, { passive: false, capture: true });
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.removeEventListener('wheel', preventBackgroundScroll, { capture: true });
+      document.removeEventListener('touchmove', preventBackgroundScroll, { capture: true });
+      
+      // Restaurar scroll del body
+      const scrollY = document.body.style.top;
+      const scrollX = document.body.style.left;
+      
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.width = '';
+      
+      // Restaurar posición del scroll
+      if (scrollY && scrollX) {
+        window.scrollTo(
+          parseInt(scrollX || '0') * -1,
+          parseInt(scrollY || '0') * -1
+        );
+      }
     };
   }, [isOpen, onClose]);
 
@@ -333,33 +534,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p className="modal-subtitle">Configuración del sistema</p>
               </div>
             </div>
-            <button onClick={onClose} className="modal-close-btn">
-              <svg viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
+            <div className="modal-header-actions">
+              <button 
+                onClick={() => setShowDeactivatedUsersModal(true)} 
+                className="deactivated-users-btn"
+                title="Ver usuarios desactivados"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                </svg>
+                <span>Desactivados</span>
+              </button>
+              <button onClick={onClose} className="modal-close-btn">
+                <svg viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Body */}
           <div className="modal-body">
-            {/* Success/Error Messages */}
-            {successMessage && (
-              <div className="message-banner message-success">
-                <svg viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span>{successMessage}</span>
-              </div>
-            )}
-            {errorMessage && (
-              <div className="message-banner message-error">
-                <svg viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
             {/* Search Bar */}
             <div className="search-section">
               <div className="search-wrapper">
@@ -386,22 +581,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   menuPortalTarget={document.body}
                   menuPosition="fixed"
                   styles={{
-                    control: (base) => ({
+                    control: (base, state) => ({
                       ...base,
                       minWidth: '180px',
-                      border: '2px solid #e5e7eb',
+                      border: state.isFocused ? '2px solid #667eea' : '2px solid #e5e7eb',
                       borderRadius: '10px',
                       fontSize: '0.9375rem',
                       cursor: 'pointer',
-                      boxShadow: 'none',
+                      boxShadow: state.isFocused ? '0 0 0 3px rgba(102, 126, 234, 0.1)' : 'none',
                       '&:hover': {
                         borderColor: '#667eea',
                       },
-                    }),
-                    controlFocused: (base) => ({
-                      ...base,
-                      border: '2px solid #667eea',
-                      boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
                     }),
                     menuPortal: (base) => ({
                       ...base,
@@ -449,34 +639,99 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 )}
 
                 {filteredUsers.length > 0 && (
-                  <div className="table-wrapper">
-                    <table className="users-table">
-                      <thead>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                          <tr key={headerGroup.id} className="table-header-row">
-                            {headerGroup.headers.map((header) => (
-                              <th key={header.id} className="table-header">
-                                {header.isPlaceholder
-                                  ? null
-                                  : flexRender(header.column.columnDef.header, header.getContext())}
-                              </th>
-                            ))}
-                          </tr>
-                        ))}
-                      </thead>
-                      <tbody>
-                        {table.getRowModel().rows.map((row) => (
-                          <tr key={row.id} className="table-row">
-                            {row.getVisibleCells().map((cell) => (
-                              <td key={cell.id} className="table-cell">
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    {/* Vista de tabla para desktop */}
+                    <div 
+                      key={`table-${searchQuery}-${roleFilter}`}
+                      className="table-wrapper desktop-view"
+                    >
+                      <table className="users-table">
+                        <thead>
+                          {table.getHeaderGroups().map((headerGroup) => (
+                            <tr key={headerGroup.id} className="table-header-row">
+                              {headerGroup.headers.map((header) => (
+                                <th key={header.id} className="table-header">
+                                  {header.isPlaceholder
+                                    ? null
+                                    : flexRender(header.column.columnDef.header, header.getContext())}
+                                </th>
+                              ))}
+                            </tr>
+                          ))}
+                        </thead>
+                        <tbody>
+                          {table.getRowModel().rows.map((row) => (
+                            <tr key={`${row.id}-${row.original.id}`} className="table-row">
+                              {row.getVisibleCells().map((cell) => (
+                                <td key={cell.id} className="table-cell">
+                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Vista de cards para mobile */}
+                    <div 
+                      key={`cards-${searchQuery}-${roleFilter}`}
+                      className="users-cards-wrapper mobile-view"
+                    >
+                      {filteredUsers.map((user) => (
+                        <div key={user.id} className="user-card">
+                          <div className="user-card-header">
+                            <div className="user-card-avatar">{getInitials(user.name)}</div>
+                            <div className="user-card-info">
+                              <h3 className="user-card-name">{user.name || 'Sin nombre'}</h3>
+                              <p className="user-card-email">{user.email}</p>
+                            </div>
+                            <span className={`role-badge role-${user.role.toLowerCase()} user-card-role`}>
+                              {getRoleText(user.role)}
+                            </span>
+                          </div>
+                          <div className="user-card-actions">
+                            <button
+                              className="action-btn action-edit"
+                              title="Editar usuario"
+                              onClick={() => setEditingUser(user)}
+                            >
+                              <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              className="action-btn action-password"
+                              title="Cambiar contraseña"
+                              onClick={() => setChangingPasswordUser(user)}
+                            >
+                              <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                              </svg>
+                              <span>Contraseña</span>
+                            </button>
+                            <button
+                              className={`action-btn ${user.active ? 'action-deactivate' : 'action-activate'}`}
+                              title={user.active ? 'Desactivar usuario' : 'Activar usuario'}
+                              onClick={() => setTogglingUser(user)}
+                            >
+                              {user.active ? (
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                              <span>{user.active ? 'Desactivar' : 'Activar'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -634,26 +889,49 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           color: #ffffff;
         }
 
+        .modal-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          position: relative;
+          z-index: 1;
+        }
+
+        .deactivated-users-btn {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(255, 255, 255, 0.2);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 8px;
+          color: #ffffff;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          white-space: nowrap;
+        }
+
+        .deactivated-users-btn:hover {
+          background: rgba(255, 255, 255, 0.3);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .deactivated-users-btn svg {
+          width: 18px;
+          height: 18px;
+        }
+
         .modal-body {
           padding: 0;
-          overflow-y: auto;
+          overflow: hidden;
           flex: 1;
           display: flex;
           flex-direction: column;
-        }
-
-        .modal-body::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .modal-body::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.05);
-          border-radius: 10px;
-        }
-
-        .modal-body::-webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          border-radius: 10px;
+          min-height: 0;
         }
 
         /* Search Section */
@@ -774,35 +1052,74 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           overflow-x: hidden;
           padding: 0;
           min-height: 400px;
+          height: 0;
           display: flex;
           flex-direction: column;
+          position: relative;
+          scrollbar-width: thin;
+          scrollbar-color: #667eea rgba(0, 0, 0, 0.05);
+        }
+
+        /* WebKit browsers (Chrome, Safari, Edge) */
+        .users-table-wrapper::-webkit-scrollbar {
+          width: 10px;
+        }
+
+        .users-table-wrapper::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 10px;
+          margin: 8px 0;
+        }
+
+        .users-table-wrapper::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 10px;
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+
+        .users-table-wrapper::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+          background-clip: padding-box;
         }
 
         .table-content-wrapper {
           flex: 1;
           position: relative;
           min-height: 300px;
-          transition: opacity 0.15s ease;
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          transition: opacity 0.2s ease;
         }
 
         .table-wrapper {
           width: 100%;
-          overflow-x: auto;
+          overflow-x: hidden;
+          flex: 1;
+          min-height: 0;
           opacity: 1;
-          transition: opacity 0.15s ease;
-          will-change: opacity;
+          transition: opacity 0.2s ease;
         }
 
-        .table-wrapper:not(:empty) {
-          animation: fadeInTable 0.2s ease-out;
+        /* Desktop: mostrar tabla, ocultar cards */
+        .table-wrapper.desktop-view {
+          display: block !important;
+          animation: fadeInTable 0.3s ease-out;
+        }
+
+        .users-cards-wrapper.mobile-view {
+          display: none !important;
         }
 
         @keyframes fadeInTable {
           from {
             opacity: 0;
+            transform: translateY(10px);
           }
           to {
             opacity: 1;
+            transform: translateY(0);
           }
         }
 
@@ -866,27 +1183,32 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
-          table-layout: fixed;
+          table-layout: auto;
+          display: table;
         }
 
         .users-table th:first-child,
         .users-table td:first-child {
-          width: 30%;
+          min-width: 150px;
+          max-width: 30%;
         }
 
         .users-table th:nth-child(2),
         .users-table td:nth-child(2) {
-          width: 35%;
+          min-width: 180px;
+          max-width: 35%;
         }
 
         .users-table th:nth-child(3),
         .users-table td:nth-child(3) {
-          width: 20%;
+          min-width: 100px;
+          max-width: 20%;
         }
 
         .users-table th:last-child,
         .users-table td:last-child {
-          width: 15%;
+          min-width: 120px;
+          max-width: 15%;
         }
 
         .table-header-row {
@@ -905,8 +1227,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           background: #f9fafb;
           position: sticky;
           top: 0;
-          z-index: 10;
+          z-index: 20;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+          backdrop-filter: blur(8px);
         }
 
         .table-header:first-child {
@@ -923,11 +1246,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         .table-row {
           border-bottom: 1px solid #f3f4f6;
-          transition: background-color 0.15s ease;
+          transition: background-color 0.15s ease, transform 0.2s ease;
+          animation: fadeInRow 0.3s ease-out backwards;
+        }
+
+        .table-row:nth-child(1) {
+          animation-delay: 0.05s;
+        }
+
+        .table-row:nth-child(2) {
+          animation-delay: 0.1s;
+        }
+
+        .table-row:nth-child(3) {
+          animation-delay: 0.15s;
+        }
+
+        .table-row:nth-child(4) {
+          animation-delay: 0.2s;
+        }
+
+        .table-row:nth-child(5) {
+          animation-delay: 0.25s;
         }
 
         .table-row:hover {
           background: rgba(102, 126, 234, 0.05);
+          transform: translateX(4px);
+        }
+
+        @keyframes fadeInRow {
+          from {
+            opacity: 0;
+            transform: translateX(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
         }
 
         .table-cell {
@@ -1181,6 +1537,144 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           border-top: 1px solid #f3f4f6;
         }
 
+        /* Vista Desktop/Mobile - Estilos base */
+        /* Los estilos específicos se aplican en las clases combinadas arriba */
+
+        /* Users Cards (Mobile) */
+        .users-cards-wrapper {
+          flex-direction: column;
+          gap: 1rem;
+          padding: 1rem;
+        }
+
+        /* Desktop: ocultar cards, mostrar tabla */
+        .users-cards-wrapper.mobile-view {
+          display: none !important;
+        }
+
+        .user-card {
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          padding: 1.25rem;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+          transition: all 0.3s ease;
+          animation: slideInCard 0.4s ease-out backwards;
+        }
+
+        .user-card:nth-child(1) {
+          animation-delay: 0.05s;
+        }
+
+        .user-card:nth-child(2) {
+          animation-delay: 0.1s;
+        }
+
+        .user-card:nth-child(3) {
+          animation-delay: 0.15s;
+        }
+
+        .user-card:nth-child(4) {
+          animation-delay: 0.2s;
+        }
+
+        .user-card:nth-child(5) {
+          animation-delay: 0.25s;
+        }
+
+        .user-card:hover {
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          transform: translateY(-2px);
+        }
+
+        @keyframes slideInCard {
+          from {
+            opacity: 0;
+            transform: translateY(15px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .user-card-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          margin-bottom: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .user-card-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.875rem;
+          font-weight: 700;
+          flex-shrink: 0;
+          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .user-card-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .user-card-name {
+          font-size: 1rem;
+          font-weight: 600;
+          color: #1f2937;
+          margin: 0 0 0.25rem 0;
+          word-wrap: break-word;
+        }
+
+        .user-card-email {
+          font-size: 0.875rem;
+          color: #6b7280;
+          margin: 0;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+        }
+
+        .user-card-role {
+          flex-shrink: 0;
+        }
+
+        .user-card-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .user-card-actions .action-btn {
+          flex: 1;
+          min-width: 100px;
+          height: 40px;
+          padding: 0.5rem 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+
+        .user-card-actions .action-btn svg {
+          width: 18px;
+          height: 18px;
+          flex-shrink: 0;
+        }
+
+        .user-card-actions .action-btn span {
+          display: inline-block;
+        }
+
         @media (max-width: 640px) {
           .modal-backdrop {
             padding: 0;
@@ -1195,6 +1689,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           .modal-header {
             padding: 1.5rem;
+            flex-wrap: wrap;
+          }
+
+          .modal-header-actions {
+            width: 100%;
+            justify-content: flex-end;
+            margin-top: 0.5rem;
+          }
+
+          .deactivated-users-btn {
+            font-size: 0.8125rem;
+            padding: 0.5rem 0.75rem;
+          }
+
+          .deactivated-users-btn span {
+            display: none;
           }
 
           .modal-title {
@@ -1223,54 +1733,108 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             width: 100%;
           }
 
+          .table-wrapper.desktop-view {
+            display: none !important;
+          }
+
+          .users-cards-wrapper.mobile-view {
+            display: flex !important;
+            animation: fadeInCards 0.3s ease-out;
+          }
+
+          @keyframes fadeInCards {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .desktop-view {
+            display: none !important;
+          }
+
+          .mobile-view {
+            display: flex !important;
+          }
+
           .users-table-wrapper {
             padding: 0;
-            overflow-x: auto;
+            overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: #667eea rgba(0, 0, 0, 0.05);
+            height: 0;
           }
 
-          .users-table {
-            min-width: 700px;
+          .users-table-wrapper::-webkit-scrollbar {
+            width: 8px;
           }
 
-          .table-header {
-            padding: 1rem 1rem;
+          .users-table-wrapper::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 10px;
+            margin: 4px 0;
           }
 
-          .table-header:first-child {
-            padding-left: 1rem;
+          .users-table-wrapper::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
           }
 
-          .table-header:last-child {
-            padding-right: 1rem;
+          .users-table-wrapper::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+            background-clip: padding-box;
           }
 
-          .table-cell {
-            padding: 1rem 1rem;
+          .users-cards-wrapper {
+            padding: 1rem;
+            gap: 0.75rem;
           }
 
-          .table-cell:first-child {
-            padding-left: 1rem;
+          .user-card {
+            padding: 1rem;
           }
 
-          .table-cell:last-child {
-            padding-right: 1rem;
+          .user-card-header {
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
           }
 
-          .user-avatar-small {
-            width: 32px;
-            height: 32px;
-            font-size: 0.7rem;
+          .user-card-avatar {
+            width: 44px;
+            height: 44px;
+            font-size: 0.8125rem;
           }
 
-          .action-btn {
-            width: 28px;
-            height: 28px;
+          .user-card-name {
+            font-size: 0.9375rem;
           }
 
-          .action-btn svg {
-            width: 14px;
-            height: 14px;
+          .user-card-email {
+            font-size: 0.8125rem;
+          }
+
+          .user-card-actions {
+            gap: 0.5rem;
+          }
+
+          .user-card-actions .action-btn {
+            flex: 1;
+            min-width: 90px;
+            height: 38px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8125rem;
+          }
+
+          .user-card-actions .action-btn svg {
+            width: 16px;
+            height: 16px;
           }
         }
       `}</style>
@@ -1299,13 +1863,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         title={togglingUser?.active ? 'Desactivar Usuario' : 'Activar Usuario'}
         message={
           togglingUser?.active
-            ? `¿Estás seguro de que deseas desactivar a ${togglingUser.name || togglingUser.email}? El usuario no podrá acceder al sistema.`
+            ? `¿Estás seguro de que deseas desactivar a ${togglingUser.name || togglingUser.email}? El usuario no podrá acceder al sistema.${togglingUser.role === 'PERSONAL' ? ' También se desactivarán sus asignaciones con cuidadores.' : ''}`
             : `¿Estás seguro de que deseas activar a ${togglingUser?.name || togglingUser?.email}? El usuario podrá acceder al sistema nuevamente.`
         }
         confirmText={togglingUser?.active ? 'Desactivar' : 'Activar'}
         cancelText="Cancelar"
         type={togglingUser?.active ? 'warning' : 'info'}
         loading={toggleLoading}
+      />
+
+      {/* Modal de Usuarios Desactivados */}
+      <DeactivatedUsersModal
+        isOpen={showDeactivatedUsersModal}
+        onClose={() => setShowDeactivatedUsersModal(false)}
+        onUserReactivated={refresh}
       />
     </>
   );

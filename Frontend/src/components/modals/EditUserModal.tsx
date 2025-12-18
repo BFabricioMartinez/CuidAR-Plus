@@ -1,27 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../../types/api';
+import { toastError } from '../../utils/toast';
 
 interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
-  onSave: (userId: number, data: { name?: string; email?: string; role?: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL' }) => Promise<void>;
+  onSave: (userId: number, data: { name?: string; email?: string }) => Promise<void>;
 }
 
 export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUserModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'ADMIN' | 'ASISTENCIAL' | 'PERSONAL'>('PERSONAL');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Cargar datos del usuario cuando se abre el modal
   useEffect(() => {
     if (isOpen && user) {
       setName(user.name || '');
       setEmail(user.email);
-      setRole(user.role);
-      setError(null);
     }
   }, [isOpen, user]);
 
@@ -32,34 +29,32 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
 
     // Validaciones básicas
     if (!name.trim()) {
-      setError('El nombre es obligatorio');
+      toastError('El nombre es obligatorio');
       return;
     }
 
     if (!email.trim()) {
-      setError('El email es obligatorio');
+      toastError('El email es obligatorio');
       return;
     }
 
     // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError('El email no es válido');
+      toastError('El email no es válido');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       await onSave(user.id, {
         name: name.trim(),
         email: email.trim(),
-        role,
       });
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error al actualizar el usuario');
+      toastError(err.message || 'Error al actualizar el usuario');
     } finally {
       setLoading(false);
     }
@@ -67,7 +62,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
 
   const handleClose = () => {
     if (!loading) {
-      setError(null);
       onClose();
     }
   };
@@ -129,15 +123,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
           {/* Body */}
           <div className="modal-body">
             <form onSubmit={handleSubmit} className="edit-user-form">
-              {error && (
-                <div className="error-message">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  {error}
-                </div>
-              )}
-
               <div className="form-group">
                 <label htmlFor="edit-name" className="form-label">
                   Nombre Completo
@@ -168,24 +153,6 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
                   disabled={loading}
                   required
                 />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="edit-role" className="form-label">
-                  Rol
-                </label>
-                <select
-                  id="edit-role"
-                  className="form-select"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL')}
-                  disabled={loading}
-                  required
-                >
-                  <option value="PERSONAL">Personal</option>
-                  <option value="ASISTENCIAL">Asistencial</option>
-                  <option value="ADMIN">Administrador</option>
-                </select>
               </div>
 
               <div className="form-actions">
@@ -397,8 +364,7 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
           color: #374151;
         }
 
-        .form-input,
-        .form-select {
+        .form-input {
           width: 100%;
           padding: 0.75rem 1rem;
           border: 2px solid #e5e7eb;
@@ -410,24 +376,14 @@ export default function EditUserModal({ isOpen, onClose, user, onSave }: EditUse
           font-family: inherit;
         }
 
-        .form-input:focus,
-        .form-select:focus {
+        .form-input:focus {
           outline: none;
           border-color: #667eea;
           box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .form-input:disabled,
-        .form-select:disabled {
+        .form-input:disabled {
           background: #f3f4f6;
-          cursor: not-allowed;
-        }
-
-        .form-select {
-          cursor: pointer;
-        }
-
-        .form-select:disabled {
           cursor: not-allowed;
         }
 

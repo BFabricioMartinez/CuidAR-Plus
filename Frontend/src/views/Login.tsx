@@ -78,6 +78,15 @@ const Login: React.FC = () => {
           password: formData.password,
         });
 
+        // Verificar que la cuenta esté activa
+        if (!authResponse.user.active) {
+          authApi.clearAuth();
+          toastError('Tu cuenta está desactivada. Por favor, contacta a un administrador.');
+          setFieldErrors({ email: true, password: true });
+          setLoading(false);
+          return;
+        }
+
         authApi.saveAuth(authResponse);
 
         if (authResponse.user.role === 'ADMIN') {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../../types/api';
+import { toastError } from '../../utils/toast';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -14,7 +15,6 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Limpiar campos cuando se abre/cierra el modal
   useEffect(() => {
@@ -23,7 +23,6 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
       setConfirmPassword('');
       setShowPassword(false);
       setShowConfirmPassword(false);
-      setError(null);
     }
   }, [isOpen]);
 
@@ -34,28 +33,27 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
 
     // Validaciones
     if (!password.trim()) {
-      setError('La contraseña es obligatoria');
+      toastError('La contraseña es obligatoria');
       return;
     }
 
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+      toastError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden');
+      toastError('Las contraseñas no coinciden');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       await onSave(user.id, password);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error al cambiar la contraseña');
+      toastError(err.message || 'Error al cambiar la contraseña');
     } finally {
       setLoading(false);
     }
@@ -63,7 +61,6 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
 
   const handleClose = () => {
     if (!loading) {
-      setError(null);
       onClose();
     }
   };
@@ -135,15 +132,6 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
             </div>
 
             <form onSubmit={handleSubmit} className="password-form">
-              {error && (
-                <div className="error-message">
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  {error}
-                </div>
-              )}
-
               <div className="form-group">
                 <label htmlFor="new-password" className="form-label">
                   Nueva Contraseña

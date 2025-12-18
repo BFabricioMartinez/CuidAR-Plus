@@ -28,6 +28,12 @@ export interface User {
   email: string;
   role: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
   active: boolean;
+  patients?: Array<{
+    id: number;
+    name: string;
+    active: boolean;
+  }>;
+  patients_count?: number;
 }
 
 // ============================================

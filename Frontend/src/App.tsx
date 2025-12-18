@@ -17,6 +17,7 @@ function App() {
         containerStyle={{
           top: 20,
           right: 20,
+          zIndex: 10001, // Mayor que el modal (9999) para aparecer por encima
         }}
         toastOptions={{
           // Duración por defecto
@@ -25,6 +26,7 @@ function App() {
           style: {
             fontSize: '14px',
             maxWidth: '500px',
+            zIndex: 10001, // Asegurar que cada toast también tenga el z-index correcto
           },
         }}
       />
