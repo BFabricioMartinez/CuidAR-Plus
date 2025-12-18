@@ -127,7 +127,7 @@ export default function Navbar() {
       return;
     }
 
-    alert('✅ Permisos OK. En 10 segundos recibirás la notificación');
+    alert('✅ Permisos OK. En 3 minutos recibirás la notificación');
 
     setTimeout(async () => {
       try {
@@ -165,7 +165,7 @@ export default function Navbar() {
         console.error('❌ Error al crear notificación:', error);
         alert('ERROR: ' + (error instanceof Error ? error.message : String(error)));
       }
-    }, 10000);
+    }, 180000); // 3 minutos = 180000 ms
   };
 
   const navItems: NavItem[] = [
@@ -391,7 +391,7 @@ export default function Navbar() {
                   <button
                     onClick={handleTestNotification}
                     className="test-notification-btn"
-                    title="Probar notificación (10 seg)"
+                    title="Probar notificación (3 min)"
                   >
                     <svg className="test-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
