@@ -24,6 +24,72 @@ Opcion A (ZIP):
 Opcion B (Git):
 - Clonar el repositorio y ubicarse en la raiz del proyecto.
 
+NOTA IMPORTANTE: Agregar al proyecto archivo para conexion a base de datos excluido del repositorio:
+
+Dentro de BackEnd/:
+
+1) Agregar una nueva carpeta llamada config/.
+2) Agregar un archivo llamado db.py con este codigo dentro:
+
+""
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
+# Configuración de base de datos
+DB_USER = "postgres"
+DB_PASSWORD = "**tucontraseña**"
+DB_HOST = "localhost"
+DB_PORT = "*tu puerto* ----"
+DB_NAME = "Cuidar"
+
+# URL de conexión síncrona
+SYNC_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# URL de conexión asíncrona (con driver asyncpg)
+ASYNC_DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Motor síncrono (para uso tradicional)
+engine = create_engine(
+    SYNC_DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=10,
+    pool_recycle=1800,
+    echo=False
+)
+
+# Motor asíncrono
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=10,
+    pool_recycle=1800,
+    echo=False
+)
+
+# Session síncrona
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False
+)
+
+# Session asíncrona
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+# Base para los modelos
+Base = declarative_base()
+
+""
+
+
 
 1.3 Base de datos (PostgreSQL)
 1) Levantar PostgreSQL y asegurarse de tener un usuario con permisos.
