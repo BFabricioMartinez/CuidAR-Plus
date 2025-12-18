@@ -19,12 +19,10 @@ export default function HistorialView() {
     nextCursor,
     hasMore,
     filterStatus,
-    filterDate,
     filterDateFrom,
     filterDateTo,
     filterTreatment,
     setFilterStatus,
-    setFilterDate,
     setFilterDateFrom,
     setFilterDateTo,
     setFilterTreatment,
@@ -44,7 +42,7 @@ export default function HistorialView() {
   });
 
   // Ref para el timeout del debounce
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<number | null>(null);
 
   // Sincronizar estados locales con los del hook
   useEffect(() => {
@@ -62,8 +60,7 @@ export default function HistorialView() {
     setFilterTreatment(localFilters.treatment_id);
     setFilterDateFrom(localFilters.dateFrom);
     setFilterDateTo(localFilters.dateTo);
-    setFilterDate(''); // Limpiar fecha única si se usa rango
-  }, [localFilters, setFilterStatus, setFilterTreatment, setFilterDateFrom, setFilterDateTo, setFilterDate]);
+  }, [localFilters, setFilterStatus, setFilterTreatment, setFilterDateFrom, setFilterDateTo]);
 
   // Debounce para aplicar filtros
   useEffect(() => {
@@ -259,7 +256,8 @@ export default function HistorialView() {
                             border: '1.5px solid #cbd5e1',
                           },
                         }),
-                        controlFocused: (base) => ({
+                        // @ts-ignore - custom style for react-select
+                        controlFocused: (base: any) => ({
                           ...base,
                           border: '1.5px solid #667eea',
                           boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
@@ -304,7 +302,8 @@ export default function HistorialView() {
                             border: '1.5px solid #cbd5e1',
                           },
                         }),
-                        controlFocused: (base) => ({
+                        // @ts-ignore - custom style for react-select
+                        controlFocused: (base: any) => ({
                           ...base,
                           border: '1.5px solid #667eea',
                           boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',

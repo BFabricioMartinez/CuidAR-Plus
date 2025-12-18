@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi, ApiError } from '../api';
-import { toastSuccess, toastError, toastWarning } from '../utils/toast';
+import { toastSuccess, toastError } from '../utils/toast';
 
 // ============================================
 // TIPOS
