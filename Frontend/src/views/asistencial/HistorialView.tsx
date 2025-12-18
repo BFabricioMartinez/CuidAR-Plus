@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Select from 'react-select';
 import { useAsistencialHistory } from '../../hooks/asistencial/useAsistencialHistory';
 
 // ============================================
@@ -19,9 +20,13 @@ export default function HistorialView() {
     hasMore,
     filterStatus,
     filterDate,
+    filterDateFrom,
+    filterDateTo,
     filterTreatment,
     setFilterStatus,
     setFilterDate,
+    setFilterDateFrom,
+    setFilterDateTo,
     setFilterTreatment,
     fetchMyPatients,
     clearFilters,
@@ -29,6 +34,94 @@ export default function HistorialView() {
     formatTime,
     fetchHistory,
   } = useAsistencialHistory();
+
+  // Estados locales para filtros (con debounce)
+  const [localFilters, setLocalFilters] = useState({
+    status: filterStatus,
+    treatment_id: filterTreatment,
+    dateFrom: filterDateFrom,
+    dateTo: filterDateTo,
+  });
+
+  // Ref para el timeout del debounce
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sincronizar estados locales con los del hook
+  useEffect(() => {
+    setLocalFilters({
+      status: filterStatus,
+      treatment_id: filterTreatment,
+      dateFrom: filterDateFrom,
+      dateTo: filterDateTo,
+    });
+  }, [filterStatus, filterTreatment, filterDateFrom, filterDateTo]);
+
+  // Función para aplicar filtros con debounce
+  const applyFilters = useCallback(() => {
+    setFilterStatus(localFilters.status);
+    setFilterTreatment(localFilters.treatment_id);
+    setFilterDateFrom(localFilters.dateFrom);
+    setFilterDateTo(localFilters.dateTo);
+    setFilterDate(''); // Limpiar fecha única si se usa rango
+  }, [localFilters, setFilterStatus, setFilterTreatment, setFilterDateFrom, setFilterDateTo, setFilterDate]);
+
+  // Debounce para aplicar filtros
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      applyFilters();
+    }, 500); // 500ms de debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [localFilters, applyFilters]);
+
+  // Contar filtros activos
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (localFilters.status !== 'all') count++;
+    if (localFilters.treatment_id !== 'all') count++;
+    if (localFilters.dateFrom) count++;
+    if (localFilters.dateTo) count++;
+    return count;
+  }, [localFilters]);
+
+  // Preparar opciones para react-select (estado)
+  const statusOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos' },
+      { value: 'TAKEN', label: 'Tomadas' },
+      { value: 'MISSED', label: 'Omitidas' },
+    ];
+  }, []);
+
+  // Preparar opciones para react-select (medicamentos)
+  const treatmentOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos los medicamentos' },
+      ...treatments.map((treatment) => ({
+        value: treatment.id.toString(),
+        label: treatment.medication_name,
+      })),
+    ];
+  }, [treatments]);
+
+  // Limpiar filtros
+  const handleClearFilters = () => {
+    setLocalFilters({
+      status: 'all',
+      treatment_id: 'all',
+      dateFrom: '',
+      dateTo: '',
+    });
+    clearFilters();
+  };
 
   useEffect(() => {
     fetchMyPatients();
@@ -101,80 +194,6 @@ export default function HistorialView() {
 
         {selectedPatientId && (
           <>
-            {/* Filtros (misma UI que MiHistorial) */}
-            <div className="filters-card">
-              <div className="filters-header">
-                <h3 className="filters-title">
-                  <svg className="filters-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                  </svg>
-                  Filtros de Búsqueda
-                </h3>
-                <button onClick={clearFilters} className="btn-clear-filters">
-                  <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                  </svg>
-                  Limpiar
-                </button>
-              </div>
-
-              <div className="filters-grid">
-                <div className="filter-field">
-                  <label className="filter-label">
-                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    Estado
-                  </label>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="filter-select"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="TAKEN">Tomadas</option>
-                    <option value="MISSED">Omitidas</option>
-                  </select>
-                </div>
-
-                <div className="filter-field">
-                  <label className="filter-label">
-                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                    </svg>
-                    Fecha
-                  </label>
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="filter-input"
-                  />
-                </div>
-
-                <div className="filter-field">
-                  <label className="filter-label">
-                    <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-                    </svg>
-                    Medicamento
-                  </label>
-                  <select
-                    value={filterTreatment}
-                    onChange={(e) => setFilterTreatment(e.target.value)}
-                    className="filter-select"
-                  >
-                    <option value="all">Todos</option>
-                    {treatments.map((treatment) => (
-                      <option key={treatment.id} value={treatment.id}>
-                        {treatment.medication_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
             {/* Error */}
             {error && (
               <div className="alert alert-error">
@@ -188,12 +207,148 @@ export default function HistorialView() {
             {/* Cuadro de historial */}
             <div className="history-box">
               <div className="history-box-header">
-                <h2 className="history-box-title">
-                  <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                  </svg>
-                  Historial de Tomas del Paciente
-                </h2>
+                <div className="history-box-header-top">
+                  <h2 className="history-box-title">
+                    <svg className="title-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                    Historial de Tomas del Paciente
+                  </h2>
+                  {activeFiltersCount > 0 && (
+                    <button onClick={handleClearFilters} className="btn-clear-filters-compact">
+                      <svg className="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filtros integrados */}
+              <div className="filters-section">
+                <div className="filters-grid">
+                  <div className="filter-field">
+                    <label className="filter-label">
+                      <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Estado
+                      {localFilters.status !== 'all' && <span className="filter-active-indicator" />}
+                    </label>
+                    <Select
+                      value={statusOptions.find(opt => opt.value === localFilters.status) || statusOptions[0]}
+                      onChange={(option) => setLocalFilters(prev => ({ ...prev, status: option?.value || 'all' }))}
+                      options={statusOptions}
+                      placeholder="Seleccionar estado..."
+                      isSearchable={false}
+                      isClearable={false}
+                      className="react-select-container"
+                      classNamePrefix="react-select"
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                      styles={{
+                        control: (base) => ({
+                          ...base,
+                          border: '1.5px solid #e5e7eb',
+                          borderRadius: '8px',
+                          minHeight: '40px',
+                          boxShadow: 'none',
+                          background: '#fff',
+                          '&:hover': {
+                            border: '1.5px solid #cbd5e1',
+                          },
+                        }),
+                        controlFocused: (base) => ({
+                          ...base,
+                          border: '1.5px solid #667eea',
+                          boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                        }),
+                        menuPortal: (base) => ({
+                          ...base,
+                          zIndex: 9999,
+                        }),
+                      }}
+                    />
+                  </div>
+
+                  <div className="filter-field">
+                    <label className="filter-label">
+                      <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                      </svg>
+                      Medicamento
+                      {localFilters.treatment_id !== 'all' && <span className="filter-active-indicator" />}
+                    </label>
+                    <Select
+                      value={treatmentOptions.find(opt => opt.value === localFilters.treatment_id) || treatmentOptions[0]}
+                      onChange={(option) => setLocalFilters(prev => ({ ...prev, treatment_id: option?.value || 'all' }))}
+                      options={treatmentOptions}
+                      placeholder="Seleccionar medicamento..."
+                      isSearchable
+                      isClearable
+                      className="react-select-container"
+                      classNamePrefix="react-select"
+                      noOptionsMessage={() => 'No se encontraron medicamentos'}
+                      menuPortalTarget={document.body}
+                      menuPosition="fixed"
+                      styles={{
+                        control: (base) => ({
+                          ...base,
+                          border: '1.5px solid #e5e7eb',
+                          borderRadius: '8px',
+                          minHeight: '40px',
+                          boxShadow: 'none',
+                          background: '#fff',
+                          '&:hover': {
+                            border: '1.5px solid #cbd5e1',
+                          },
+                        }),
+                        controlFocused: (base) => ({
+                          ...base,
+                          border: '1.5px solid #667eea',
+                          boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                        }),
+                        menuPortal: (base) => ({
+                          ...base,
+                          zIndex: 9999,
+                        }),
+                      }}
+                    />
+                  </div>
+
+                  <div className="filter-field filter-field-date-range">
+                    <label className="filter-label">
+                      <svg className="filter-label-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                      </svg>
+                      Rango de Fechas
+                      {(localFilters.dateFrom || localFilters.dateTo) && <span className="filter-active-indicator" />}
+                    </label>
+                    <div className="date-range-inputs">
+                      <div className="date-input-wrapper">
+                        <label className="date-input-label">Desde</label>
+                        <input
+                          type="date"
+                          value={localFilters.dateFrom}
+                          onChange={(e) => setLocalFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                          className="filter-input filter-input-date"
+                          max={localFilters.dateTo || undefined}
+                        />
+                      </div>
+                      <div className="date-input-wrapper">
+                        <label className="date-input-label">Hasta</label>
+                        <input
+                          type="date"
+                          value={localFilters.dateTo}
+                          onChange={(e) => setLocalFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                          className="filter-input filter-input-date"
+                          min={localFilters.dateFrom || undefined}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="history-box-content">
@@ -211,7 +366,7 @@ export default function HistorialView() {
                     <div className="empty-icon">📋</div>
                     <h3 className="empty-title">Sin registros</h3>
                     <p className="empty-text">
-                      {filterStatus !== 'all' || filterDate || filterTreatment !== 'all'
+                      {activeFiltersCount > 0
                         ? 'No hay registros que coincidan con los filtros aplicados'
                         : 'Todavía no hay tomas registradas para este paciente'}
                     </p>
@@ -429,98 +584,29 @@ export default function HistorialView() {
           z-index: 5;
         }
 
-        .filters-card {
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
-          border-radius: 20px;
-          padding: 1.75rem 2rem;
-          margin-bottom: 2rem;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.8);
-          animation: scaleIn 0.4s ease-out 0.5s both;
-        }
-
-        @keyframes scaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        .filters-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-        }
-
-        .filters-title {
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #1f2937;
-          margin: 0;
-          display: flex;
-          align-items: center;
-          gap: 0.625rem;
-        }
-
-        .filters-icon {
-          width: 22px;
-          height: 22px;
-          color: #667eea;
-        }
-
-        .btn-clear-filters {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.625rem 1.25rem;
-          background: rgba(102, 126, 234, 0.1);
-          border: 2px solid #667eea;
-          color: #667eea;
-          border-radius: 10px;
-          font-size: 0.9375rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          font-family: inherit;
-        }
-
-        .btn-clear-filters:hover {
-          background: #667eea;
-          color: #fff;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-icon {
-          width: 18px;
-          height: 18px;
-        }
-
         .filters-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 1.25rem;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1rem;
+          align-items: start;
         }
 
         .filter-field {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.375rem;
         }
 
         .filter-label {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          font-size: 0.875rem;
+          font-size: 0.75rem;
           font-weight: 600;
-          color: #374151;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          position: relative;
         }
 
         .filter-label-icon {
@@ -529,27 +615,182 @@ export default function HistorialView() {
           color: #667eea;
         }
 
+        .filter-active-indicator {
+          width: 8px;
+          height: 8px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 50%;
+          margin-left: 0.25rem;
+          animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+
         .filter-select,
         .filter-input {
-          padding: 0.875rem 1rem;
-          font-size: 1rem;
-          border: 2px solid #e5e7eb;
-          border-radius: 10px;
+          padding: 0.5rem 0.875rem;
+          font-size: 0.9375rem;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 8px;
           outline: none;
           transition: all 0.3s ease;
-          background: #f9fafb;
+          background: #fff;
           font-family: inherit;
+          min-height: 40px;
+          box-sizing: border-box;
+          color: #1f2937;
+        }
+
+        .filter-select:hover {
+          border-color: #cbd5e1;
         }
 
         .filter-select:focus,
         .filter-input:focus {
           border-color: #667eea;
-          background: #fff;
-          box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+          background-color: #fff;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .filter-select {
-          cursor: pointer;
+        .filter-field-date-range {
+          grid-column: 1 / -1;
+        }
+
+        .date-range-inputs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+          margin-top: 0;
+        }
+
+        .date-input-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .date-input-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .filter-input-date {
+          width: 100%;
+          min-height: 40px;
+        }
+
+        /* React Select Styles */
+        .react-select-container {
+          width: 100%;
+        }
+
+        .react-select__control {
+          border: 1.5px solid #e5e7eb !important;
+          border-radius: 8px !important;
+          min-height: 40px !important;
+          background: #fff !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .react-select__control:hover {
+          border-color: #cbd5e1 !important;
+        }
+
+        .react-select__control--is-focused {
+          border-color: #667eea !important;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+          background: #fff !important;
+        }
+
+        .react-select__value-container {
+          padding: 0.5rem 0.875rem !important;
+        }
+
+        .react-select__input-container {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .react-select__input {
+          font-size: 0.9375rem !important;
+          color: #1f2937 !important;
+        }
+
+        .react-select__single-value {
+          color: #1f2937 !important;
+          font-size: 0.9375rem !important;
+        }
+
+        .react-select__placeholder {
+          color: #9ca3af !important;
+          font-size: 0.9375rem !important;
+        }
+
+        .react-select__indicator-separator {
+          background-color: #e5e7eb !important;
+        }
+
+        .react-select__dropdown-indicator {
+          color: #667eea !important;
+        }
+
+        .react-select__dropdown-indicator:hover {
+          color: #764ba2 !important;
+        }
+
+        .react-select__clear-indicator {
+          color: #9ca3af !important;
+        }
+
+        .react-select__clear-indicator:hover {
+          color: #dc2626 !important;
+        }
+
+        .react-select__menu {
+          border-radius: 10px !important;
+          border: 2px solid #e5e7eb !important;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1) !important;
+          margin-top: 4px !important;
+          z-index: 9999 !important;
+        }
+
+        .react-select__menu-portal {
+          z-index: 9999 !important;
+        }
+
+        .react-select__menu-list {
+          padding: 0.5rem !important;
+        }
+
+        .react-select__option {
+          border-radius: 8px !important;
+          padding: 0.75rem 1rem !important;
+          font-size: 0.9375rem !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+        }
+
+        .react-select__option:hover {
+          background: rgba(102, 126, 234, 0.1) !important;
+        }
+
+        .react-select__option--is-selected {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+          color: #fff !important;
+        }
+
+        .react-select__option--is-focused {
+          background: rgba(102, 126, 234, 0.1) !important;
+        }
+
+        .react-select__option--is-focused.react-select__option--is-selected {
+          background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
         }
 
         .alert {
@@ -755,9 +996,45 @@ export default function HistorialView() {
         }
 
         .history-box-header {
-          padding: 1.75rem 2rem;
+          padding: 1.5rem 2rem;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-box-header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          width: 100%;
+        }
+
+        .btn-clear-filters-compact {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          color: #fff;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+        }
+
+        .btn-clear-filters-compact:hover {
+          background: rgba(255, 255, 255, 0.3);
+          border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .filters-section {
+          padding: 1.25rem 2rem;
+          background: #f9fafb;
+          border-bottom: 1px solid #e5e7eb;
+          position: relative;
+          z-index: 100;
         }
 
         .history-box-title {
@@ -812,7 +1089,7 @@ export default function HistorialView() {
         }
 
         .table-header {
-          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+          background: #f9fafb;
         }
 
         .table-th {
@@ -820,17 +1097,23 @@ export default function HistorialView() {
           text-align: left;
           font-size: 0.875rem;
           font-weight: 700;
-          color: #fff;
+          color: #374151;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+          border-bottom: 2px solid #e5e7eb;
           position: sticky;
           top: 0;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          backdrop-filter: blur(10px);
+          background: #f9fafb;
           z-index: 10;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .table-th:first-child {
+          border-top-left-radius: 12px;
+        }
+
+        .table-th:last-child {
+          border-top-right-radius: 12px;
         }
 
         .table-row {
@@ -978,6 +1261,24 @@ export default function HistorialView() {
           }
         }
 
+        @media (max-width: 1024px) {
+          .filters-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .filter-field-date-range {
+            grid-column: span 1;
+          }
+
+          .date-range-inputs {
+            grid-template-columns: 1fr;
+          }
+
+          .filters-section {
+            padding: 1rem 1.5rem;
+          }
+        }
+
         @media (max-width: 768px) {
           .history-header {
             padding: 2rem 1.5rem;
@@ -991,19 +1292,120 @@ export default function HistorialView() {
             padding: 0 1.5rem;
           }
 
-          .filters-grid {
-            grid-template-columns: 1fr;
+          .history-box {
+            max-height: calc(100vh - 60px);
+            border-radius: 20px;
           }
 
-          .filters-header {
-            flex-direction: column;
-            align-items: stretch;
+          .history-box-header {
+            padding: 0.75rem 1.25rem;
+          }
+
+          .history-box-title {
+            font-size: 1rem;
+          }
+
+          .filters-section {
+            padding: 0.5rem 1.25rem;
+          }
+
+          .filters-grid {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+          }
+
+          .filter-field {
+            gap: 0.25rem;
+          }
+
+          .filter-label {
+            font-size: 0.625rem;
+            margin-bottom: 0.125rem;
+          }
+
+          .filter-select,
+          .filter-input {
+            padding: 0.375rem 0.625rem;
+            font-size: 0.8125rem;
+            min-height: 32px;
+          }
+
+          .filter-field-date-range {
+            grid-column: span 1;
+          }
+
+          .date-range-inputs {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+          }
+
+          .date-input-label {
+            font-size: 0.625rem;
+          }
+
+          .filter-input-date {
+            min-height: 32px;
+            padding: 0.375rem 0.625rem;
+            font-size: 0.8125rem;
+          }
+
+          .react-select__control {
+            min-height: 32px !important;
+          }
+
+          .react-select__value-container {
+            padding: 0.375rem 0.625rem !important;
+          }
+
+          .react-select__single-value {
+            font-size: 0.8125rem !important;
+          }
+
+          .history-box-header-top {
+            flex-direction: row;
+            align-items: center;
+            gap: 0.75rem;
+          }
+
+          .btn-clear-filters-compact {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+          }
+
+          .cards-container {
+            padding: 1rem 1.25rem;
             gap: 1rem;
           }
 
-          .btn-clear-filters {
-            width: 100%;
-            justify-content: center;
+          .history-card {
+            border-radius: 12px;
+          }
+
+          .card-header {
+            padding: 1rem 1.25rem;
+          }
+
+          .card-date {
+            font-size: 0.9375rem;
+          }
+
+          .card-body {
+            padding: 1.25rem 1.25rem;
+            gap: 1rem;
+          }
+
+          .card-label {
+            font-size: 0.875rem;
+          }
+
+          .card-value {
+            font-size: 0.9375rem;
+            font-weight: 700;
+          }
+
+          .status-badge {
+            font-size: 0.8125rem;
+            padding: 0.5rem 1rem;
           }
         }
       `}</style>

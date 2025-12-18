@@ -28,6 +28,12 @@ export interface User {
   email: string;
   role: 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
   active: boolean;
+  patients?: Array<{
+    id: number;
+    name: string;
+    active: boolean;
+  }>;
+  patients_count?: number;
 }
 
 // ============================================
@@ -220,6 +226,79 @@ export interface MyStats {
     total: number;
     adherence_percentage: number | null;
   };
+}
+
+// ============================================
+// ESTADÍSTICAS ADMIN
+// ============================================
+
+export interface PatientAdherence {
+  patient_id: number;
+  patient_name: string;
+  adherence_percentage: number | null;
+  taken: number;
+  missed: number;
+  total: number;
+}
+
+export interface PatientsAdherenceResponse {
+  patients: PatientAdherence[];
+}
+
+export interface AdherenceTrendDay {
+  date: string;
+  taken: number;
+  missed: number;
+  total: number;
+  adherence_percentage: number;
+}
+
+export interface AdherenceTrendResponse {
+  trend: AdherenceTrendDay[];
+}
+
+export interface DosesByHourItem {
+  hour: string;
+  taken: number;
+  missed: number;
+  total: number;
+}
+
+export interface DosesByHourResponse {
+  doses_by_hour: DosesByHourItem[];
+}
+
+export interface TopMedication {
+  medication_name: string;
+  count: number;
+}
+
+export interface TopMedicationsResponse {
+  medications: TopMedication[];
+}
+
+export interface CaregiverStat {
+  caregiver_id: number;
+  caregiver_name: string;
+  patient_count: number;
+}
+
+export interface CaregiverStatsResponse {
+  caregivers: CaregiverStat[];
+}
+
+export interface UsersByRoleItem {
+  role: string;
+  count: number;
+}
+
+export interface UsersByRoleResponse {
+  users_by_role: UsersByRoleItem[];
+}
+
+export interface TreatmentsStatusResponse {
+  active: number;
+  inactive: number;
 }
 
 export interface PersonalStats {

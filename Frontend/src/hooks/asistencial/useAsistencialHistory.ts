@@ -65,6 +65,8 @@ export const useAsistencialHistory = () => {
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterTreatment, setFilterTreatment] = useState<string>('all');
 
   // Obtener usuario actual del localStorage
@@ -224,8 +226,9 @@ export const useAsistencialHistory = () => {
           };
         });
 
-        // Filtro por fecha en el cliente (para no depender del backend)
+        // Filtro por fecha o rango de fechas en el cliente (para no depender del backend)
         if (filterDate) {
+          // Filtro por fecha única (compatibilidad)
           const filterDateObj = new Date(filterDate);
           filterDateObj.setHours(0, 0, 0, 0);
 
@@ -233,6 +236,29 @@ export const useAsistencialHistory = () => {
             const itemDate = new Date(item.taken_at);
             itemDate.setHours(0, 0, 0, 0);
             return itemDate.getTime() === filterDateObj.getTime();
+          });
+        } else if (filterDateFrom || filterDateTo) {
+          // Filtro por rango de fechas
+          historyData = historyData.filter((item) => {
+            const itemDate = new Date(item.taken_at);
+            itemDate.setHours(0, 0, 0, 0);
+            
+            if (filterDateFrom && filterDateTo) {
+              const fromDate = new Date(filterDateFrom);
+              fromDate.setHours(0, 0, 0, 0);
+              const toDate = new Date(filterDateTo);
+              toDate.setHours(23, 59, 59, 999);
+              return itemDate >= fromDate && itemDate <= toDate;
+            } else if (filterDateFrom) {
+              const fromDate = new Date(filterDateFrom);
+              fromDate.setHours(0, 0, 0, 0);
+              return itemDate >= fromDate;
+            } else if (filterDateTo) {
+              const toDate = new Date(filterDateTo);
+              toDate.setHours(23, 59, 59, 999);
+              return itemDate <= toDate;
+            }
+            return true;
           });
         }
 
@@ -259,7 +285,7 @@ export const useAsistencialHistory = () => {
         }
       }
     },
-    [selectedPatientId, filterStatus, filterDate, filterTreatment, treatments, hasMore]
+    [selectedPatientId, filterStatus, filterDate, filterDateFrom, filterDateTo, filterTreatment, treatments, hasMore]
   );
 
   // Cambiar paciente seleccionado
@@ -275,6 +301,8 @@ export const useAsistencialHistory = () => {
     // Resetear filtros al cambiar de paciente
     setFilterStatus('all');
     setFilterDate('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
     setFilterTreatment('all');
   }, []);
 
@@ -311,6 +339,8 @@ export const useAsistencialHistory = () => {
   const clearFilters = useCallback(() => {
     setFilterStatus('all');
     setFilterDate('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
     setFilterTreatment('all');
     setNextCursor(null);
     setHasMore(true);
@@ -354,7 +384,7 @@ export const useAsistencialHistory = () => {
     if (selectedPatientId) {
       fetchHistory();
     }
-  }, [selectedPatientId, filterStatus, filterDate, filterTreatment, fetchHistory]);
+  }, [selectedPatientId, filterStatus, filterDate, filterDateFrom, filterDateTo, filterTreatment, fetchHistory]);
 
   return {
     // Estados
@@ -372,9 +402,13 @@ export const useAsistencialHistory = () => {
     // Filtros
     filterStatus,
     filterDate,
+    filterDateFrom,
+    filterDateTo,
     filterTreatment,
     setFilterStatus,
     setFilterDate,
+    setFilterDateFrom,
+    setFilterDateTo,
     setFilterTreatment,
 
     // Funciones

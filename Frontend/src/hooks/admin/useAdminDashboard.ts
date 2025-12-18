@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { statisticsApi, patientsApi, ApiError } from '../../api';
-import type { OverviewStats, Patient } from '../../api';
+import { statisticsApi, ApiError } from '../../api';
+import type { OverviewStats } from '../../api';
 
 // ============================================
 // TIPOS
@@ -9,12 +9,24 @@ import type { OverviewStats, Patient } from '../../api';
 export interface PatientAdherence {
   patient_id: number;
   patient_name: string;
-  summary: {
-    taken_count: number;
-    missed_count: number;
-    total_count: number;
-    adherence_percentage: number | null;
-  };
+  adherence_percentage: number | null;
+  taken: number;
+  missed: number;
+  total: number;
+}
+
+export interface AdherenceTrend {
+  date: string;
+  taken: number;
+  missed: number;
+  total: number;
+  adherence_percentage: number;
+}
+
+export interface CaregiverStats {
+  caregiver_id: number;
+  caregiver_name: string;
+  patient_count: number;
 }
 
 // ============================================
@@ -25,15 +37,14 @@ export const useAdminDashboard = () => {
   // Estados principales
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [patientsAdherence, setPatientsAdherence] = useState<PatientAdherence[]>([]);
+  const [adherenceTrend, setAdherenceTrend] = useState<AdherenceTrend[]>([]);
+  const [caregiverStats, setCaregiverStats] = useState<CaregiverStats[]>([]);
+  const [topPatients, setTopPatients] = useState<{ best: PatientAdherence[]; worst: PatientAdherence[] }>({ best: [], worst: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [successMessage] = useState<string>('');
 
   // Obtener estadísticas generales
   const fetchOverviewStats = useCallback(async () => {
-    setLoading(true);
-    setError('');
-
     try {
       const data = await statisticsApi.overview();
       setStats(data);
@@ -43,78 +54,87 @@ export const useAdminDashboard = () => {
       } else {
         setError('Error al cargar estadísticas');
       }
-    } finally {
-      setLoading(false);
     }
   }, []);
 
-  // Obtener adherencia de todos los pacientes
-  const fetchPatientsAdherence = useCallback(async () => {
+  // Calcular adherencia por paciente (últimos 7 días) - Todos los pacientes
+  const calculatePatientsAdherence = useCallback(async () => {
     try {
-      // Obtener todos los pacientes activos
-      const patientsResponse = await patientsApi.list({
-        limit: 100,
-        filters: {
-          active: true,
-        },
-      });
+      // Usar endpoint optimizado
+      const response = await statisticsApi.adminPatientsAdherence();
+      const adherenceData = response.patients;
 
-      const patients = patientsResponse.items;
+      setPatientsAdherence(adherenceData);
 
-      // Obtener adherencia de cada paciente (últimos 7 días)
-      const adherencePromises = patients.map(async (patient: Patient) => {
-        try {
-          // Nota: Este endpoint puede no existir aún, manejamos el error
-          const adherenceRes = await fetch(
-            `http://localhost:8000/statistics/patients/${patient.id}/adherence?days=7`,
-            {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              },
-            }
-          );
-
-          if (!adherenceRes.ok) return null;
-
-          const adherenceData = await adherenceRes.json();
-          return adherenceData;
-        } catch {
-          return null;
-        }
-      });
-
-      const adherenceResults = await Promise.all(adherencePromises);
-      const validAdherence = adherenceResults.filter((a) => a !== null) as PatientAdherence[];
-
-      // Ordenar por adherencia (menor a mayor para ver los más problemáticos)
-      validAdherence.sort((a, b) => {
-        const adhA = a.summary.adherence_percentage || 0;
-        const adhB = b.summary.adherence_percentage || 0;
-        return adhA - adhB;
-      });
-
-      setPatientsAdherence(validAdherence.slice(0, 10)); // Top 10
+      // Top 5 mejores y peores
+      const best = adherenceData.slice(0, 5);
+      const worst = [...adherenceData].reverse().slice(0, 5);
+      setTopPatients({ best, worst });
     } catch (err: any) {
-      console.error('Error adherencia:', err);
+      console.error('Error calculando adherencia de pacientes:', err);
+      setPatientsAdherence([]);
+    }
+  }, []);
+
+  // Calcular tendencia de adherencia (últimos 7 días)
+  const calculateAdherenceTrend = useCallback(async () => {
+    try {
+      // Usar endpoint optimizado
+      const response = await statisticsApi.adminAdherenceTrend();
+      setAdherenceTrend(response.trend);
+    } catch (err: any) {
+      console.error('Error calculando tendencia:', err);
+      setAdherenceTrend([]);
+    }
+  }, []);
+
+  // Calcular distribución de pacientes por cuidador
+  const calculateCaregiverStats = useCallback(async () => {
+    try {
+      // Usar endpoint optimizado
+      const response = await statisticsApi.adminCaregiverStats();
+      setCaregiverStats(response.caregivers);
+    } catch (err: any) {
+      console.error('Error calculando estadísticas de cuidadores:', err);
+      setCaregiverStats([]);
     }
   }, []);
 
   // Cargar todos los datos del dashboard
   const fetchDashboard = useCallback(async () => {
-    await Promise.all([fetchOverviewStats(), fetchPatientsAdherence()]);
-  }, [fetchOverviewStats, fetchPatientsAdherence]);
+    setLoading(true);
+    setError('');
+
+    try {
+      await Promise.all([
+        fetchOverviewStats(),
+        calculatePatientsAdherence(),
+        calculateAdherenceTrend(),
+        calculateCaregiverStats(),
+      ]);
+    } catch (err: any) {
+      console.error('Error cargando dashboard:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    fetchOverviewStats,
+    calculatePatientsAdherence,
+    calculateAdherenceTrend,
+    calculateCaregiverStats,
+  ]);
 
   return {
     // Estados
     stats,
     patientsAdherence,
+    adherenceTrend,
+    caregiverStats,
+    topPatients,
     loading,
     error,
-    successMessage,
 
     // Funciones
     fetchDashboard,
-    fetchOverviewStats,
-    fetchPatientsAdherence,
   };
 };

@@ -147,13 +147,12 @@ export default function PersonalDashboard() {
   if (loading && !stats) {
     return (
       <div className="dashboard-container">
-        <div className="loading-screen">
+        <div className="loading-state">
           <div className="loading-spinner">
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
             <div className="spinner-ring"></div>
           </div>
-          <p className="loading-text">Cargando tu información de salud...</p>
         </div>
       </div>
     );
@@ -415,14 +414,14 @@ export default function PersonalDashboard() {
 
                   return (
                     <div className="doses-grid">
-                      {visibleDoses.map((dose, index) => {
+                      {visibleDoses.map((dose) => {
                       const doseKey = getDoseKey(dose.treatment_id, dose.time);
                       const isOverdue = isDoseOverdue(dose.time);
                       const isFading = fadingDoses.has(doseKey);
 
                       return (
                         <div
-                          key={index}
+                          key={doseKey}
                           className={`dose-card ${isOverdue ? 'dose-card-overdue' : ''} ${isFading ? 'dose-card-fading' : ''}`}
                         >
                           {/* Indicador de atrasada */}
@@ -528,19 +527,21 @@ export default function PersonalDashboard() {
           padding-bottom: 4rem;
         }
 
-        .loading-screen {
+        .loading-state {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          min-height: 100vh;
+          padding: 4rem 2rem;
           gap: 2rem;
+          min-height: 100vh;
         }
 
         .loading-spinner {
           position: relative;
           width: 80px;
           height: 80px;
+          display: block;
         }
 
         .spinner-ring {
@@ -551,6 +552,7 @@ export default function PersonalDashboard() {
           border-top-color: #667eea;
           border-radius: 50%;
           animation: spin 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+          display: block;
         }
 
         .spinner-ring:nth-child(1) {
@@ -566,8 +568,8 @@ export default function PersonalDashboard() {
         }
 
         @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
 
         .loading-text {
@@ -1091,6 +1093,7 @@ export default function PersonalDashboard() {
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          overflow: hidden;
         }
 
         .dose-card {
@@ -1101,8 +1104,12 @@ export default function PersonalDashboard() {
           border: 1px solid rgba(255, 255, 255, 0.8);
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
-          animation: scaleIn 0.4s ease-out;
           position: relative;
+        }
+
+        .dose-card:not(.dose-card-fading) {
+          animation: scaleIn 0.4s ease-out;
+          animation-fill-mode: both;
         }
 
         @keyframes scaleIn {
@@ -1285,20 +1292,30 @@ export default function PersonalDashboard() {
 
         .dose-card-fading {
           animation: fadeOutScale 0.6s ease-out forwards;
+          pointer-events: none;
         }
 
         @keyframes fadeOutScale {
           0% {
             opacity: 1;
             transform: scale(1);
+            max-height: 500px;
+            margin-bottom: 1rem;
+          }
+          50% {
+            opacity: 0.3;
+            transform: scale(0.95);
+            max-height: 500px;
+            margin-bottom: 1rem;
           }
           100% {
             opacity: 0;
             transform: scale(0.9);
-            height: 0;
+            max-height: 0;
             padding: 0;
             margin: 0;
             border: none;
+            margin-bottom: 0;
           }
         }
 
@@ -1494,7 +1511,63 @@ export default function PersonalDashboard() {
             display: flex;
           }
         }
+
+        /* Dashboard Footer */
+        .dashboard-footer {
+          position: fixed;
+          bottom: 1rem;
+          left: 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(10px);
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          font-size: 0.875rem;
+          color: #6b7280;
+          z-index: 100;
+          border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .dashboard-footer svg {
+          width: 16px;
+          height: 16px;
+          color: #667eea;
+        }
+
+        .dashboard-footer-text {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .dashboard-footer-year {
+          font-weight: 600;
+          color: #667eea;
+        }
+
+        @media (max-width: 640px) {
+          .dashboard-footer {
+            bottom: 0.5rem;
+            left: 0.5rem;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+          }
+        }
       `}</style>
+      
+      {/* Footer */}
+      <div className="dashboard-footer">
+        <svg viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+        </svg>
+        <div className="dashboard-footer-text">
+          <span className="dashboard-footer-year">{new Date().getFullYear()}</span>
+          <span>CuidAR</span>
+        </div>
+      </div>
     </div>
   );
 }

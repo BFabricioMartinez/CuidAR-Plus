@@ -5,6 +5,7 @@ from sqlalchemy.orm import joinedload
 from models import User, InputUser, InputUserUpdate, InputPaginatedRequestFilter
 from config.db import AsyncSessionLocal
 from auth.roles import require_roles
+from auth.security import hash_password
 from utils.update import is_valid_change
 import traceback
 
@@ -161,13 +162,24 @@ async def get_user_by_id(req: Request, user_id: int):
                     content={"message": f"Usuario con ID {user_id} no encontrado"}
                 )
 
+            # Obtener pacientes asociados (para usuarios PERSONAL)
+            patients_data = []
+            if user_found.patients:
+                for p in user_found.patients:
+                    patients_data.append({
+                        "id": p.id,
+                        "name": p.name,
+                        "active": p.active
+                    })
+            
             user_data = {
                 "id": user_found.id,
                 "name": user_found.name,
                 "email": user_found.email,
                 "role": user_found.role,
                 "active": user_found.active,
-                "patients_count": len(user_found.patients) if user_found.patients else 0
+                "patients_count": len(user_found.patients) if user_found.patients else 0,
+                "patients": patients_data  # Incluir información de pacientes para facilitar la reactivación
             }
 
             return JSONResponse(status_code=200, content=user_data)
@@ -235,7 +247,8 @@ async def update_user(req: Request, data: InputUserUpdate):
                 updated = True
 
             if is_valid_change(data.password, user_found.password):
-                user_found.password = data.password  # Debe hashearse en producción
+                # Hashear la contraseña antes de guardarla
+                user_found.password = hash_password(data.password)
                 updated = True
 
             if is_valid_change(data.role, user_found.role):

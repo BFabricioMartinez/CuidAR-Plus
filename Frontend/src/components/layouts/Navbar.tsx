@@ -1,6 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import Select from 'react-select';
 import { useAsistencialDashboard } from '../../hooks/asistencial/useAsistencialDashboard';
+import SettingsModal from '../modals/SettingsModal';
 
 type UserRole = 'ADMIN' | 'ASISTENCIAL' | 'PERSONAL';
 
@@ -22,6 +24,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const userStr = localStorage.getItem('user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -41,6 +44,38 @@ export default function Navbar() {
       fetchMyPatients();
     }
   }, [isAsistencial, fetchMyPatients]);
+
+  // Preparar opciones para react-select (pacientes)
+  const patientOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Todos' },
+      ...patients.map((patient) => ({
+        value: patient.id.toString(),
+        label: patient.name,
+      })),
+    ];
+  }, [patients]);
+
+  // Valor seleccionado para react-select
+  const selectedPatientOption = useMemo(() => {
+    const value = selectedPatientId ? selectedPatientId.toString() : 'all';
+    return patientOptions.find(opt => opt.value === value) || patientOptions[0];
+  }, [selectedPatientId, patientOptions]);
+
+  // Handler para cambio de paciente
+  const handlePatientChange = (option: { value: string; label: string } | null) => {
+    if (!option) return;
+    const value = option.value;
+    if (value === 'all') {
+      // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
+      if (location.pathname !== '/asistencial/dashboard') {
+        navigate('/asistencial/dashboard');
+      }
+      selectPatient(null);
+    } else {
+      selectPatient(Number(value));
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -111,6 +146,16 @@ export default function Navbar() {
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Determinar si un item de navegación debe estar deshabilitado
+  const isDisabled = (item: NavItem) => {
+    // Solo deshabilitar para usuarios asistenciales cuando no hay paciente seleccionado
+    if (user?.role === 'ASISTENCIAL' && selectedPatientId === null) {
+      // Deshabilitar "Tratamientos" e "Historial" cuando está en "Todos"
+      return item.path === '/asistencial/tratamientos' || item.path === '/asistencial/historial';
+    }
+    return false;
+  };
+
   if (!user) return null;
 
   return (
@@ -144,45 +189,82 @@ export default function Navbar() {
               </svg>
               <span className="patients-count-text">{patients.length}</span>
               <div className="patient-selector-divider"></div>
-              <select
-                value={selectedPatientId || 'all'}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'all') {
-                    // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
-                    if (location.pathname !== '/asistencial/dashboard') {
-                      navigate('/asistencial/dashboard');
-                    }
-                    selectPatient(null);
-                  } else {
-                    selectPatient(Number(value));
-                  }
+              <Select
+                value={selectedPatientOption}
+                onChange={handlePatientChange}
+                options={patientOptions}
+                isSearchable
+                isClearable={false}
+                className="react-select-navbar-container"
+                classNamePrefix="react-select-navbar"
+                menuPortalTarget={document.body}
+                menuPosition="fixed"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    background: 'transparent',
+                    border: 'none',
+                    boxShadow: 'none',
+                    minHeight: 'auto',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      border: 'none',
+                    },
+                  }),
+                  valueContainer: (base) => ({
+                    ...base,
+                    padding: '0.25rem 0.5rem',
+                  }),
+                  singleValue: (base) => ({
+                    ...base,
+                    color: '#1f2937',
+                    fontSize: '0.9375rem',
+                    fontWeight: 600,
+                    margin: 0,
+                  }),
+                  input: (base) => ({
+                    ...base,
+                    margin: 0,
+                    padding: 0,
+                  }),
+                  indicatorSeparator: () => ({
+                    display: 'none',
+                  }),
+                  dropdownIndicator: (base) => ({
+                    ...base,
+                    color: '#667eea',
+                    padding: '0 0.25rem',
+                    '&:hover': {
+                      color: '#764ba2',
+                    },
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    zIndex: 9999,
+                    minWidth: '200px',
+                  }),
                 }}
-                className="patient-selector-dropdown"
-                title="Seleccionar paciente"
-              >
-                <option value="all">Todos</option>
-                {patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 
           {/* Desktop Navigation */}
           <div className="nav-links-desktop">
-            {visibleItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`nav-link ${isActive(item.path) ? 'active' : ''}`}
-              >
-                <span className="nav-link-icon">{item.icon}</span>
-                <span className="nav-link-label">{item.label}</span>
-              </button>
-            ))}
+            {visibleItems.map((item) => {
+              const disabled = isDisabled(item);
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => !disabled && navigate(item.path)}
+                  disabled={disabled}
+                  className={`nav-link ${isActive(item.path) ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+                  title={disabled ? 'Selecciona un paciente para acceder' : ''}
+                >
+                  <span className="nav-link-icon">{item.icon}</span>
+                  <span className="nav-link-label">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* User Menu */}
@@ -200,6 +282,20 @@ export default function Navbar() {
                 </div>
               </div>
             </div>
+
+            {/* Settings Button - Solo para ADMIN */}
+            {user.role === 'ADMIN' && (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="settings-btn"
+                title="Ajustes"
+              >
+                <svg className="settings-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+
             <button onClick={handleLogout} className="logout-btn">
               <svg className="logout-icon" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
@@ -234,46 +330,70 @@ export default function Navbar() {
                   </svg>
                   <span>Paciente ({patients.length}):</span>
                 </label>
-                <select
-                  value={selectedPatientId || 'all'}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === 'all') {
-                      // Si se selecciona "Todos" desde otras vistas, redirigir al dashboard
-                      if (location.pathname !== '/asistencial/dashboard') {
-                        navigate('/asistencial/dashboard');
-                        setMenuOpen(false);
-                      }
-                      selectPatient(null);
-                    } else {
-                      selectPatient(Number(value));
+                <Select
+                  value={selectedPatientOption}
+                  onChange={(option) => {
+                    handlePatientChange(option);
+                    if (option?.value === 'all' && location.pathname !== '/asistencial/dashboard') {
+                      setMenuOpen(false);
                     }
                   }}
-                  className="patient-selector-dropdown-mobile"
-                >
-                  <option value="all">Todos</option>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.name}
-                    </option>
-                  ))}
-                </select>
+                  options={patientOptions}
+                  isSearchable
+                  isClearable={false}
+                  className="react-select-navbar-mobile-container"
+                  classNamePrefix="react-select-navbar-mobile"
+                  menuPortalTarget={document.body}
+                  menuPosition="fixed"
+                  styles={{
+                    control: (base, state) => ({
+                      ...base,
+                      background: '#fff',
+                      border: state.isFocused 
+                        ? '2px solid #667eea' 
+                        : '2px solid rgba(102, 126, 234, 0.2)',
+                      borderRadius: '8px',
+                      minHeight: '44px',
+                      boxShadow: state.isFocused 
+                        ? '0 0 0 3px rgba(102, 126, 234, 0.1)' 
+                        : 'none',
+                      '&:hover': {
+                        borderColor: '#667eea',
+                      },
+                    }),
+                    menu: (base) => ({
+                      ...base,
+                      zIndex: 9999,
+                    }),
+                    menuPortal: (base) => ({
+                      ...base,
+                      zIndex: 9999,
+                    }),
+                  }}
+                />
               </div>
             )}
             <div className="mobile-menu-links">
-              {visibleItems.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => {
-                    navigate(item.path);
-                    setMenuOpen(false);
-                  }}
-                  className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''}`}
-                >
-                  <span className="mobile-nav-icon">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
+              {visibleItems.map((item) => {
+                const disabled = isDisabled(item);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => {
+                      if (!disabled) {
+                        navigate(item.path);
+                        setMenuOpen(false);
+                      }
+                    }}
+                    disabled={disabled}
+                    className={`mobile-nav-link ${isActive(item.path) ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+                    title={disabled ? 'Selecciona un paciente para acceder' : ''}
+                  >
+                    <span className="mobile-nav-icon">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
             <button onClick={() => { handleLogout(); setMenuOpen(false); }} className="mobile-logout-btn">
               <svg className="logout-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -284,6 +404,9 @@ export default function Navbar() {
           </div>
         )}
       </nav>
+
+      {/* Settings Modal */}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <style>{`
         .modern-navbar {
@@ -411,6 +534,21 @@ export default function Navbar() {
           width: 100%;
         }
 
+        .nav-link.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+        .nav-link.disabled:hover {
+          background: transparent;
+          color: #6b7280;
+        }
+
+        .nav-link.disabled:hover::before {
+          width: 0;
+        }
+
         .nav-link-icon {
           width: 20px;
           height: 20px;
@@ -462,26 +600,60 @@ export default function Navbar() {
           flex-shrink: 0;
         }
 
-        .patient-selector-dropdown {
-          background: transparent;
-          border: none;
-          color: #1f2937;
-          font-size: 0.9375rem;
-          font-weight: 600;
-          cursor: pointer;
-          outline: none;
-          font-family: inherit;
-          padding: 0.25rem 0.5rem;
+        /* React Select Styles para Navbar Desktop */
+        .react-select-navbar-container {
           min-width: 150px;
           max-width: 200px;
         }
 
-        .patient-selector-dropdown:hover {
-          color: #667eea;
+        .react-select-navbar__control {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          min-height: auto !important;
+          cursor: pointer !important;
         }
 
-        .patient-selector-dropdown:focus {
-          color: #667eea;
+        .react-select-navbar__control:hover {
+          border: none !important;
+        }
+
+        .react-select-navbar__value-container {
+          padding: 0.25rem 0.5rem !important;
+        }
+
+        .react-select-navbar__single-value {
+          color: #1f2937 !important;
+          font-size: 0.9375rem !important;
+          font-weight: 600 !important;
+          margin: 0 !important;
+        }
+
+        .react-select-navbar__input-container {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        .react-select-navbar__indicator-separator {
+          display: none !important;
+        }
+
+        .react-select-navbar__dropdown-indicator {
+          color: #667eea !important;
+          padding: 0 0.25rem !important;
+        }
+
+        .react-select-navbar__dropdown-indicator:hover {
+          color: #764ba2 !important;
+        }
+
+        .react-select-navbar__menu {
+          z-index: 9999 !important;
+          min-width: 200px !important;
+        }
+
+        .react-select-navbar__menu-portal {
+          z-index: 9999 !important;
         }
 
         .patient-selector-mobile {
@@ -502,28 +674,45 @@ export default function Navbar() {
           margin-bottom: 0.5rem;
         }
 
-        .patient-selector-dropdown-mobile {
+        /* React Select Styles para Navbar Mobile */
+        .react-select-navbar-mobile-container {
           width: 100%;
-          padding: 0.75rem;
-          background: #fff;
-          border: 2px solid rgba(102, 126, 234, 0.2);
-          border-radius: 8px;
-          color: #1f2937;
-          font-size: 0.9375rem;
-          font-weight: 600;
-          cursor: pointer;
-          outline: none;
-          font-family: inherit;
-          transition: all 0.3s ease;
         }
 
-        .patient-selector-dropdown-mobile:hover {
-          border-color: #667eea;
+        .react-select-navbar-mobile__control {
+          background: #fff !important;
+          border: 2px solid rgba(102, 126, 234, 0.2) !important;
+          borderRadius: 8px !important;
+          minHeight: 44px !important;
+          boxShadow: none !important;
+          transition: all 0.3s ease !important;
         }
 
-        .patient-selector-dropdown-mobile:focus {
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        .react-select-navbar-mobile__control:hover {
+          borderColor: #667eea !important;
+        }
+
+        .react-select-navbar-mobile__control--is-focused {
+          borderColor: #667eea !important;
+          boxShadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        }
+
+        .react-select-navbar-mobile__value-container {
+          padding: 0.75rem !important;
+        }
+
+        .react-select-navbar-mobile__single-value {
+          color: #1f2937 !important;
+          font-size: 0.9375rem !important;
+          font-weight: 600 !important;
+        }
+
+        .react-select-navbar-mobile__menu {
+          z-index: 9999 !important;
+        }
+
+        .react-select-navbar-mobile__menu-portal {
+          z-index: 9999 !important;
         }
 
         .user-section {
@@ -569,6 +758,46 @@ export default function Navbar() {
           font-size: 0.8125rem;
           color: #6b7280;
           line-height: 1;
+        }
+
+        .settings-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          background: transparent;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          color: #6b7280;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-family: inherit;
+          position: relative;
+        }
+
+        .settings-btn:hover {
+          background: rgba(102, 126, 234, 0.08);
+          border-color: #667eea;
+          color: #667eea;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .settings-btn:hover .settings-icon {
+          animation: rotate 0.6s ease-in-out;
+        }
+
+        @keyframes rotate {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(90deg); }
+        }
+
+        .settings-icon {
+          width: 20px;
+          height: 20px;
+          transition: transform 0.3s ease;
         }
 
         .logout-btn {
@@ -664,6 +893,17 @@ export default function Navbar() {
           color: #667eea;
         }
 
+        .mobile-nav-link.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
+        }
+
+        .mobile-nav-link.disabled:hover {
+          background: transparent;
+          color: #6b7280;
+        }
+
         .mobile-nav-icon {
           width: 24px;
           height: 24px;
@@ -712,6 +952,17 @@ export default function Navbar() {
 
           .logout-btn {
             display: none;
+          }
+
+          /* Mantener settings button visible en mobile */
+          .settings-btn {
+            width: 40px;
+            height: 40px;
+          }
+
+          .settings-icon {
+            width: 18px;
+            height: 18px;
           }
 
           /* Mantener selector de pacientes visible en mobile */
