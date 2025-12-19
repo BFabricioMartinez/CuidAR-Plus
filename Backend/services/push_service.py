@@ -15,6 +15,7 @@ from http_ece import encrypt
 from urllib.parse import urlparse
 from jose import jwt as jose_jwt
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -216,13 +217,18 @@ class PushNotificationService:
                 p256dh_bytes = base64.urlsafe_b64decode(subscription.p256dh_key + '=' * p256dh_padding)
                 auth_bytes = base64.urlsafe_b64decode(subscription.auth_key + '=' * auth_padding)
                 
+                # Generar una clave privada efímera (ephemeral) para cada mensaje
+                # Esto es necesario para el intercambio Diffie-Hellman con la clave pública del cliente
+                ephemeral_private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+                
                 # Encriptar el payload según el estándar Web Push Encryption
-                # http-ece requiere: payload, dh (clave pública del cliente), authSecret (clave de autenticación)
+                # http-ece requiere: payload, private_key (clave privada efímera del servidor),
+                # dh (clave pública del cliente), authSecret (clave de autenticación)
                 payload_data = json.dumps(notification_data).encode('utf-8')
                 try:
                     encrypted_payload = encrypt(
                         payload_data,
-                        private_key=None,  # Generar nueva clave privada para cada mensaje (recomendado)
+                        private_key=ephemeral_private_key,  # Clave privada efímera del servidor
                         dh=p256dh_bytes,   # Clave pública del cliente (p256dh)
                         auth_secret=auth_bytes,  # Clave de autenticación del cliente
                         version="aes128gcm"  # Versión de encriptación
