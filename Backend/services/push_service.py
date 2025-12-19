@@ -24,33 +24,14 @@ VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n").strip(
 _email = os.getenv("VAPID_EMAIL", "admin@cuidar.com")
 VAPID_EMAIL = _email if _email.startswith("mailto:") else f"mailto:{_email}"
 
-# Preparar clave privada VAPID
-# Intentamos múltiples métodos para asegurar compatibilidad
-VAPID_PRIVATE_KEY = None
-_vapid_obj = None
+# Usar la clave privada directamente como string (sin crear objeto Vapid)
+# Esto evita problemas de deserialización
+VAPID_PRIVATE_KEY = _vapid_private_key_raw if _vapid_private_key_raw.startswith("-----BEGIN") else None
 
-if _vapid_private_key_raw:
-    try:
-        # Método 1: Crear objeto Vapid y obtener la clave PEM desde él
-        # Esto asegura que la clave esté en el formato exacto que pywebpush espera
-        _vapid_obj = Vapid.from_pem(_vapid_private_key_raw.encode('utf-8'))
-        # Obtener la clave PEM desde el objeto (esto normaliza el formato)
-        VAPID_PRIVATE_KEY = _vapid_obj.private_pem().decode('utf-8')
-        logger.info("Clave VAPID cargada correctamente usando objeto Vapid")
-    except Exception as e:
-        logger.warning(f"No se pudo cargar clave VAPID como objeto: {e}")
-        try:
-            # Método 2: Usar la clave directamente como string (fallback)
-            # Limpiar espacios y asegurar formato correcto
-            VAPID_PRIVATE_KEY = _vapid_private_key_raw.strip()
-            if not VAPID_PRIVATE_KEY.startswith("-----BEGIN"):
-                logger.error("Formato de clave VAPID inválido")
-                VAPID_PRIVATE_KEY = None
-            else:
-                logger.info("Clave VAPID cargada como string (fallback)")
-        except Exception as e2:
-            logger.error(f"Error al procesar clave VAPID: {e2}")
-            VAPID_PRIVATE_KEY = None
+if not VAPID_PRIVATE_KEY:
+    logger.error("VAPID_PRIVATE_KEY no está configurada o tiene formato inválido")
+else:
+    logger.info("Clave VAPID cargada correctamente")
 
 
 class PushNotificationService:
@@ -132,16 +113,19 @@ class PushNotificationService:
                 # Asegurar que el audience sea exactamente scheme://netloc sin trailing slash
                 audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
                 
-                # Usar siempre la clave como string (más estable que el objeto)
-                # pywebpush 2.x acepta tanto string como objeto Vapid
+                # Preparar claims VAPID - ambos son obligatorios en pywebpush 2.x
+                vapid_claims = {
+                    "sub": VAPID_EMAIL,  # Subject: debe ser mailto:email
+                    "aud": audience      # Audience: debe ser el origen del endpoint
+                }
+                
+                # Enviar notificación usando la clave como string
+                # pywebpush 2.x internamente creará el objeto Vapid si es necesario
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
                     vapid_private_key=VAPID_PRIVATE_KEY,
-                    vapid_claims={
-                        "sub": VAPID_EMAIL,
-                        "aud": audience
-                    }
+                    vapid_claims=vapid_claims
                 )
 
                 sent_count += 1
