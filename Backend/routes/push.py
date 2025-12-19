@@ -29,7 +29,7 @@ async def subscribe_to_push(req: Request, subscription_data: PushSubscriptionCre
     """
     try:
         # Obtener usuario autenticado
-        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
 
         # Verificar si hubo error de autenticación
         if isinstance(user_payload, JSONResponse):
@@ -74,7 +74,7 @@ async def unsubscribe_from_push(req: Request, endpoint: str):
     """
     try:
         # Obtener usuario autenticado
-        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
         if isinstance(user_payload, JSONResponse):
             return user_payload
 
@@ -116,7 +116,7 @@ async def get_my_subscriptions(req: Request):
     """
     try:
         # Obtener usuario autenticado
-        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
         if isinstance(user_payload, JSONResponse):
             return user_payload
 
@@ -159,7 +159,7 @@ async def test_push_notification(req: Request):
     """
     try:
         # Obtener usuario autenticado
-        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req.headers, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
         if isinstance(user_payload, JSONResponse):
             return user_payload
 
