@@ -3,52 +3,53 @@ Script para generar claves VAPID (Voluntary Application Server Identification)
 Ejecutar una sola vez para obtener las claves y agregarlas al .env
 """
 
-from py_vapid import Vapid
-import base64
-import os
-
-# Genera las claves VAPID
 try:
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    import base64
+
     print("Generando claves VAPID...")
 
-    vapid = Vapid()
-    vapid.generate_keys()
+    # Generar clave privada usando SECP256R1 (P-256)
+    private_key = ec.generate_private_key(ec.SECP256R1())
 
-    # Guardar las claves en archivos temporales
-    vapid.save_key('private_vapid.pem')
-    vapid.save_public_key('public_vapid.pem')
+    # Serializar clave privada a PEM
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    ).decode('utf-8')
 
-    # Leer clave privada (formato PEM completo)
-    with open('private_vapid.pem', 'r') as f:
-        private_key_pem = f.read().strip()
+    # Obtener clave pública
+    public_key = private_key.public_key()
 
-    # Leer clave pública (formato base64 URL-safe)
-    with open('public_vapid.pem', 'r') as f:
-        public_key_b64 = f.read().strip()
+    # Serializar clave pública a formato base64 URL-safe sin padding
+    public_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint
+    )
+    public_b64 = base64.urlsafe_b64encode(public_bytes).decode('utf-8').rstrip('=')
 
     print("=" * 80)
     print("CLAVES VAPID GENERADAS")
     print("=" * 80)
-    print("\nAgrega estas líneas a tu archivo .env:\n")
-    print(f"VAPID_PRIVATE_KEY={private_key_pem}")
-    print(f"VAPID_PUBLIC_KEY={public_key_b64}")
-    print('VAPID_EMAIL=mailto:tu@email.com  # Cambia esto por tu email')
+    print("\nAgrega estas lineas a tu archivo .env:\n")
+    print(f'VAPID_PRIVATE_KEY="{private_pem}"')
+    print(f'VAPID_PUBLIC_KEY={public_b64}')
+    print('VAPID_EMAIL=tu@email.com  # Cambia esto por tu email (sin mailto:)')
     print("\n" + "=" * 80)
-    print("\n⚠️  IMPORTANTE:")
-    print("1. Copia la VAPID_PUBLIC_KEY al frontend (será visible públicamente)")
-    print("2. NUNCA compartas la VAPID_PRIVATE_KEY (guárdala solo en backend)")
+    print("\nIMPORTANTE:")
+    print("1. Copia la VAPID_PUBLIC_KEY al frontend (sera visible publicamente)")
+    print("2. NUNCA compartas la VAPID_PRIVATE_KEY (guardala solo en backend)")
     print("3. Cambia el email por uno real")
+    print("4. La clave privada debe estar entre comillas dobles en el .env")
     print("=" * 80)
 
-    # Limpiar archivos temporales
-    os.remove('private_vapid.pem')
-    os.remove('public_vapid.pem')
-
-    print("\n✅ Claves generadas exitosamente!")
+    print("\nClaves generadas exitosamente!")
 
 except Exception as e:
-    print(f"❌ ERROR: {e}")
+    print(f"ERROR: {e}")
     import traceback
     traceback.print_exc()
-    print("\nAsegúrate de tener instalado:")
-    print("pip install pywebpush APScheduler")
+    print("\nAsegurate de tener instalado:")
+    print("pip install pywebpush==2.1.2")
