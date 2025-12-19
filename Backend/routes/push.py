@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 import traceback
 import logging
+from datetime import datetime, timedelta
 
 from models import (
     PushSubscriptionCreate,
@@ -13,6 +14,7 @@ from models.push_subscription import PushSubscription
 from config.db import AsyncSessionLocal
 from auth.roles import require_roles
 from services.push_service import PushNotificationService
+from services.scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -144,46 +146,63 @@ async def get_my_subscriptions(req: Request):
 @push.post("/test")
 async def test_push_notification(req: Request):
     """
-    Enviar una notificación de prueba al usuario autenticado.
-    Útil para testing.
+    Programar una notificación de prueba para 2 minutos después.
+    Útil para testing de notificaciones con app cerrada.
     """
     try:
         # Obtener usuario autenticado
         user = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
 
-        async with AsyncSessionLocal() as session:
-            # Crear payload de prueba
-            payload = PushNotificationPayload(
-                title="🧪 Notificación de prueba",
-                body="Si ves esto, las notificaciones push funcionan correctamente!",
-                icon="/pwa-192x192.png",
-                badge="/pwa-192x192.png",
-                tag="test-notification"
-            )
+        # Calcular tiempo de envío (2 minutos desde ahora)
+        send_time = datetime.now() + timedelta(minutes=2)
 
-            # Enviar notificación
-            result = await PushNotificationService.send_to_user(
-                db=session,
-                user_id=user.id,
-                payload=payload
-            )
+        # Crear payload de prueba
+        payload = PushNotificationPayload(
+            title="🧪 Notificación de prueba",
+            body="Si ves esto, las notificaciones push funcionan correctamente!",
+            icon="/pwa-192x192.png",
+            badge="/pwa-192x192.png",
+            tag="test-notification"
+        )
 
-            if result["success"]:
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "message": "Notificación de prueba enviada",
-                        "sent_count": result["sent_count"],
-                        "total_subscriptions": result["total_subscriptions"]
-                    }
-                )
-            else:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "message": result.get("error", "No se pudo enviar la notificación")
-                    }
-                )
+        # Programar notificación usando el scheduler
+        scheduler = get_scheduler()
+
+        def send_test_notification():
+            """Función que se ejecutará en 2 minutos"""
+            import asyncio
+            from config.db import AsyncSessionLocal
+
+            async def _send():
+                async with AsyncSessionLocal() as session:
+                    await PushNotificationService.send_to_user(
+                        db=session,
+                        user_id=user.id,
+                        payload=payload
+                    )
+
+            # Ejecutar la función async en el event loop
+            asyncio.run(_send())
+
+        # Programar el job
+        job = scheduler.add_job(
+            send_test_notification,
+            'date',
+            run_date=send_time,
+            id=f'test_notification_{user.id}_{int(send_time.timestamp())}',
+            replace_existing=True
+        )
+
+        logger.info(f"Notificación de prueba programada para {send_time.strftime('%H:%M:%S')} (usuario {user.id})")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": f"Notificación de prueba programada para 2 minutos (aproximadamente a las {send_time.strftime('%H:%M:%S')})",
+                "scheduled_time": send_time.isoformat(),
+                "job_id": job.id
+            }
+        )
 
     except ValueError as e:
         return JSONResponse(status_code=401, content={"message": str(e)})
@@ -192,5 +211,5 @@ async def test_push_notification(req: Request):
         traceback.print_exc()
         return JSONResponse(
             status_code=500,
-            content={"message": "Error al enviar notificación de prueba"}
+            content={"message": "Error al programar notificación de prueba"}
         )
