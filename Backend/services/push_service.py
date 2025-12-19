@@ -197,13 +197,22 @@ class PushNotificationService:
                     headers={"typ": "JWT", "alg": "ES256"}
                 )
                 
-                # 3. Obtener la clave pública en formato base64 URL-safe para el header Crypto-Key
+                # Verificar que el JWT se generó correctamente (solo en modo debug)
+                try:
+                    decoded = jose_jwt.decode(jwt_token, options={"verify_signature": False})
+                    logger.debug(f"JWT generado correctamente. Claims decodificados: {decoded}")
+                except Exception as e:
+                    logger.warning(f"Error al decodificar JWT para verificación: {e}")
+                
+                # 3. Obtener la clave pública en formato base64 URL-safe para los headers
                 public_key_b64 = VAPID_PUBLIC_KEY
                 
-                # 4. Preparar headers VAPID según el estándar
+                # 4. Preparar headers VAPID según el estándar Web Push
                 # Formato: Authorization: vapid t=<JWT>, k=<public_key>
+                # También incluir Crypto-Key para compatibilidad con Apple Push Service
                 headers = {
                     "Authorization": f"vapid t={jwt_token}, k={public_key_b64}",
+                    "Crypto-Key": f"p256ecdsa={public_key_b64}",  # Requerido por Apple Push Service
                     "Content-Type": "application/octet-stream",
                     "Content-Encoding": "aes128gcm",
                     "TTL": "86400"  # 24 horas
@@ -261,9 +270,11 @@ class PushNotificationService:
                     failed_subscriptions.append(subscription.id)
                     logger.warning(f"BadJwtToken para subscription {subscription.id} (403)")
                     logger.warning(f"  Response body: {response.text}")
-                    logger.warning(f"  JWT usado: {jwt_token[:50]}...")
+                    logger.warning(f"  JWT completo: {jwt_token}")
                     logger.warning(f"  Claims: {vapid_claims}")
                     logger.warning(f"  Audience: {audience}")
+                    logger.warning(f"  Public key (primeros 50 chars): {public_key_b64[:50]}...")
+                    logger.warning(f"  Headers enviados: {headers}")
                 else:
                     # Otro error
                     failed_subscriptions.append(subscription.id)
