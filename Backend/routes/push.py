@@ -29,19 +29,23 @@ async def subscribe_to_push(req: Request, subscription_data: PushSubscriptionCre
     """
     try:
         # Obtener usuario autenticado
-        user = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+
+        # Verificar si hubo error de autenticación
+        if isinstance(user_payload, JSONResponse):
+            return user_payload
 
         async with AsyncSessionLocal() as session:
             # Guardar suscripción
             subscription = await PushNotificationService.save_subscription(
                 db=session,
-                user_id=user.id,
+                user_id=user_payload["sub"],
                 endpoint=subscription_data.subscription.endpoint,
                 p256dh_key=subscription_data.subscription.keys.p256dh,
                 auth_key=subscription_data.subscription.keys.auth
             )
 
-            logger.info(f"Usuario {user.id} suscrito a push notifications")
+            logger.info(f"Usuario {user_payload['sub']} suscrito a push notifications")
 
             return JSONResponse(
                 status_code=201,
@@ -70,18 +74,20 @@ async def unsubscribe_from_push(req: Request, endpoint: str):
     """
     try:
         # Obtener usuario autenticado
-        user = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(user_payload, JSONResponse):
+            return user_payload
 
         async with AsyncSessionLocal() as session:
             # Eliminar suscripción
             deleted = await PushNotificationService.remove_subscription(
                 db=session,
-                user_id=user.id,
+                user_id=user_payload["sub"],
                 endpoint=endpoint
             )
 
             if deleted:
-                logger.info(f"Usuario {user.id} desuscrito de push notifications")
+                logger.info(f"Usuario {user_payload['sub']} desuscrito de push notifications")
                 return JSONResponse(
                     status_code=200,
                     content={"message": "Suscripción eliminada exitosamente"}
@@ -110,12 +116,14 @@ async def get_my_subscriptions(req: Request):
     """
     try:
         # Obtener usuario autenticado
-        user = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(user_payload, JSONResponse):
+            return user_payload
 
         async with AsyncSessionLocal() as session:
             subscriptions = await PushNotificationService.get_user_subscriptions(
                 db=session,
-                user_id=user.id
+                user_id=user_payload["sub"]
             )
 
             return JSONResponse(
@@ -151,7 +159,11 @@ async def test_push_notification(req: Request):
     """
     try:
         # Obtener usuario autenticado
-        user = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        user_payload = require_roles(req, ["ADMIN", "ASISTENCIAL", "PERSONAL"])
+        if isinstance(user_payload, JSONResponse):
+            return user_payload
+
+        user_id = user_payload["sub"]
 
         # Calcular tiempo de envío (2 minutos desde ahora)
         send_time = datetime.now() + timedelta(minutes=2)
@@ -177,7 +189,7 @@ async def test_push_notification(req: Request):
                 async with AsyncSessionLocal() as session:
                     await PushNotificationService.send_to_user(
                         db=session,
-                        user_id=user.id,
+                        user_id=user_id,
                         payload=payload
                     )
 
@@ -189,11 +201,11 @@ async def test_push_notification(req: Request):
             send_test_notification,
             'date',
             run_date=send_time,
-            id=f'test_notification_{user.id}_{int(send_time.timestamp())}',
+            id=f'test_notification_{user_id}_{int(send_time.timestamp())}',
             replace_existing=True
         )
 
-        logger.info(f"Notificación de prueba programada para {send_time.strftime('%H:%M:%S')} (usuario {user.id})")
+        logger.info(f"Notificación de prueba programada para {send_time.strftime('%H:%M:%S')} (usuario {user_id})")
 
         return JSONResponse(
             status_code=200,
