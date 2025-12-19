@@ -6,9 +6,16 @@ Utiliza pywebpush para enviar notificaciones siguiendo el estándar Web Push Pro
 import json
 import os
 import time
+import base64
+import requests
 from typing import Optional, List
-from pywebpush import webpush, WebPushException
+from pywebpush import WebPushException
 from py_vapid import Vapid
+from http_ece import encrypt
+from urllib.parse import urlparse
+from jose import jwt as jose_jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from models.push_subscription import PushSubscription, PushNotificationPayload
@@ -161,47 +168,101 @@ class PushNotificationService:
                 # Asegurar que el audience sea exactamente scheme://netloc sin trailing slash
                 audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
                 
-                # Preparar claims VAPID - todos son obligatorios para un JWT válido
-                # "sub": Subject (mailto:email) - obligatorio
-                # "aud": Audience (origen del endpoint) - obligatorio, solucionó BadJwtToken la primera vez
-                # "exp": Expiration (timestamp) - obligatorio para JWT válido
-                # "iat": Issued At (timestamp) - pywebpush lo agrega automáticamente
+                # GENERACIÓN MANUAL DEL JWT Y ENVÍO
+                # Esto nos da control total sobre el proceso y evita problemas con pywebpush
+                
+                # 1. Preparar claims VAPID - todos son obligatorios para un JWT válido
                 vapid_claims = {
                     "sub": VAPID_EMAIL,  # Subject: debe ser mailto:email
-                    "aud": audience,      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
-                    "exp": int(time.time()) + 86400  # Expiration: 24 horas desde ahora (obligatorio para JWT válido)
+                    "aud": audience,      # Audience: debe ser el origen del endpoint
+                    "exp": int(time.time()) + 86400,  # Expiration: 24 horas desde ahora
+                    "iat": int(time.time())  # Issued At: ahora
                 }
                 
-                # SOLUCIÓN ALTERNATIVA: Usar la clave como string normalizada desde el objeto Vapid
-                # Esto combina lo mejor de ambos mundos:
-                # - Validación y normalización del objeto Vapid
-                # - Formato string que pywebpush procesa correctamente
-                # La clave está normalizada por el objeto Vapid, evitando problemas de formato
-                webpush(
-                    subscription_info=subscription_info,
-                    data=json.dumps(notification_data),
-                    vapid_private_key=VAPID_PRIVATE_KEY,  # Clave normalizada desde objeto Vapid
-                    vapid_claims=vapid_claims
+                # 2. Generar JWT manualmente usando python-jose
+                # Cargar la clave privada desde el objeto Vapid
+                private_key_pem = VAPID_PRIVATE_KEY.encode('utf-8')
+                private_key = serialization.load_pem_private_key(
+                    private_key_pem,
+                    password=None,
+                    backend=default_backend()
                 )
-
-                sent_count += 1
-                logger.info(f"Notificación enviada a subscription {subscription.id}")
-
-            except WebPushException as e:
-                logger.error(f"Error enviando a subscription {subscription.id}: {e}")
                 
-                # Si el endpoint expiró o es inválido (410 Gone), marcarlo para eliminación
-                if e.response and e.response.status_code == 410:
-                    failed_subscriptions.append(subscription.id)
-                    logger.info(f"Subscription {subscription.id} expirada, se eliminará")
+                # Generar JWT con ES256 (algoritmo requerido para VAPID)
+                jwt_token = jose_jwt.encode(
+                    vapid_claims,
+                    private_key,
+                    algorithm="ES256",
+                    headers={"typ": "JWT", "alg": "ES256"}
+                )
                 
-                # Si hay BadJwtToken (403), probablemente la suscripción fue creada con una clave pública diferente
-                # Eliminarla para que el usuario se vuelva a suscribir con la clave correcta
-                elif e.response and e.response.status_code == 403:
+                # 3. Obtener la clave pública en formato base64 URL-safe para el header Crypto-Key
+                public_key_b64 = VAPID_PUBLIC_KEY
+                
+                # 4. Preparar headers VAPID según el estándar
+                # Formato: Authorization: vapid t=<JWT>, k=<public_key>
+                headers = {
+                    "Authorization": f"vapid t={jwt_token}, k={public_key_b64}",
+                    "Content-Type": "application/octet-stream",
+                    "Content-Encoding": "aes128gcm",
+                    "TTL": "86400"  # 24 horas
+                }
+                
+                # 5. Encriptar el payload usando http-ece
+                # Convertir las claves de base64 URL-safe a bytes
+                # Agregar padding si es necesario
+                p256dh_padding = (4 - len(subscription.p256dh_key) % 4) % 4
+                auth_padding = (4 - len(subscription.auth_key) % 4) % 4
+                p256dh_bytes = base64.urlsafe_b64decode(subscription.p256dh_key + '=' * p256dh_padding)
+                auth_bytes = base64.urlsafe_b64decode(subscription.auth_key + '=' * auth_padding)
+                
+                # Encriptar el payload según el estándar Web Push Encryption
+                # http-ece requiere: payload, dh (clave pública del cliente), authSecret (clave de autenticación)
+                payload_data = json.dumps(notification_data).encode('utf-8')
+                try:
+                    encrypted_payload = encrypt(
+                        payload_data,
+                        private_key=None,  # Generar nueva clave privada para cada mensaje (recomendado)
+                        dh=p256dh_bytes,   # Clave pública del cliente (p256dh)
+                        auth_secret=auth_bytes,  # Clave de autenticación del cliente
+                        version="aes128gcm"  # Versión de encriptación
+                    )
+                except Exception as e:
+                    logger.error(f"Error encriptando payload: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    raise
+                
+                # 6. Enviar la petición HTTP directamente
+                response = requests.post(
+                    subscription.endpoint,
+                    data=encrypted_payload,
+                    headers=headers,
+                    timeout=30
+                )
+                
+                # 7. Verificar respuesta
+                if response.status_code == 201:
+                    # Éxito
+                    sent_count += 1
+                    logger.info(f"Notificación enviada a subscription {subscription.id}")
+                elif response.status_code == 410:
+                    # Endpoint expirado
                     failed_subscriptions.append(subscription.id)
-                    logger.warning(f"BadJwtToken para subscription {subscription.id} - probablemente creada con clave publica diferente")
-                    logger.warning(f"  Eliminando suscripción para que el usuario se vuelva a suscribir")
-                    logger.warning(f"  Endpoint: {subscription.endpoint[:80]}...")
+                    logger.info(f"Subscription {subscription.id} expirada (410), se eliminará")
+                elif response.status_code == 403:
+                    # BadJwtToken
+                    failed_subscriptions.append(subscription.id)
+                    logger.warning(f"BadJwtToken para subscription {subscription.id} (403)")
+                    logger.warning(f"  Response body: {response.text}")
+                    logger.warning(f"  JWT usado: {jwt_token[:50]}...")
+                    logger.warning(f"  Claims: {vapid_claims}")
+                    logger.warning(f"  Audience: {audience}")
+                else:
+                    # Otro error
+                    failed_subscriptions.append(subscription.id)
+                    logger.error(f"Error HTTP {response.status_code} para subscription {subscription.id}")
+                    logger.error(f"  Response: {response.text}")
 
             except Exception as e:
                 logger.error(f"Error inesperado enviando notificación: {e}")
