@@ -39,7 +39,7 @@ async def subscribe_to_push(req: Request, subscription_data: PushSubscriptionCre
             # Guardar suscripción
             subscription = await PushNotificationService.save_subscription(
                 db=session,
-                user_id=user_payload["sub"],
+                user_id=int(user_payload["sub"]),
                 endpoint=subscription_data.subscription.endpoint,
                 p256dh_key=subscription_data.subscription.keys.p256dh,
                 auth_key=subscription_data.subscription.keys.auth
@@ -82,7 +82,7 @@ async def unsubscribe_from_push(req: Request, endpoint: str):
             # Eliminar suscripción
             deleted = await PushNotificationService.remove_subscription(
                 db=session,
-                user_id=user_payload["sub"],
+                user_id=int(user_payload["sub"]),
                 endpoint=endpoint
             )
 
@@ -123,7 +123,7 @@ async def get_my_subscriptions(req: Request):
         async with AsyncSessionLocal() as session:
             subscriptions = await PushNotificationService.get_user_subscriptions(
                 db=session,
-                user_id=user_payload["sub"]
+                user_id=int(user_payload["sub"])
             )
 
             return JSONResponse(
@@ -163,7 +163,7 @@ async def test_push_notification(req: Request):
         if isinstance(user_payload, JSONResponse):
             return user_payload
 
-        user_id = user_payload["sub"]
+        user_id = int(user_payload["sub"])
 
         # Calcular tiempo de envío (2 minutos desde ahora)
         send_time = datetime.now() + timedelta(minutes=2)
