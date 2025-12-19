@@ -180,31 +180,19 @@ class PushNotificationService:
                     "iat": int(time.time())  # Issued At: ahora
                 }
                 
-                # 2. Generar JWT manualmente usando python-jose
-                # Cargar la clave privada desde el objeto Vapid
-                private_key_pem = VAPID_PRIVATE_KEY.encode('utf-8')
-                private_key = serialization.load_pem_private_key(
-                    private_key_pem,
-                    password=None,
-                    backend=default_backend()
-                )
+                # 2. Generar JWT usando el objeto Vapid directamente
+                # py_vapid está diseñado específicamente para generar JWTs VAPID con el formato correcto
+                # Esto asegura compatibilidad con todos los servicios push (Apple, FCM, Mozilla, etc.)
+                if not _vapid_obj:
+                    raise ValueError("Objeto Vapid no está inicializado")
                 
-                # Generar JWT con ES256 (algoritmo requerido para VAPID)
-                jwt_token = jose_jwt.encode(
-                    vapid_claims,
-                    private_key,
-                    algorithm="ES256",
-                    headers={"typ": "JWT", "alg": "ES256"}
-                )
-                
-                # Verificar que el JWT se generó correctamente (solo en modo debug)
-                try:
-                    decoded = jose_jwt.decode(jwt_token, options={"verify_signature": False})
-                    logger.debug(f"JWT generado correctamente. Claims decodificados: {decoded}")
-                except Exception as e:
-                    logger.warning(f"Error al decodificar JWT para verificación: {e}")
+                # El objeto Vapid tiene un método sign() que genera el JWT desde claims
+                # Esto genera el JWT con el formato exacto que los servicios push esperan
+                # El método sign() de py_vapid genera el JWT con el formato correcto para VAPID
+                jwt_token = _vapid_obj.sign(vapid_claims)
                 
                 # 3. Obtener la clave pública en formato base64 URL-safe para los headers
+                # Usamos la clave pública del .env que ya está verificada
                 public_key_b64 = VAPID_PUBLIC_KEY
                 
                 # 4. Preparar headers VAPID según el estándar Web Push
@@ -266,15 +254,15 @@ class PushNotificationService:
                     failed_subscriptions.append(subscription.id)
                     logger.info(f"Subscription {subscription.id} expirada (410), se eliminará")
                 elif response.status_code == 403:
-                    # BadJwtToken
+                    # BadJwtToken - generalmente significa que la suscripción fue creada con una clave pública diferente
                     failed_subscriptions.append(subscription.id)
                     logger.warning(f"BadJwtToken para subscription {subscription.id} (403)")
                     logger.warning(f"  Response body: {response.text}")
-                    logger.warning(f"  JWT completo: {jwt_token}")
-                    logger.warning(f"  Claims: {vapid_claims}")
+                    logger.warning(f"  Endpoint: {subscription.endpoint[:100]}...")
                     logger.warning(f"  Audience: {audience}")
-                    logger.warning(f"  Public key (primeros 50 chars): {public_key_b64[:50]}...")
-                    logger.warning(f"  Headers enviados: {headers}")
+                    logger.warning(f"  Public key actual: {public_key_b64[:50]}...")
+                    logger.warning(f"  SOLUCION: El usuario debe volver a suscribirse con la clave publica actual")
+                    logger.warning(f"  La suscripcion fue creada con una clave publica diferente")
                 else:
                     # Otro error
                     failed_subscriptions.append(subscription.id)
