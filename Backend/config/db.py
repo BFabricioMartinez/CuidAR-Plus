@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 
 # Obtener DATABASE_URL desde variables de entorno
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:123@localhost:5432/Cuidar")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cuidar_giw3_user:suPg36WGhYCcRBbFqNI6YGN0L0dq8GgB@dpg-d52fdnv5r7bs73a4oln0-a/cuidar_giw3")
 
 # Si DATABASE_URL viene de Render (empieza con postgres://), convertir a postgresql://
 if DATABASE_URL.startswith("postgres://"):
