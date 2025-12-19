@@ -158,6 +158,19 @@ class PushNotificationService:
                 parsed = urlparse(subscription.endpoint)
                 audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
                 
+                # Identificar el servicio push
+                push_service = "Unknown"
+                if "fcm.googleapis.com" in subscription.endpoint:
+                    push_service = "FCM (Android/Chrome)"
+                elif "web.push.apple.com" in subscription.endpoint:
+                    push_service = "Apple Push Service (iOS/Safari)"
+                elif "updates.push.services.mozilla.com" in subscription.endpoint:
+                    push_service = "Mozilla Push Service (Firefox)"
+                else:
+                    push_service = f"Other ({parsed.netloc})"
+                
+                logger.debug(f"Enviando a {push_service} - Endpoint: {subscription.endpoint[:80]}...")
+                
                 # Preparar claims VAPID
                 vapid_claims = {
                     "sub": VAPID_EMAIL,
@@ -166,17 +179,18 @@ class PushNotificationService:
                     "iat": int(time.time())
                 }
                 
-                # Usar pywebpush directamente - es la solución más confiable
-                # La clave está normalizada desde el objeto Vapid
+                # Usar pywebpush directamente
+                # Usar la clave original sin normalizar - pywebpush la procesa internamente
+                # La normalización puede causar problemas de formato
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
-                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_private_key=_vapid_private_key_raw,  # Clave original del .env
                     vapid_claims=vapid_claims
                 )
                 
                 sent_count += 1
-                logger.info(f"Notificación enviada a subscription {subscription.id}")
+                logger.info(f"Notificación enviada a subscription {subscription.id} ({push_service})")
 
             except WebPushException as e:
                 logger.error(f"Error enviando a subscription {subscription.id}: {e}")
@@ -185,9 +199,11 @@ class PushNotificationService:
                     failed_subscriptions.append(subscription.id)
                     logger.info(f"Subscription {subscription.id} expirada, se eliminará")
                 elif e.response and e.response.status_code == 403:
-                    logger.warning(f"BadJwtToken para subscription {subscription.id} (403)")
+                    logger.warning(f"BadJwtToken para subscription {subscription.id} (403) - {push_service}")
                     logger.warning(f"  Response: {e.response.text if e.response else 'N/A'}")
+                    logger.warning(f"  Endpoint: {subscription.endpoint[:100]}...")
                     # NO eliminamos - puede ser problema del servicio push
+                    # Si solo falla con Apple, es un problema conocido de Apple Push Service
                 else:
                     failed_subscriptions.append(subscription.id)
                     
