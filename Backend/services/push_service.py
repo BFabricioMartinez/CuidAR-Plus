@@ -5,6 +5,7 @@ Utiliza pywebpush para enviar notificaciones siguiendo el estándar Web Push Pro
 
 import json
 import os
+import time
 from typing import Optional, List
 from pywebpush import webpush, WebPushException
 from py_vapid import Vapid
@@ -150,21 +151,20 @@ class PushNotificationService:
                 # Asegurar que el audience sea exactamente scheme://netloc sin trailing slash
                 audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
                 
-                # Preparar claims VAPID - "sub" y "aud" son obligatorios en pywebpush 2.x
-                # El claim "aud" solucionó el error BadJwtToken la primera vez
+                # Preparar claims VAPID - todos son obligatorios para un JWT válido
+                # "sub": Subject (mailto:email) - obligatorio
+                # "aud": Audience (origen del endpoint) - obligatorio, solucionó BadJwtToken la primera vez
+                # "exp": Expiration (timestamp) - obligatorio para JWT válido
+                # "iat": Issued At (timestamp) - pywebpush lo agrega automáticamente
                 vapid_claims = {
                     "sub": VAPID_EMAIL,  # Subject: debe ser mailto:email
-                    "aud": audience      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
+                    "aud": audience,      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
+                    "exp": int(time.time()) + 86400  # Expiration: 24 horas desde ahora (obligatorio para JWT válido)
                 }
-                
-                # Logging detallado para diagnóstico
-                logger.debug(f"Enviando push a endpoint: {subscription.endpoint[:50]}...")
-                logger.debug(f"Audience: {audience}")
-                logger.debug(f"VAPID_EMAIL: {VAPID_EMAIL}")
-                logger.debug(f"Vapid object type: {type(_vapid_obj)}")
                 
                 # Usar el objeto Vapid directamente - esto evita problemas de deserialización
                 # pywebpush 2.x genera el JWT correctamente cuando recibe el objeto Vapid
+                # IMPORTANTE: Pasamos exp explícitamente para asegurar que el JWT sea válido
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
