@@ -7,6 +7,7 @@ import json
 import os
 from typing import Optional, List
 from pywebpush import webpush, WebPushException
+from py_vapid import Vapid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from models.push_subscription import PushSubscription, PushNotificationPayload
@@ -16,12 +17,22 @@ logger = logging.getLogger(__name__)
 
 # Configuración VAPID desde variables de entorno
 # Las claves pueden venir con \n literales, hay que reemplazarlos por saltos reales
-VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+_vapid_private_key_raw = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
 
 # VAPID_EMAIL debe tener formato mailto: según el protocolo VAPID
 _email = os.getenv("VAPID_EMAIL", "admin@cuidar.com")
 VAPID_EMAIL = _email if _email.startswith("mailto:") else f"mailto:{_email}"
+
+# Crear objeto Vapid desde la clave privada PEM
+# Esto es más robusto que pasar la clave como string
+_vapid_obj = None
+if _vapid_private_key_raw:
+    try:
+        _vapid_obj = Vapid.from_pem(_vapid_private_key_raw.encode('utf-8'))
+    except Exception as e:
+        logger.error(f"Error al cargar clave VAPID privada: {e}")
+        _vapid_obj = None
 
 
 class PushNotificationService:
@@ -45,8 +56,8 @@ class PushNotificationService:
             dict con resultados del envío
         """
         # Validar configuración VAPID
-        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
-            logger.error("VAPID keys no configuradas")
+        if not _vapid_obj or not VAPID_PUBLIC_KEY:
+            logger.error("VAPID keys no configuradas o inválidas")
             return {
                 "success": False,
                 "error": "VAPID keys no configuradas en el servidor"
@@ -99,11 +110,12 @@ class PushNotificationService:
                 parsed = urlparse(subscription.endpoint)
                 audience = f"{parsed.scheme}://{parsed.netloc}"
 
-                # Enviar notificación
+                # Enviar notificación usando el objeto Vapid
+                # Esto es más robusto que pasar la clave como string
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
-                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_private_key=_vapid_obj,
                     vapid_claims={
                         "sub": VAPID_EMAIL,
                         "aud": audience
