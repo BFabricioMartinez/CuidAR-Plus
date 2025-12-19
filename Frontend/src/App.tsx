@@ -22,11 +22,11 @@ function App() {
         toastOptions={{
           // Duración por defecto
           duration: 3000,
-          // Los estilos específicos se manejan en utils/toast.ts
+          
           style: {
             fontSize: '14px',
             maxWidth: '500px',
-            zIndex: 10001, // Asegurar que cada toast también tenga el z-index correcto
+            zIndex: 10001, 
           },
         }}
       />

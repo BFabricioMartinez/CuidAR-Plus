@@ -114,58 +114,16 @@ export default function Navbar() {
     }
   };
 
-  // Handler para probar notificación programada (10 segundos)
+  // Handler para probar notificación push (inmediata desde el backend)
   const handleTestNotification = async () => {
     if (!notificationsEnabled) {
       alert('Primero activa las notificaciones con el botón de la campana');
       return;
     }
 
-    // Verificar permisos explícitamente
-    if (Notification.permission !== 'granted') {
-      alert('ERROR: Permisos no otorgados. Estado: ' + Notification.permission);
-      return;
-    }
-
-    alert('✅ Permisos OK. En 3 minutos recibirás la notificación');
-
-    setTimeout(async () => {
-      try {
-        // Intentar usar Service Worker primero (Android)
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          const registration = await navigator.serviceWorker.ready;
-          await registration.showNotification('💊 Hora de medicación', {
-            body: 'Tomar Paracetamol 500mg',
-            icon: '/pwa-192x192.png',
-            badge: '/pwa-192x192.png',
-            requireInteraction: true,
-            tag: 'med-reminder',
-            data: { url: window.location.origin }
-          });
-          console.log('✅ Notificación enviada vía Service Worker');
-          return;
-        }
-
-        // Fallback: Notification API (iOS, desktop)
-        const notification = new Notification('💊 Hora de medicación', {
-          body: 'Tomar Paracetamol 500mg',
-          icon: '/pwa-192x192.png',
-          badge: '/pwa-192x192.png',
-          requireInteraction: true,
-          tag: 'med-reminder'
-        });
-
-        notification.onclick = () => {
-          window.focus();
-          notification.close();
-        };
-
-        console.log('✅ Notificación enviada vía Notification API');
-      } catch (error) {
-        console.error('❌ Error al crear notificación:', error);
-        alert('ERROR: ' + (error instanceof Error ? error.message : String(error)));
-      }
-    }, 180000); // 3 minutos = 180000 ms
+    // Solicitar al backend que envíe una notificación push de prueba
+    await testNotification();
+    alert('✅ Notificación de prueba solicitada al servidor. Debería llegar en unos segundos.');
   };
 
   const navItems: NavItem[] = [
@@ -391,7 +349,7 @@ export default function Navbar() {
                   <button
                     onClick={handleTestNotification}
                     className="test-notification-btn"
-                    title="Probar notificación (3 min)"
+                    title="Probar notificación push"
                   >
                     <svg className="test-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
