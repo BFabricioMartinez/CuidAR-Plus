@@ -6,12 +6,10 @@ Utiliza APScheduler para programar y ejecutar notificaciones en el momento adecu
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.jobstores.memory import MemoryJobStore
-from apscheduler.executors.pool import ThreadPoolExecutor
 from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
 
 from models.push_subscription import PushNotificationPayload
 from services.push_service import PushNotificationService
@@ -23,47 +21,20 @@ logger = logging.getLogger(__name__)
 jobstores = {
     'default': MemoryJobStore()
 }
-executors = {
-    'default': ThreadPoolExecutor(10)
-}
 job_defaults = {
     'coalesce': False,  # No combinar ejecuciones perdidas
     'max_instances': 3  # Máximo 3 instancias de un job simultáneamente
 }
 
-# Inicializar scheduler
-scheduler = BackgroundScheduler(
+# Inicializar scheduler AsyncIO (corre en el mismo event loop que FastAPI)
+scheduler = AsyncIOScheduler(
     jobstores=jobstores,
-    executors=executors,
     job_defaults=job_defaults,
     timezone='UTC'
 )
 
 
-def send_medication_notification_sync(user_id: int, medication_name: str, dosage: str, notification_type: str):
-    """
-    Función sincrónica que envía la notificación.
-    APScheduler requiere funciones síncronas, así que wrapeamos la función async.
-
-    Args:
-        user_id: ID del usuario (paciente o cuidador)
-        medication_name: Nombre del medicamento
-        dosage: Dosis del medicamento
-        notification_type: Tipo de notificación ('1_hour', '10_min', 'now')
-    """
-    try:
-        # Ejecutar la función async en un nuevo event loop
-        asyncio.run(send_medication_notification_async(
-            user_id=user_id,
-            medication_name=medication_name,
-            dosage=dosage,
-            notification_type=notification_type
-        ))
-    except Exception as e:
-        logger.error(f"Error en send_medication_notification_sync: {e}")
-
-
-async def send_medication_notification_async(
+async def send_medication_notification(
     user_id: int,
     medication_name: str,
     dosage: str,
@@ -71,6 +42,7 @@ async def send_medication_notification_async(
 ):
     """
     Función asíncrona que envía la notificación push.
+    Se ejecuta directamente en el event loop de FastAPI gracias a AsyncIOScheduler.
 
     Args:
         user_id: ID del usuario (paciente o cuidador)
@@ -172,7 +144,7 @@ class MedicationNotificationScheduler:
             if one_hour_before > current_time:
                 job_id_1h = f"medication_{intake_log_id}_1h"
                 scheduler.add_job(
-                    send_medication_notification_sync,
+                    send_medication_notification,
                     trigger=DateTrigger(run_date=one_hour_before),
                     args=[user_id, medication_name, dosage, '1_hour'],
                     id=job_id_1h,
@@ -185,7 +157,7 @@ class MedicationNotificationScheduler:
             if ten_min_before > current_time:
                 job_id_10m = f"medication_{intake_log_id}_10m"
                 scheduler.add_job(
-                    send_medication_notification_sync,
+                    send_medication_notification,
                     trigger=DateTrigger(run_date=ten_min_before),
                     args=[user_id, medication_name, dosage, '10_min'],
                     id=job_id_10m,
@@ -198,7 +170,7 @@ class MedicationNotificationScheduler:
             if exact_time > current_time:
                 job_id_now = f"medication_{intake_log_id}_now"
                 scheduler.add_job(
-                    send_medication_notification_sync,
+                    send_medication_notification,
                     trigger=DateTrigger(run_date=exact_time),
                     args=[user_id, medication_name, dosage, 'now'],
                     id=job_id_now,

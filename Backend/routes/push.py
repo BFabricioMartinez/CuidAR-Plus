@@ -171,42 +171,37 @@ async def test_push_notification(req: Request):
         # Programar notificación usando el scheduler
         scheduler = get_scheduler()
 
-        # Función sincrónica que será llamada por el scheduler
-        def send_test_notification_sync():
+        # Crear una función async que será ejecutada por AsyncIOScheduler
+        async def send_test_notification():
             """
-            Función sincrónica que se ejecutará en 2 minutos.
-            APScheduler la ejecuta en un thread separado, por lo que puede usar asyncio.run()
+            Envía la notificación de prueba.
+            AsyncIOScheduler ejecuta esta función directamente en el event loop de FastAPI.
             """
-            import asyncio
-            from config.db import AsyncSessionLocal
+            try:
+                # Crear payload de prueba
+                payload = PushNotificationPayload(
+                    title="🧪 Notificación de prueba",
+                    body="Si ves esto, las notificaciones push funcionan correctamente!",
+                    icon="/pwa-192x192.png",
+                    badge="/pwa-192x192.png",
+                    tag="test-notification"
+                )
 
-            # Crear payload de prueba
-            payload = PushNotificationPayload(
-                title="🧪 Notificación de prueba",
-                body="Si ves esto, las notificaciones push funcionan correctamente!",
-                icon="/pwa-192x192.png",
-                badge="/pwa-192x192.png",
-                tag="test-notification"
-            )
+                async with AsyncSessionLocal() as session:
+                    result = await PushNotificationService.send_to_user(
+                        db=session,
+                        user_id=user_id,
+                        payload=payload
+                    )
+                    logger.info(f"Notificación de prueba enviada: {result}")
+            except Exception as e:
+                logger.error(f"Error enviando notificación de prueba: {e}")
+                import traceback
+                traceback.print_exc()
 
-            async def _send():
-                try:
-                    async with AsyncSessionLocal() as session:
-                        result = await PushNotificationService.send_to_user(
-                            db=session,
-                            user_id=user_id,
-                            payload=payload
-                        )
-                        logger.info(f"Notificación de prueba enviada: {result}")
-                except Exception as e:
-                    logger.error(f"Error enviando notificación de prueba: {e}")
-
-            # Ejecutar en un nuevo event loop (funciona porque estamos en un thread separado)
-            asyncio.run(_send())
-
-        # Programar el job
+        # Programar el job (AsyncIOScheduler acepta coroutines directamente)
         job = scheduler.add_job(
-            send_test_notification_sync,
+            send_test_notification,
             'date',
             run_date=send_time,
             id=f'test_notification_{user_id}_{int(send_time.timestamp())}',
