@@ -826,6 +826,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           gap: 1rem;
           position: relative;
           z-index: 1;
+          flex: 1;
+          min-width: 0;
         }
 
         .modal-icon-wrapper {
@@ -1677,25 +1679,29 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         @media (max-width: 640px) {
           .modal-backdrop {
-            padding: 0;
-            align-items: flex-end;
+            padding: 1rem;
+            align-items: center;
           }
 
           .modal-container {
             max-width: 100%;
-            border-radius: 24px 24px 0 0;
+            border-radius: 24px;
             max-height: 95vh;
           }
 
           .modal-header {
             padding: 1.5rem;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+          }
+
+          .modal-header-content {
+            flex: 1;
+            min-width: 0;
           }
 
           .modal-header-actions {
-            width: 100%;
+            flex-shrink: 0;
             justify-content: flex-end;
-            margin-top: 0.5rem;
           }
 
           .deactivated-users-btn {

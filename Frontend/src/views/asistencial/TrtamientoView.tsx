@@ -1517,12 +1517,30 @@ export default function TratamientoView() {
             font-size: 2rem;
           }
 
+          .header-content-treatments {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+
+          .title-section {
+            width: 100%;
+            text-align: center;
+          }
+
+          .btn-add-treatment {
+            width: 100%;
+            justify-content: center;
+            margin-top: 1rem;
+          }
+
           .treatments-content {
             padding: 0 1.5rem;
           }
 
           .treatments-grid {
             grid-template-columns: 1fr;
+            margin-top: 2rem;
           }
 
           .form-grid {

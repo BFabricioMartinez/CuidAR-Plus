@@ -3,6 +3,7 @@ import Select from 'react-select';
 import { assignmentsApi, usersApi, patientsApi, ApiError } from '../../api';
 import type { Assignment, User, Patient } from '../../api';
 import { toastSuccess, toastError, toastWarning } from '../../utils/toast';
+import ConfirmDialog from '../../components/modals/ConfirmDialog';
 
 // ============================================
 // TIPOS
@@ -36,6 +37,17 @@ export default function AsignacionesView() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showCreatePatientForm, setShowCreatePatientForm] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    assignmentId: number | null;
+    caregiverName: string;
+    patientName: string;
+  }>({
+    isOpen: false,
+    assignmentId: null,
+    caregiverName: '',
+    patientName: '',
+  });
 
   // Form de asignación
   const [selectedCaregiver, setSelectedCaregiver] = useState<{ value: string; label: string } | null>(null);
@@ -44,9 +56,9 @@ export default function AsignacionesView() {
   // Form de crear paciente
   const [patientFormData, setPatientFormData] = useState({
     name: '',
-    caregiver_id: '',
     notes: '',
   });
+  const [selectedPatientCaregiver, setSelectedPatientCaregiver] = useState<{ value: string; label: string } | null>(null);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -243,21 +255,33 @@ export default function AsignacionesView() {
     }
   };
 
-  // Eliminar asignación
-  const handleDelete = async (id: number, caregiverName: string, patientName: string) => {
-    // Confirmación nativa para operaciones críticas
-    const confirmed = window.confirm(
-      `¿Confirmar eliminación?\n\nCuidador: ${caregiverName}\nPaciente: ${patientName}\n\nEsta acción no se puede deshacer.`
-    );
+  // Abrir modal de confirmación de eliminación
+  const handleDeleteClick = (id: number, caregiverName: string, patientName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      assignmentId: id,
+      caregiverName,
+      patientName,
+    });
+  };
 
-    if (!confirmed) return;
+  // Confirmar eliminación
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.assignmentId) return;
 
     setLoading(true);
 
     try {
-      await assignmentsApi.deactivate(id);
+      await assignmentsApi.deactivate(deleteModal.assignmentId);
 
       toastSuccess('Asignación eliminada correctamente');
+
+      setDeleteModal({
+        isOpen: false,
+        assignmentId: null,
+        caregiverName: '',
+        patientName: '',
+      });
 
       fetchAssignments();
     } catch (err: any) {
@@ -265,6 +289,18 @@ export default function AsignacionesView() {
       toastError(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cerrar modal de eliminación
+  const handleCloseDeleteModal = () => {
+    if (!loading) {
+      setDeleteModal({
+        isOpen: false,
+        assignmentId: null,
+        caregiverName: '',
+        patientName: '',
+      });
     }
   };
 
@@ -281,14 +317,14 @@ export default function AsignacionesView() {
     setLoading(true);
 
     // Validar que se haya seleccionado un cuidador
-    if (!patientFormData.caregiver_id) {
+    if (!selectedPatientCaregiver) {
       toastWarning('Seleccioná un cuidador para el paciente');
       setLoading(false);
       return;
     }
 
     try {
-      const caregiverId = Number(patientFormData.caregiver_id);
+      const caregiverId = Number(selectedPatientCaregiver.value);
 
       // Crear el paciente
       const createResponse: any = await patientsApi.create({
@@ -321,9 +357,9 @@ export default function AsignacionesView() {
 
       setPatientFormData({
         name: '',
-        caregiver_id: '',
         notes: '',
       });
+      setSelectedPatientCaregiver(null);
       setShowCreatePatientForm(false);
 
       // Recargar pacientes y asignaciones
@@ -342,9 +378,9 @@ export default function AsignacionesView() {
     setShowCreatePatientForm(false);
     setPatientFormData({
       name: '',
-      caregiver_id: '',
       notes: '',
     });
+    setSelectedPatientCaregiver(null);
   };
 
   // Obtener IDs de pacientes/usuarios que ya tienen asignación activa
@@ -459,25 +495,19 @@ export default function AsignacionesView() {
                     </svg>
                     Cuidador asignado <span className="required">*</span>
                   </label>
-                  <select
-                    value={patientFormData.caregiver_id}
-                    onChange={(e) => setPatientFormData({ ...patientFormData, caregiver_id: e.target.value })}
-                    className="field-input"
-                    required
-                  >
-                    <option value="">Seleccionar cuidador...</option>
-                    {caregivers.length === 0 ? (
-                      <option value="" disabled>
-                        No hay cuidadores disponibles
-                      </option>
-                    ) : (
-                      caregivers.map((caregiver) => (
-                        <option key={caregiver.id} value={caregiver.id}>
-                          {caregiver.name} ({caregiver.email})
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  <Select
+                    value={selectedPatientCaregiver}
+                    onChange={(option) => setSelectedPatientCaregiver(option)}
+                    options={caregiverOptions}
+                    placeholder="Seleccionar cuidador..."
+                    isSearchable
+                    isClearable
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                    noOptionsMessage={() => 'No se encontraron cuidadores'}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
+                  />
                   {caregivers.length === 0 && (
                     <small className="field-hint" style={{ color: '#dc2626' }}>
                       ⚠️ No hay cuidadores (ASISTENCIAL) activos en el sistema.
@@ -497,7 +527,7 @@ export default function AsignacionesView() {
                     onChange={(e) => setPatientFormData({ ...patientFormData, notes: e.target.value })}
                     className="field-textarea"
                     placeholder="Información adicional sobre el paciente..."
-                    rows={3}
+                    rows={5}
                   />
                 </div>
               </div>
@@ -560,6 +590,8 @@ export default function AsignacionesView() {
                     className="react-select-container"
                     classNamePrefix="react-select"
                     noOptionsMessage={() => 'No se encontraron cuidadores'}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
                   />
                 </div>
 
@@ -580,6 +612,8 @@ export default function AsignacionesView() {
                     className="react-select-container"
                     classNamePrefix="react-select"
                     noOptionsMessage={() => 'No se encontraron pacientes ni usuarios personal'}
+                    menuPortalTarget={document.body}
+                    menuPosition="fixed"
                   />
                 </div>
               </div>
@@ -672,7 +706,7 @@ export default function AsignacionesView() {
                       </div>
                       <button
                         onClick={() =>
-                          handleDelete(
+                          handleDeleteClick(
                             assignment.id,
                             assignment.caregiver_name,
                             assignment.patient_name
@@ -693,6 +727,19 @@ export default function AsignacionesView() {
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de eliminación */}
+      <ConfirmDialog
+        isOpen={deleteModal.isOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        title="Confirmar eliminación"
+        message={`¿Estás seguro de que querés eliminar esta asignación?\n\nCuidador: ${deleteModal.caregiverName}\nPaciente: ${deleteModal.patientName}\n\nEsta acción no se puede deshacer.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        type="danger"
+        loading={loading}
+      />
 
       <style>{`
         .admin-assignments-container {
@@ -942,7 +989,19 @@ export default function AsignacionesView() {
           font-weight: 700;
         }
 
-        .field-input,
+        .field-input {
+          padding: 1rem;
+          font-size: 1rem;
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          outline: none;
+          transition: all 0.3s ease;
+          background: #f9fafb;
+          font-family: inherit;
+          height: 48px;
+          box-sizing: border-box;
+        }
+
         .field-textarea {
           padding: 1rem;
           font-size: 1rem;
@@ -952,6 +1011,7 @@ export default function AsignacionesView() {
           transition: all 0.3s ease;
           background: #f9fafb;
           font-family: inherit;
+          box-sizing: border-box;
         }
 
         .field-input:focus,
@@ -968,14 +1028,17 @@ export default function AsignacionesView() {
 
         /* React Select Styles */
         .react-select-container {
-          margin-top: 0.5rem;
+          margin-top: 0;
+          width: 100%;
         }
 
         .react-select__control {
-          min-height: 48px;
+          min-height: 48px !important;
+          height: 48px !important;
+          width: 100% !important;
           border: 2px solid #e5e7eb !important;
           border-radius: 12px !important;
-          background: #fff !important;
+          background: #f9fafb !important;
           box-shadow: none !important;
           transition: all 0.3s ease !important;
         }
@@ -986,12 +1049,16 @@ export default function AsignacionesView() {
 
         .react-select__control--is-focused {
           border-color: #667eea !important;
+          background: #fff !important;
           box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1) !important;
           transform: translateY(-1px);
         }
 
         .react-select__value-container {
-          padding: 0.5rem 1rem !important;
+          padding: 0 1rem !important;
+          height: 100% !important;
+          display: flex !important;
+          align-items: center !important;
         }
 
         .react-select__input-container {
@@ -1042,6 +1109,11 @@ export default function AsignacionesView() {
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
           margin-top: 0.5rem !important;
           overflow: hidden !important;
+          z-index: 9999 !important;
+        }
+
+        .react-select__menu-portal {
+          z-index: 9999 !important;
         }
 
         .react-select__menu-list {

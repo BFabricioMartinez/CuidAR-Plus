@@ -567,14 +567,14 @@ export default function ChangePasswordModal({ isOpen, onClose, user, onSave }: C
 
         @media (max-width: 640px) {
           .modal-backdrop {
-            padding: 0;
-            align-items: flex-end;
+            padding: 1rem;
+            align-items: center;
           }
 
           .change-password-modal {
             max-width: 100%;
             margin: 0;
-            border-radius: 24px 24px 0 0;
+            border-radius: 24px;
             max-height: 95vh;
           }
 
