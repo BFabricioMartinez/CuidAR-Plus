@@ -273,6 +273,11 @@ class MedicationNotificationScheduler:
         ]
 
 
+def get_scheduler():
+    """Retorna la instancia del scheduler"""
+    return scheduler
+
+
 def start_scheduler():
     """Inicia el scheduler si no está corriendo"""
     if not scheduler.running:
