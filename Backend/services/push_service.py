@@ -93,13 +93,20 @@ class PushNotificationService:
                     }
                 }
 
+                # Extraer el origen del endpoint para el claim "aud"
+                # Ejemplo: https://fcm.googleapis.com/... -> https://fcm.googleapis.com
+                from urllib.parse import urlparse
+                parsed = urlparse(subscription.endpoint)
+                audience = f"{parsed.scheme}://{parsed.netloc}"
+
                 # Enviar notificación
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
                     vapid_private_key=VAPID_PRIVATE_KEY,
                     vapid_claims={
-                        "sub": VAPID_EMAIL
+                        "sub": VAPID_EMAIL,
+                        "aud": audience
                     }
                 )
 
