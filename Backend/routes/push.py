@@ -168,37 +168,45 @@ async def test_push_notification(req: Request):
         # Calcular tiempo de envío (2 minutos desde ahora)
         send_time = datetime.now() + timedelta(minutes=2)
 
-        # Crear payload de prueba
-        payload = PushNotificationPayload(
-            title="🧪 Notificación de prueba",
-            body="Si ves esto, las notificaciones push funcionan correctamente!",
-            icon="/pwa-192x192.png",
-            badge="/pwa-192x192.png",
-            tag="test-notification"
-        )
-
         # Programar notificación usando el scheduler
         scheduler = get_scheduler()
 
-        def send_test_notification():
-            """Función que se ejecutará en 2 minutos"""
+        # Función sincrónica que será llamada por el scheduler
+        def send_test_notification_sync():
+            """
+            Función sincrónica que se ejecutará en 2 minutos.
+            APScheduler la ejecuta en un thread separado, por lo que puede usar asyncio.run()
+            """
             import asyncio
             from config.db import AsyncSessionLocal
 
-            async def _send():
-                async with AsyncSessionLocal() as session:
-                    await PushNotificationService.send_to_user(
-                        db=session,
-                        user_id=user_id,
-                        payload=payload
-                    )
+            # Crear payload de prueba
+            payload = PushNotificationPayload(
+                title="🧪 Notificación de prueba",
+                body="Si ves esto, las notificaciones push funcionan correctamente!",
+                icon="/pwa-192x192.png",
+                badge="/pwa-192x192.png",
+                tag="test-notification"
+            )
 
-            # Ejecutar la función async en el event loop
+            async def _send():
+                try:
+                    async with AsyncSessionLocal() as session:
+                        result = await PushNotificationService.send_to_user(
+                            db=session,
+                            user_id=user_id,
+                            payload=payload
+                        )
+                        logger.info(f"Notificación de prueba enviada: {result}")
+                except Exception as e:
+                    logger.error(f"Error enviando notificación de prueba: {e}")
+
+            # Ejecutar en un nuevo event loop (funciona porque estamos en un thread separado)
             asyncio.run(_send())
 
         # Programar el job
         job = scheduler.add_job(
-            send_test_notification,
+            send_test_notification_sync,
             'date',
             run_date=send_time,
             id=f'test_notification_{user_id}_{int(send_time.timestamp())}',
