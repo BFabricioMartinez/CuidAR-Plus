@@ -34,6 +34,35 @@ if _vapid_private_key_raw and _vapid_private_key_raw.startswith("-----BEGIN"):
         # Crear objeto Vapid desde la clave PEM
         _vapid_obj = Vapid.from_pem(cleaned_key.encode('utf-8'))
         logger.info("Clave VAPID cargada correctamente como objeto Vapid")
+        
+        # Verificar que la clave pública derivada coincida con la del .env
+        try:
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.backends import default_backend
+            import base64
+            
+            private_key = serialization.load_pem_private_key(
+                cleaned_key.encode('utf-8'),
+                password=None,
+                backend=default_backend()
+            )
+            public_key = private_key.public_key()
+            public_bytes = public_key.public_bytes(
+                encoding=serialization.Encoding.X962,
+                format=serialization.PublicFormat.UncompressedPoint
+            )
+            derived_public = base64.urlsafe_b64encode(public_bytes).decode('utf-8').rstrip('=')
+            
+            if derived_public != VAPID_PUBLIC_KEY:
+                logger.warning(f"ADVERTENCIA: La clave publica del .env no coincide con la derivada de la privada!")
+                logger.warning(f"  Clave publica en .env: {VAPID_PUBLIC_KEY}")
+                logger.warning(f"  Clave publica derivada: {derived_public}")
+                logger.warning("  Esto causara BadJwtToken. Verifica que las claves coincidan.")
+            else:
+                logger.info("Claves VAPID verificadas: la clave publica coincide con la privada")
+        except Exception as e:
+            logger.warning(f"No se pudo verificar coincidencia de claves: {e}")
+            
     except Exception as e:
         logger.error(f"Error al cargar clave VAPID como objeto: {e}")
         import traceback
