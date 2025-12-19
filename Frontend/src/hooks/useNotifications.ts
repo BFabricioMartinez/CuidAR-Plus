@@ -6,8 +6,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// VAPID Public Key - Generada con generate_vapid_keys.py
-const VAPID_PUBLIC_KEY = 'BF63RXWCKBCzgQQxogPOv1z_Flfa3PZsSolZHqMY09I-ws1eOLT8YGY9akbJcgcd9gPtXno5IjnSxrVNiKhbkgs';
+// VAPID Public Key - Generada con openssl (método oficial)
+const VAPID_PUBLIC_KEY = 'BC7q507Z_Gf22XjiPEoTdqY1_jOjB29lxHTIyooXpIYpUSwMEQLSJdLGfSNdXlHbQxWvN1gaH4hqAfiEbhvL_9s';
 
 // ============================================
 // TIPOS
