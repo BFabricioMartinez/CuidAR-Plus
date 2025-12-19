@@ -1059,6 +1059,7 @@ export default function AsignacionesView() {
           height: 100% !important;
           display: flex !important;
           align-items: center !important;
+          position: relative !important;
         }
 
         .react-select__input-container {
@@ -1069,11 +1070,21 @@ export default function AsignacionesView() {
         .react-select__input {
           font-size: 1rem !important;
           color: #1f2937 !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
 
         .react-select__single-value {
           color: #1f2937 !important;
           font-size: 1rem !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 1.5 !important;
+          position: absolute !important;
+          top: 50% !important;
+          left: 1rem !important;
+          right: 2.5rem !important;
+          transform: translateY(-50%) !important;
         }
 
         .react-select__placeholder {
