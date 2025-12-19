@@ -48,6 +48,9 @@ class PushNotificationService:
                 "error": "VAPID keys no configuradas en el servidor"
             }
 
+        # Asegurar que user_id sea int (puede venir como string del JWT)
+        user_id = int(user_id)
+
         # Obtener todas las suscripciones del usuario
         result = await db.execute(
             select(PushSubscription).where(PushSubscription.user_id == user_id)
@@ -149,6 +152,9 @@ class PushNotificationService:
         Returns:
             PushSubscription creada o actualizada
         """
+        # Asegurar que user_id sea int
+        user_id = int(user_id)
+
         # Verificar si ya existe
         result = await db.execute(
             select(PushSubscription).where(
@@ -197,6 +203,9 @@ class PushNotificationService:
         Returns:
             True si se eliminó, False si no existía
         """
+        # Asegurar que user_id sea int
+        user_id = int(user_id)
+
         result = await db.execute(
             delete(PushSubscription).where(
                 PushSubscription.user_id == user_id,
@@ -225,6 +234,9 @@ class PushNotificationService:
         Returns:
             Lista de suscripciones
         """
+        # Asegurar que user_id sea int
+        user_id = int(user_id)
+
         result = await db.execute(
             select(PushSubscription).where(PushSubscription.user_id == user_id)
         )
