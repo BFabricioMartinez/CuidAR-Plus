@@ -17,22 +17,40 @@ logger = logging.getLogger(__name__)
 
 # Configuración VAPID desde variables de entorno
 # Las claves pueden venir con \n literales, hay que reemplazarlos por saltos reales
-_vapid_private_key_raw = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
-VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
+_vapid_private_key_raw = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n").strip()
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n").strip()
 
 # VAPID_EMAIL debe tener formato mailto: según el protocolo VAPID
 _email = os.getenv("VAPID_EMAIL", "admin@cuidar.com")
 VAPID_EMAIL = _email if _email.startswith("mailto:") else f"mailto:{_email}"
 
-# Crear objeto Vapid desde la clave privada PEM
-# Esto es más robusto que pasar la clave como string
+# Preparar clave privada VAPID
+# Intentamos múltiples métodos para asegurar compatibilidad
+VAPID_PRIVATE_KEY = None
 _vapid_obj = None
+
 if _vapid_private_key_raw:
     try:
+        # Método 1: Crear objeto Vapid y obtener la clave PEM desde él
+        # Esto asegura que la clave esté en el formato exacto que pywebpush espera
         _vapid_obj = Vapid.from_pem(_vapid_private_key_raw.encode('utf-8'))
+        # Obtener la clave PEM desde el objeto (esto normaliza el formato)
+        VAPID_PRIVATE_KEY = _vapid_obj.private_pem().decode('utf-8')
+        logger.info("Clave VAPID cargada correctamente usando objeto Vapid")
     except Exception as e:
-        logger.error(f"Error al cargar clave VAPID privada: {e}")
-        _vapid_obj = None
+        logger.warning(f"No se pudo cargar clave VAPID como objeto: {e}")
+        try:
+            # Método 2: Usar la clave directamente como string (fallback)
+            # Limpiar espacios y asegurar formato correcto
+            VAPID_PRIVATE_KEY = _vapid_private_key_raw.strip()
+            if not VAPID_PRIVATE_KEY.startswith("-----BEGIN"):
+                logger.error("Formato de clave VAPID inválido")
+                VAPID_PRIVATE_KEY = None
+            else:
+                logger.info("Clave VAPID cargada como string (fallback)")
+        except Exception as e2:
+            logger.error(f"Error al procesar clave VAPID: {e2}")
+            VAPID_PRIVATE_KEY = None
 
 
 class PushNotificationService:
@@ -56,8 +74,10 @@ class PushNotificationService:
             dict con resultados del envío
         """
         # Validar configuración VAPID
-        if not _vapid_obj or not VAPID_PUBLIC_KEY:
+        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
             logger.error("VAPID keys no configuradas o inválidas")
+            logger.error(f"VAPID_PRIVATE_KEY presente: {VAPID_PRIVATE_KEY is not None}")
+            logger.error(f"VAPID_PUBLIC_KEY presente: {bool(VAPID_PUBLIC_KEY)}")
             return {
                 "success": False,
                 "error": "VAPID keys no configuradas en el servidor"
@@ -105,17 +125,19 @@ class PushNotificationService:
                 }
 
                 # Extraer el origen del endpoint para el claim "aud"
+                # El audience DEBE ser exactamente el origen sin path ni trailing slash
                 # Ejemplo: https://fcm.googleapis.com/... -> https://fcm.googleapis.com
                 from urllib.parse import urlparse
                 parsed = urlparse(subscription.endpoint)
-                audience = f"{parsed.scheme}://{parsed.netloc}"
-
-                # Enviar notificación usando el objeto Vapid
-                # Esto es más robusto que pasar la clave como string
+                # Asegurar que el audience sea exactamente scheme://netloc sin trailing slash
+                audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+                
+                # Usar siempre la clave como string (más estable que el objeto)
+                # pywebpush 2.x acepta tanto string como objeto Vapid
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
-                    vapid_private_key=_vapid_obj,
+                    vapid_private_key=VAPID_PRIVATE_KEY,
                     vapid_claims={
                         "sub": VAPID_EMAIL,
                         "aud": audience
