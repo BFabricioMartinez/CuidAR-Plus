@@ -1,0 +1,231 @@
+"""
+Servicio para enviar notificaciones push a usuarios.
+Utiliza pywebpush para enviar notificaciones siguiendo el estándar Web Push Protocol.
+"""
+
+import json
+import os
+from typing import Optional, List
+from pywebpush import webpush, WebPushException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from models.push_subscription import PushSubscription, PushNotificationPayload
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Configuración VAPID desde variables de entorno
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@cuidar.com")
+
+
+class PushNotificationService:
+    """Servicio para gestionar notificaciones push"""
+
+    @staticmethod
+    async def send_to_user(
+        db: AsyncSession,
+        user_id: int,
+        payload: PushNotificationPayload
+    ) -> dict:
+        """
+        Envía una notificación push a todos los dispositivos de un usuario.
+
+        Args:
+            db: Sesión de base de datos
+            user_id: ID del usuario destinatario
+            payload: Contenido de la notificación
+
+        Returns:
+            dict con resultados del envío
+        """
+        # Validar configuración VAPID
+        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+            logger.error("VAPID keys no configuradas")
+            return {
+                "success": False,
+                "error": "VAPID keys no configuradas en el servidor"
+            }
+
+        # Obtener todas las suscripciones del usuario
+        result = await db.execute(
+            select(PushSubscription).where(PushSubscription.user_id == user_id)
+        )
+        subscriptions = result.scalars().all()
+
+        if not subscriptions:
+            logger.warning(f"Usuario {user_id} no tiene suscripciones push")
+            return {
+                "success": False,
+                "error": "Usuario no tiene dispositivos suscritos"
+            }
+
+        # Preparar payload
+        notification_data = {
+            "title": payload.title,
+            "body": payload.body,
+            "icon": payload.icon,
+            "badge": payload.badge,
+            "tag": payload.tag,
+            "data": payload.data or {}
+        }
+
+        # Enviar a cada dispositivo
+        sent_count = 0
+        failed_subscriptions = []
+
+        for subscription in subscriptions:
+            try:
+                # Construir subscription_info para pywebpush
+                subscription_info = {
+                    "endpoint": subscription.endpoint,
+                    "keys": {
+                        "p256dh": subscription.p256dh_key,
+                        "auth": subscription.auth_key
+                    }
+                }
+
+                # Enviar notificación
+                webpush(
+                    subscription_info=subscription_info,
+                    data=json.dumps(notification_data),
+                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_claims={
+                        "sub": VAPID_EMAIL
+                    }
+                )
+
+                sent_count += 1
+                logger.info(f"Notificación enviada a subscription {subscription.id}")
+
+            except WebPushException as e:
+                logger.error(f"Error enviando a subscription {subscription.id}: {e}")
+
+                # Si el endpoint expiró o es inválido (410 Gone), marcarlo para eliminación
+                if e.response and e.response.status_code == 410:
+                    failed_subscriptions.append(subscription.id)
+                    logger.info(f"Subscription {subscription.id} expirada, se eliminará")
+
+            except Exception as e:
+                logger.error(f"Error inesperado enviando notificación: {e}")
+
+        # Eliminar suscripciones expiradas
+        if failed_subscriptions:
+            await db.execute(
+                delete(PushSubscription).where(
+                    PushSubscription.id.in_(failed_subscriptions)
+                )
+            )
+            await db.commit()
+            logger.info(f"Eliminadas {len(failed_subscriptions)} suscripciones expiradas")
+
+        return {
+            "success": sent_count > 0,
+            "sent_count": sent_count,
+            "total_subscriptions": len(subscriptions),
+            "removed_expired": len(failed_subscriptions)
+        }
+
+    @staticmethod
+    async def save_subscription(
+        db: AsyncSession,
+        user_id: int,
+        endpoint: str,
+        p256dh_key: str,
+        auth_key: str
+    ) -> PushSubscription:
+        """
+        Guarda o actualiza una suscripción push.
+        Si ya existe el mismo endpoint para el usuario, la actualiza.
+
+        Args:
+            db: Sesión de base de datos
+            user_id: ID del usuario
+            endpoint: URL del endpoint push
+            p256dh_key: Clave pública p256dh
+            auth_key: Clave de autenticación
+
+        Returns:
+            PushSubscription creada o actualizada
+        """
+        # Verificar si ya existe
+        result = await db.execute(
+            select(PushSubscription).where(
+                PushSubscription.user_id == user_id,
+                PushSubscription.endpoint == endpoint
+            )
+        )
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            # Actualizar keys (pueden cambiar si el usuario reinstala la PWA)
+            existing.p256dh_key = p256dh_key
+            existing.auth_key = auth_key
+            await db.commit()
+            await db.refresh(existing)
+            logger.info(f"Subscription actualizada para user {user_id}")
+            return existing
+        else:
+            # Crear nueva
+            subscription = PushSubscription(
+                user_id=user_id,
+                endpoint=endpoint,
+                p256dh_key=p256dh_key,
+                auth_key=auth_key
+            )
+            db.add(subscription)
+            await db.commit()
+            await db.refresh(subscription)
+            logger.info(f"Nueva subscription creada para user {user_id}")
+            return subscription
+
+    @staticmethod
+    async def remove_subscription(
+        db: AsyncSession,
+        user_id: int,
+        endpoint: str
+    ) -> bool:
+        """
+        Elimina una suscripción específica de un usuario.
+
+        Args:
+            db: Sesión de base de datos
+            user_id: ID del usuario
+            endpoint: Endpoint a eliminar
+
+        Returns:
+            True si se eliminó, False si no existía
+        """
+        result = await db.execute(
+            delete(PushSubscription).where(
+                PushSubscription.user_id == user_id,
+                PushSubscription.endpoint == endpoint
+            )
+        )
+        await db.commit()
+
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.info(f"Subscription eliminada para user {user_id}")
+        return deleted
+
+    @staticmethod
+    async def get_user_subscriptions(
+        db: AsyncSession,
+        user_id: int
+    ) -> List[PushSubscription]:
+        """
+        Obtiene todas las suscripciones de un usuario.
+
+        Args:
+            db: Sesión de base de datos
+            user_id: ID del usuario
+
+        Returns:
+            Lista de suscripciones
+        """
+        result = await db.execute(
+            select(PushSubscription).where(PushSubscription.user_id == user_id)
+        )
+        return result.scalars().all()

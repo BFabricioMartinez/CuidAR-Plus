@@ -66,4 +66,10 @@ class InputIntakeLogUpdate(BaseModel):
     taken_at: Optional[str] = None  # Cambiado de datetime a str
     status: Optional[str] = None
 
+class ScheduleIntakeInput(BaseModel):
+    """Modelo para programar una toma futura con notificaciones push"""
+    treatment_id: int
+    scheduled_datetime: str  # Formato: "YYYY-MM-DD HH:MM:SS" - Momento exacto de la toma
+    scheduled_time: str  # Formato: "HH:MM" - Hora del día (ej: "08:00")
+
 #endregion

@@ -2,10 +2,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from models import IntakeLog, Treatment, Patient, Assignment, InputIntakeLog, InputIntakeLogUpdate, InputPaginatedRequestFilter
+from models import IntakeLog, Treatment, Patient, Assignment, InputIntakeLog, InputIntakeLogUpdate, InputPaginatedRequestFilter, ScheduleIntakeInput
 from config.db import AsyncSessionLocal
 from auth.roles import require_roles
 from utils.update import is_valid_change
+from services.scheduler import MedicationNotificationScheduler
+from datetime import datetime
 import traceback
 
 intake = APIRouter()
@@ -1030,4 +1032,147 @@ async def mark_missed(req: Request, treatment_id: int, time: str, recorded_by_us
         return JSONResponse(
             status_code=500,
             content={"message": "Error al marcar dosis como omitida"}
+        )
+
+
+@intake.post("/intake/schedule-with-notifications")
+async def schedule_intake_with_notifications(req: Request, data: ScheduleIntakeInput):
+    """
+    Programa una toma futura y configura notificaciones push automáticas.
+    
+    Se programan 3 notificaciones:
+    - 1 hora antes de la toma
+    - 10 minutos antes de la toma
+    - En el momento exacto de la toma
+    
+    Control de acceso:
+    - ADMIN: puede programar para cualquier tratamiento
+    - PERSONAL: solo para tratamientos de sus propios pacientes
+    - ASISTENCIAL: solo para pacientes con Assignment activa
+    
+    Args:
+        data: Datos de la programación (ScheduleIntakeInput)
+    
+    Returns:
+        JSONResponse con el IntakeLog creado y los job_ids programados
+    """
+    try:
+        # Verificar token y rol
+        payload = require_roles(req.headers, ["ADMIN", "PERSONAL", "ASISTENCIAL"])
+        if isinstance(payload, JSONResponse):
+            return payload
+        
+        user_id = int(payload["sub"])
+        user_role = payload["role"].upper()
+        
+        async with AsyncSessionLocal() as session:
+            # Verificar que el tratamiento existe
+            stmt_treatment = select(Treatment).options(joinedload(Treatment.patient)).where(Treatment.id == data.treatment_id)
+            result_treatment = await session.execute(stmt_treatment)
+            treatment = result_treatment.scalar_one_or_none()
+            
+            if not treatment:
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": f"Tratamiento con ID {data.treatment_id} no encontrado"}
+                )
+            
+            # Validación de acceso por rol
+            if user_role == "PERSONAL":
+                # PERSONAL: verificar ownership del paciente
+                if treatment.patient.caregiver_id != user_id:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            elif user_role == "ASISTENCIAL":
+                # ASISTENCIAL: verificar Assignment activa
+                stmt_assignment = select(Assignment).where(
+                    Assignment.patient_id == treatment.patient_id,
+                    Assignment.caregiver_id == user_id,
+                    Assignment.active == True
+                )
+                result_assignment = await session.execute(stmt_assignment)
+                assignment = result_assignment.scalar_one_or_none()
+                
+                if not assignment:
+                    return JSONResponse(status_code=403, content={"message": "Acceso denegado"})
+            
+            # Parsear scheduled_datetime
+            try:
+                scheduled_dt = datetime.strptime(data.scheduled_datetime, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "Formato de fecha inválido. Use: YYYY-MM-DD HH:MM:SS"}
+                )
+            
+            # Verificar que la fecha es futura
+            if scheduled_dt <= datetime.utcnow():
+                return JSONResponse(
+                    status_code=400,
+                    content={"message": "La fecha programada debe ser futura"}
+                )
+            
+            # Crear IntakeLog pendiente (status="PENDING")
+            new_intake = IntakeLog(
+                treatment_id=data.treatment_id,
+                taken_at=scheduled_dt,  # Hora programada inicial
+                scheduled_time=data.scheduled_time,  # Hora del día (ej: "08:00")
+                status="PENDING"  # Estado pendiente hasta que se tome o se omita
+            )
+            
+            session.add(new_intake)
+            await session.commit()
+            await session.refresh(new_intake)
+            
+            # Programar notificaciones push
+            # El destinatario es el paciente (caregiver_id)
+            notification_user_id = treatment.patient.caregiver_id
+            
+            schedule_result = MedicationNotificationScheduler.schedule_medication_reminders(
+                intake_log_id=new_intake.id,
+                user_id=notification_user_id,
+                medication_name=treatment.medication_name,
+                dosage=treatment.dosage or "",
+                scheduled_datetime=scheduled_dt
+            )
+            
+            if not schedule_result["success"]:
+                # Si falla el scheduling, eliminar el IntakeLog
+                await session.delete(new_intake)
+                await session.commit()
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "message": "Error al programar notificaciones",
+                        "error": schedule_result.get("error")
+                    }
+                )
+            
+            return JSONResponse(
+                status_code=201,
+                content={
+                    "message": "Toma programada exitosamente con notificaciones",
+                    "data": {
+                        "id": new_intake.id,
+                        "treatment_id": new_intake.treatment_id,
+                        "scheduled_datetime": new_intake.taken_at.isoformat(),
+                        "scheduled_time": new_intake.scheduled_time,
+                        "status": new_intake.status,
+                        "notifications": {
+                            "job_ids": schedule_result["job_ids"],
+                            "scheduled_for": schedule_result["scheduled_for"]
+                        },
+                        "treatment": {
+                            "medication_name": treatment.medication_name,
+                            "dosage": treatment.dosage
+                        }
+                    }
+                }
+            )
+    
+    except Exception as error:
+        print("Error al programar toma con notificaciones ----> ", error)
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"message": "Error al programar toma"}
         )
