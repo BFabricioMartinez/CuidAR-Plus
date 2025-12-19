@@ -114,16 +114,16 @@ export default function Navbar() {
     }
   };
 
-  // Handler para probar notificación push (inmediata desde el backend)
+  // Handler para probar notificación push (programada para 2 minutos después)
   const handleTestNotification = async () => {
     if (!notificationsEnabled) {
       alert('Primero activa las notificaciones con el botón de la campana');
       return;
     }
 
-    // Solicitar al backend que envíe una notificación push de prueba
+    // Solicitar al backend que programe una notificación push de prueba
     await testNotification();
-    alert('✅ Notificación de prueba solicitada al servidor. Debería llegar en unos segundos.');
+    alert('✅ Notificación de prueba programada. Llegará en 2 minutos.\n\nPuedes cerrar la app ahora para probar que funciona con la app cerrada.');
   };
 
   const navItems: NavItem[] = [
