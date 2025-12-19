@@ -15,8 +15,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuración VAPID desde variables de entorno
-VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
-VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+# Las claves pueden venir con \n literales, hay que reemplazarlos por saltos reales
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
 VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@cuidar.com")
 
 
