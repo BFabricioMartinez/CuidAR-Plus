@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 # Las claves pueden venir con \n literales, hay que reemplazarlos por saltos reales
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n")
-VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@cuidar.com")
+
+# VAPID_EMAIL debe tener formato mailto: según el protocolo VAPID
+_email = os.getenv("VAPID_EMAIL", "admin@cuidar.com")
+VAPID_EMAIL = _email if _email.startswith("mailto:") else f"mailto:{_email}"
 
 
 class PushNotificationService:
