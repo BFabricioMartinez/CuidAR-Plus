@@ -157,6 +157,12 @@ class PushNotificationService:
                     "aud": audience      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
                 }
                 
+                # Logging detallado para diagnóstico
+                logger.debug(f"Enviando push a endpoint: {subscription.endpoint[:50]}...")
+                logger.debug(f"Audience: {audience}")
+                logger.debug(f"VAPID_EMAIL: {VAPID_EMAIL}")
+                logger.debug(f"Vapid object type: {type(_vapid_obj)}")
+                
                 # Usar el objeto Vapid directamente - esto evita problemas de deserialización
                 # pywebpush 2.x genera el JWT correctamente cuando recibe el objeto Vapid
                 webpush(
@@ -171,11 +177,19 @@ class PushNotificationService:
 
             except WebPushException as e:
                 logger.error(f"Error enviando a subscription {subscription.id}: {e}")
-
+                
                 # Si el endpoint expiró o es inválido (410 Gone), marcarlo para eliminación
                 if e.response and e.response.status_code == 410:
                     failed_subscriptions.append(subscription.id)
                     logger.info(f"Subscription {subscription.id} expirada, se eliminará")
+                
+                # Si hay BadJwtToken (403), probablemente la suscripción fue creada con una clave pública diferente
+                # Eliminarla para que el usuario se vuelva a suscribir con la clave correcta
+                elif e.response and e.response.status_code == 403:
+                    failed_subscriptions.append(subscription.id)
+                    logger.warning(f"BadJwtToken para subscription {subscription.id} - probablemente creada con clave publica diferente")
+                    logger.warning(f"  Eliminando suscripción para que el usuario se vuelva a suscribir")
+                    logger.warning(f"  Endpoint: {subscription.endpoint[:80]}...")
 
             except Exception as e:
                 logger.error(f"Error inesperado enviando notificación: {e}")
