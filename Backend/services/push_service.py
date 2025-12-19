@@ -24,14 +24,24 @@ VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "").replace("\\n", "\n").strip(
 _email = os.getenv("VAPID_EMAIL", "admin@cuidar.com")
 VAPID_EMAIL = _email if _email.startswith("mailto:") else f"mailto:{_email}"
 
-# Usar la clave privada directamente como string
-# pywebpush 2.x puede procesarla correctamente si está bien formateada
-VAPID_PRIVATE_KEY = _vapid_private_key_raw if _vapid_private_key_raw.startswith("-----BEGIN") else None
+# Crear objeto Vapid una vez al inicio - esto evita problemas de deserialización
+# El objeto Vapid maneja correctamente el formato PEM y genera el JWT apropiadamente
+_vapid_obj = None
+if _vapid_private_key_raw and _vapid_private_key_raw.startswith("-----BEGIN"):
+    try:
+        # Limpiar la clave: asegurar que tenga saltos de línea correctos
+        cleaned_key = _vapid_private_key_raw.strip()
+        # Crear objeto Vapid desde la clave PEM
+        _vapid_obj = Vapid.from_pem(cleaned_key.encode('utf-8'))
+        logger.info("Clave VAPID cargada correctamente como objeto Vapid")
+    except Exception as e:
+        logger.error(f"Error al cargar clave VAPID como objeto: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        _vapid_obj = None
 
-if not VAPID_PRIVATE_KEY:
+if not _vapid_obj:
     logger.error("VAPID_PRIVATE_KEY no está configurada o tiene formato inválido")
-else:
-    logger.info("Clave VAPID cargada correctamente")
 
 
 class PushNotificationService:
@@ -55,7 +65,7 @@ class PushNotificationService:
             dict con resultados del envío
         """
         # Validar configuración VAPID
-        if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        if not _vapid_obj or not VAPID_PUBLIC_KEY:
             logger.error("VAPID keys no configuradas o inválidas")
             return {
                 "success": False,
@@ -113,18 +123,17 @@ class PushNotificationService:
                 
                 # Preparar claims VAPID - "sub" y "aud" son obligatorios en pywebpush 2.x
                 # El claim "aud" solucionó el error BadJwtToken la primera vez
-                # pywebpush agrega automáticamente "exp" e "iat", no los pasamos manualmente
                 vapid_claims = {
                     "sub": VAPID_EMAIL,  # Subject: debe ser mailto:email
                     "aud": audience      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
                 }
                 
-                # Usar la clave como string - pywebpush la procesará internamente
-                # Esto evita problemas de deserialización y permite que pywebpush maneje el JWT correctamente
+                # Usar el objeto Vapid directamente - esto evita problemas de deserialización
+                # pywebpush 2.x genera el JWT correctamente cuando recibe el objeto Vapid
                 webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(notification_data),
-                    vapid_private_key=VAPID_PRIVATE_KEY,
+                    vapid_private_key=_vapid_obj,
                     vapid_claims=vapid_claims
                 )
 
