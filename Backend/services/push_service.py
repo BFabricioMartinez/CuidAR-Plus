@@ -5,6 +5,7 @@ Utiliza pywebpush para enviar notificaciones siguiendo el estándar Web Push Pro
 
 import json
 import os
+import time
 from typing import Optional, List
 from pywebpush import webpush, WebPushException
 from py_vapid import Vapid
@@ -116,11 +117,13 @@ class PushNotificationService:
                 # Asegurar que el audience sea exactamente scheme://netloc sin trailing slash
                 audience = f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
                 
-                # Preparar claims VAPID - ambos son obligatorios en pywebpush 2.x
+                # Preparar claims VAPID - todos son obligatorios en pywebpush 2.x
                 # El claim "aud" solucionó el error BadJwtToken la primera vez
+                # El claim "exp" también es necesario para un JWT válido
                 vapid_claims = {
                     "sub": VAPID_EMAIL,  # Subject: debe ser mailto:email
-                    "aud": audience      # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
+                    "aud": audience,     # Audience: debe ser el origen del endpoint (esto solucionó BadJwtToken)
+                    "exp": int(time.time()) + 86400  # Expiration: 24 horas desde ahora (requerido para JWT válido)
                 }
                 
                 # Usar el objeto Vapid directamente - esto evita problemas de deserialización
